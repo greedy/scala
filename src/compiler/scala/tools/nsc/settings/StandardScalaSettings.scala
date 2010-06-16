@@ -39,7 +39,7 @@ trait StandardScalaSettings {
   val nowarn =         BooleanSetting ("-nowarn", "Generate no warnings")
   val optimise:        BooleanSetting // depends on post hook which mutates other settings
   val print =          BooleanSetting ("-print", "Print program with all Scala-specific features removed")
-  val target =          ChoiceSetting ("-target", "Specify for which target object files should be built", List("jvm-1.5", "msil"), "jvm-1.5")
+  val target =          ChoiceSetting ("-target", "Specify for which target object files should be built", List("jvm-1.5", "msil", "llvm"), "jvm-1.5")
   val unchecked =      BooleanSetting ("-unchecked", "Enable detailed unchecked warnings")
   val uniqid =         BooleanSetting ("-uniqid", "Print identifiers with unique names for debugging")
   val usejavacp =      BooleanSetting ("-usejavacp", "Utilize the java.class.path in classpath resolution.")
