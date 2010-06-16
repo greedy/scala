@@ -257,6 +257,7 @@ INITIALISATION
       <pathelement location="${lib.starr.jar}"/>
       <pathelement location="${comp.starr.jar}"/>
       <pathelement location="${lib.dir}/fjbg.jar"/>
+      <pathelement location="${lib.dir}/llvm.jar"/>
       <pathelement location="${lib.dir}/msil.jar"/>
       <pathelement location="${lib.dir}/forkjoin.jar"/>
       <pathelement location="${ant.jar}"/>
@@ -342,6 +343,7 @@ LOCAL REFERENCE BUILD (LOCKER)
         <pathelement location="${build-locker.dir}/classes/library"/>
         <pathelement location="${build-locker.dir}/classes/compiler"/>
         <pathelement location="${lib.dir}/fjbg.jar"/>
+        <pathelement location="${lib.dir}/llvm.jar"/>
         <pathelement location="${lib.dir}/msil.jar"/>
         <pathelement location="${lib.dir}/forkjoin.jar"/>
         <pathelement location="${ant.jar}"/>
@@ -374,6 +376,7 @@ LOCAL REFERENCE BUILD (LOCKER)
       <pathelement location="${build-locker.dir}/classes/library"/>
       <pathelement location="${build-locker.dir}/classes/compiler"/>
       <pathelement location="${lib.dir}/fjbg.jar"/>
+      <pathelement location="${lib.dir}/llvm.jar"/>
       <pathelement location="${lib.dir}/msil.jar"/>
       <pathelement location="${lib.dir}/forkjoin.jar"/>
       <pathelement location="${ant.jar}"/>
@@ -534,11 +537,13 @@ QUICK BUILD (QUICK)
   <target name="quick.newlibs" depends="quick.lib" if="libs.outdated">
     <antcall target="libs.done" inheritRefs="true"/>
     <property name="fjbg.jar" value="${build-libs.dir}/fjbg.jar"/>
+    <property name="llvm.jar" value="${build-libs.dir}/llvm.jar"/>
     <property name="msil.jar" value="${build-libs.dir}/msil.jar"/>
   </target>
   
   <target name="quick.libs" depends="quick.newlibs" unless="libs.outdated">
     <property name="fjbg.jar" value="${lib.dir}/fjbg.jar"/>
+    <property name="llvm.jar" value="${lib.dir}/llvm.jar"/>
     <property name="msil.jar" value="${lib.dir}/msil.jar"/>
   </target>
 
@@ -571,6 +576,7 @@ QUICK BUILD (QUICK)
         <pathelement location="${build-quick.dir}/classes/library"/>
         <pathelement location="${build-quick.dir}/classes/compiler"/>
         <pathelement location="${fjbg.jar}"/>
+        <pathelement location="${llvm.jar}"/>
         <pathelement location="${msil.jar}"/>
         <pathelement location="${forkjoin.jar}"/>
         <pathelement location="${ant.jar}"/>
@@ -734,6 +740,7 @@ QUICK BUILD (QUICK)
       <pathelement location="${build-quick.dir}/classes/compiler"/>
       <pathelement location="${build-quick.dir}/classes/scalap"/>
       <pathelement location="${fjbg.jar}"/>
+      <pathelement location="${llvm.jar}"/>
       <pathelement location="${msil.jar}"/>
       <pathelement location="${forkjoin.jar}"/>
       <pathelement location="${jline.jar}"/>
@@ -778,6 +785,7 @@ QUICK BUILD (QUICK)
       <pathelement location="${build-quick.dir}/classes/library"/>
       <pathelement location="${build-quick.dir}/classes/compiler"/>
       <pathelement location="${fjbg.jar}"/>
+      <pathelement location="${llvm.jar}"/>
       <pathelement location="${msil.jar}"/>
       <pathelement location="${forkjoin.jar}"/>
       <pathelement location="${ant.jar}"/>
@@ -843,6 +851,7 @@ PACKED QUICK BUILD (PACK)
       <fileset dir="${build-quick.dir}/classes/compiler"/>
       <!-- filemode / dirmode: see trac ticket #1294 -->
       <zipfileset dirmode="755" filemode="644" src="${fjbg.jar}"/>
+      <zipfileset dirmode="755" filemode="644" src="${llvm.jar}"/>
       <zipfileset dirmode="755" filemode="644" src="${msil.jar}"/>
     </jar>
     <copy file="${jline.jar}" toDir="${build-pack.dir}/lib"/>
@@ -1070,6 +1079,7 @@ BOOTSTRAPPING BUILD (STRAP)
         <pathelement location="${build-strap.dir}/classes/library"/>
         <pathelement location="${build-strap.dir}/classes/compiler"/>
         <pathelement location="${fjbg.jar}"/>
+        <pathelement location="${llvm.jar}"/>
         <pathelement location="${msil.jar}"/>
         <pathelement location="${forkjoin.jar}"/>
         <pathelement location="${ant.jar}"/>
@@ -1289,6 +1299,7 @@ LIBRARIES (MSIL, FJBG maybe later)
       includes="**/*.java"
       excludes="**/tests/**"
       debug="true"
+      encoding="UTF-8"
       target="1.5" source="1.4">
         <compilerarg line="${javac.args}"/>
     </javac>
@@ -1348,7 +1359,41 @@ LIBRARIES (MSIL, FJBG maybe later)
     </jar>
   </target>
 
-  <target name="libs.done" depends="libs.msilpack, libs.fjbgpack"/>
+  <target name="libs.pre-llvm" depends="libs.start">
+    <uptodate property="libs.llvm.available" targetfile="${build-libs.dir}/llvm.complete">
+      <srcfiles dir="${src.dir}/llvm">
+	<include name="**/*.java"/>
+	<include name="**/*.scala"/>
+      </srcfiles>
+    </uptodate>
+  </target>
+
+  <target name="libs.llvm" depends="libs.pre-llvm" unless="libs.llvm.available">
+    <mkdir dir="${build-libs.dir}/classes/llvm"/>
+    <scalacfork
+      destdir="${build-libs.dir}/classes/llvm"
+      compilerpathref="locker.classpath"
+      params="${scalac.args.all}"
+      srcdir="${src.dir}/llvm"
+      jvmargs="${scalacfork.jvmargs}">
+      <include name="**/*.scala"/>
+      <compilationpath>
+	<pathelement location="${build-quick.dir}/classes/library"/>
+      </compilationpath>
+    </scalacfork>
+    <touch file="${build-libs.dir}/llvm.complete" verbose="no"/>
+  </target>
+
+  <target name="libs.pre-llvmpack" depends="libs.llvm">
+  </target>
+
+  <target name="libs.llvmpack" depends="libs.pre-llvmpack" unless="libs.llvmpack.available">
+    <jar destfile="${build-libs.dir}/llvm.jar">
+      <fileset dir="${build-libs.dir}/classes/llvm"/>
+    </jar>
+  </target>
+
+  <target name="libs.done" depends="libs.msilpack, libs.fjbgpack, libs.llvmpack"/>
 
   <target name="forkjoin.done" depends="libs.forkjoinpack"/>
 
@@ -1720,6 +1765,7 @@ STABLE REFERENCE (STARR)
     <copy toDir="${lib.dir}" overwrite="yes">
       <fileset dir="${build-libs.dir}">
         <include name="fjbg.jar"/>
+        <include name="llvm.jar"/>
         <include name="msil.jar"/>
         <include name="forkjoin.jar"/>
       </fileset>
