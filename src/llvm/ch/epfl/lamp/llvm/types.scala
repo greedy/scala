@@ -1,4 +1,4 @@
-package ch.epfl.lamp.llvm {
+package ch.epfl.lamp.llvm.x {
 
 package object types {
   /** A String in LLVM */
@@ -124,6 +124,16 @@ case class LMFunction(decl: LlvmFunctionDecl) extends LlvmType {
   override def source = List("declare " + decl.rep)
   def width = 0
 }
+class LMLazyType(lt: =>LlvmType) extends LlvmType {
+  override lazy val tpe = lt
+  override def rep = this.tpe.rep
+  override def width = this.tpe.width
+  override def source = this.tpe.source
+  override def pointer = this.tpe.pointer
+}
+object LMLazyType {
+  def apply(lt: =>LlvmType) = new LMLazyType(lt)
+}
 
 /** Llvm Variables */
 sealed abstract class LlvmVar extends LMRep with LMTyped {
@@ -177,6 +187,10 @@ case class LMFloatLit(value: Double, tpe: LlvmType with CanFloatLit) extends Llv
     case LMDouble => "0x" + java.lang.Long.toHexString(java.lang.Double.doubleToRawLongBits(value))
   }
 }
+/** Null literal value */
+case class LMNull(tpe: LlvmType) extends LlvmLit {
+  def lit = "null"
+}
 
 /** Llvm Static Data. These represent the possible global level variables and constants */
 sealed abstract class LlvmStatic extends LMRep
@@ -199,16 +213,16 @@ case class LMStaticStr(s: LMString, tpe: LlvmType) extends LlvmStatic with LMTyp
 }
 /** A static array */
 case class LMStaticArray(values: Seq[LlvmStatic], tpe: LlvmType) extends LlvmStatic with LMTyped {
-  def rep = tpe.rep + " " + values.mkString("[",",","]")
+  def rep = tpe.rep + " " + values.map(_.rep).mkString("[",",","]")
 }
 /** A static structure type */
 case class LMStaticStruc(values: Seq[LlvmStatic], tpe: LlvmType) extends LlvmStatic with LMTyped {
-  def rep = tpe.rep + " " + values.mkString("{",",","}")
+  def rep = tpe.rep + " " + values.map(_.rep).mkString("{",",","}")
 }
 /** A pointer to other data */
 case class LMStaticPointer(v: LlvmVar) extends LlvmStatic with LMTyped {
-  def rep = v.rep
-  def tpe = v.tpe
+  def rep = tpe.rep + " " + v.name
+  def tpe = v.tpe.pointer
 }
 /* Static expressions, could split out but leave for moment for ease of use. Not many of them. */
 /** Pointer to Integer conversion */

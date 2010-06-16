@@ -1,0 +1,17 @@
+package ch.epfl.lamp.llvm
+
+sealed abstract class Linkage(val syntax: String)
+case object Private extends Linkage("private")
+case object Linker_private extends Linkage("linker_private")
+case object Internal extends Linkage("internal")
+case object Available_externally extends Linkage("available_externally")
+case object Linkonce extends Linkage("linkonce")
+case object Weak extends Linkage("weak")
+case object Common extends Linkage("common")
+case object Appending extends Linkage("appending")
+case object Extern_weak extends Linkage("extern_weak")
+case object Linkonce_odr extends Linkage("linkonce_odr")
+case object Weak_odr extends Linkage("weak_odr")
+case object Externally_visible extends Linkage("externally_visible")
+case object Dllimport extends Linkage("dllimport")
+case object Dllexport extends Linkage("dllexport")

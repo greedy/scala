@@ -1,4 +1,4 @@
-package ch.epfl.lamp.llvm {
+package ch.epfl.lamp.llvm.x {
 import types._
 package object syntax {
   type BlockId = LMString
@@ -13,9 +13,9 @@ case class LlvmBlock(label: BlockId, statements: LlvmStatements) extends LMSourc
   def source = (Label(label)+:statements).map(_.rep)
 }
 
-case class LlvmModule(comments: Seq[LMString], constants: Seq[LMConstant], globals: Seq[LMGlobal], forwardDecls: LlvmFunctionDecls, functions: LlvmFunctions) {
+case class LlvmModule(comments: Seq[LMString], types: Seq[LlvmType], constants: Seq[LMConstant], globals: Seq[LMGlobal], forwardDecls: LlvmFunctionDecls, functions: LlvmFunctions) {
   def source = {
-    comments.map(c => "; " + c) ++ constants.flatMap(_.source) ++ globals.flatMap(_.source) ++ forwardDecls.map("declare " + _.rep) ++ functions.flatMap(_.source)
+    comments.map(c => "; " + c) ++ types.flatMap(_.source) ++ constants.flatMap(_.source) ++ globals.flatMap(_.source) ++ forwardDecls.map("declare " + _.rep) ++ functions.flatMap(_.source)
   }
 }
 
