@@ -84,7 +84,7 @@ define fastcc i8* @.rt.lookup_method(%.dispatch* %dtable, %.class* %cls) {
     ret i8* %dentry.fun
 }
 
-define void @"java.lang.Object/<init>"(%java.lang.Object* %object) {
+define fastcc void @"java.lang.Object/<init>"(%java.lang.Object* %object) {
   ret void
 }
 
