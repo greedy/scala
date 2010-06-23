@@ -4,7 +4,7 @@ import scala.text.Document
 
 case class Label(name: String) {
   def tpe = LMLabel
-  def rep = "%"+name
+  def rep = "%\""+name+"\""
   def tperep = tpe.rep+" "+rep
 }
 case class Block(label: Option[Label], instructions: Seq[Instruction]) {
@@ -23,7 +23,7 @@ abstract class LMValue[+T <: ConcreteType] {
 }
 
 case class LocalVariable[+T <: ConcreteType](name: String, tpe: T) extends LMValue[T] {
-  def rep = "%"+name
+  def rep = "%\""+name+"\""
 }
 
 sealed abstract class Instruction {
