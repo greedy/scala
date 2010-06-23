@@ -5,7 +5,7 @@ case class ArgSpec(lmvar: LocalVariable[_ <: ConcreteType], attrs: Seq[Parameter
     lmvar.tpe.rep+attrs.map(_.syntax).mkString(" "," ","").trim
   }
   def defnSyn = {
-    lmvar.tpe.rep+" %"+lmvar.name+attrs.map(_.syntax).mkString(" "," ","").trim
+    lmvar.tperep+attrs.map(_.syntax).mkString(" "," ","").trim
   }
 }
 object ArgSpec {
@@ -18,23 +18,23 @@ class LMFunction(val resultType: ConcreteType, val name: String, val args: Seq[A
   def define(blocks: Seq[Block]) = new LMFunctionDef(this, blocks)
 }
 
-class LMFunctionDecl(fun: LMFunction) extends ModuleComp {
+class LMFunctionDecl(val fun: LMFunction) extends ModuleComp {
   def syntax = {
     val theargs = if (fun.varargs) fun.args.map(_.declSyn):+"..." else fun.args.map(_.declSyn)
     val sectionSyn = fun.section.map("section \""+_+"\"")
     val alignSyn = fun.align.map("align "+_.toString)
     val gcSyn = fun.section.map("gc \""+_+"\"")
-    val nameAndArgs = "@"+fun.name+theargs.mkString("(",",",")")
+    val nameAndArgs = "@\""+fun.name+"\""+theargs.mkString("(",",",")")
     (Seq("declare",fun.linkage.syntax,fun.visibility.syntax,fun.cconv.syntax)++fun.ret_attrs.map(_.syntax)++Seq(fun.resultType.rep,nameAndArgs)++fun.fn_attrs.map(_.syntax)++sectionSyn++alignSyn++gcSyn).mkString(" ")
   }
 }
-class LMFunctionDef(fun: LMFunction, blocks: Seq[Block]) extends ModuleComp {
+class LMFunctionDef(val fun: LMFunction, val blocks: Seq[Block]) extends ModuleComp {
   def syntax = {
     val theargs = if (fun.varargs) fun.args.map(_.defnSyn):+"..." else fun.args.map(_.defnSyn)
     val sectionSyn = fun.section.map("section \""+_+"\"")
     val alignSyn = fun.align.map("align "+_.toString)
     val gcSyn = fun.section.map("gc \""+_+"\"")
-    val nameAndArgs = "@"+fun.name+theargs.mkString("(",",",")")
-    (Seq("declare",fun.linkage.syntax,fun.visibility.syntax,fun.cconv.syntax)++fun.ret_attrs.map(_.syntax)++Seq(fun.resultType.rep,nameAndArgs)++fun.fn_attrs.map(_.syntax)++sectionSyn++alignSyn++gcSyn).mkString(" ") + blocks.map(_.syntax).mkString("{\n","\n  ","}")
+    val nameAndArgs = "@\""+fun.name+"\""+theargs.mkString("(",",",")")
+    (Seq("define",fun.linkage.syntax,fun.visibility.syntax,fun.cconv.syntax)++fun.ret_attrs.map(_.syntax)++Seq(fun.resultType.rep,nameAndArgs)++fun.fn_attrs.map(_.syntax)++sectionSyn++alignSyn++gcSyn).mkString(" ") + blocks.map(_.syntax).mkString("{\n","\n  ","\n}")
   }
 }
