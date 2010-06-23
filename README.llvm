@@ -17,3 +17,63 @@ There's an example in docs/examples/llvm/ that can be compiled and run as:
 ../../../build/quick/bin/scalac -target:llvm -Xmainclass example example.scala
 llvmc runtime.ll example.ll example_native.ll
 ./a.out
+
+
+What's done
+-----------
+
+ * Model for generating LLVM assembly
+ * Basic code generation
+ * Boxing/unboxing
+ * Conditional branches
+ * Unconditional branches
+ * Static method dispatch
+ * Loading constants
+ * Local variables (untested) load and store
+ * Fields load and store
+ * Primitive operations
+ * Instance creation
+
+What's not
+----------
+
+ * Separate compilation
+ * Garbage collection
+ * Arrays
+ * Dynamic method dispatch
+ * Exceptions
+ * Strings
+
+Points of Interest
+------------------
+
+Model for generating LLVM assembly is in src/llvm
+
+Only new files in compiler are
+src/compiler/scala/tools/nsc/backend/{LLVMPlatform.scala,llvm/GenLLVM.scala}
+
+Everything interesting is in
+src/compiler/scala/tools/nsc/backend/llvm/GenLLVM.scala
+
+genClass writes out the LLVM assembly for each class. Lots of internal
+functions do most of the work.
+
+recordType, externModule, externFun, externClass record types, modules,
+functions and class record that were used so the appropriate declarations can
+be emitted
+
+classInfo defines the class record which includes the class name, instance size
+and super class pointer
+
+moduleInfo defines the singleton instance and initializer
+
+genFun generates the code for each method in the class. Each basic block is
+translated from ICode to LLVM instructions. A stack is used as instructions are
+generated to map from ICode stack positions to LLVM registers. Each basic block
+is analyzed (see stackUsage method) to see how many values it consumes from the
+stack and how many are produced. The outputs are given well defined register
+names so that the phi instructions at the start of the block can select the
+right value for each predecessor block.
+
+There are a bunch of methods for translating from scalac symbols and types to
+the appopriate LLVM type.
