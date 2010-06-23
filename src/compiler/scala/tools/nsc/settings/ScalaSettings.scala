@@ -82,6 +82,7 @@ trait ScalaSettings extends AbsScalaSettings with StandardScalaSettings {
   val Xwarnfatal    = BooleanSetting    ("-Xfatal-warnings", "Fail the compilation if there are any warnings.")
   val Xwarninit     = BooleanSetting    ("-Xwarninit", "Warn about possible changes in initialization semantics")
   val Xchecknull    = BooleanSetting    ("-Xcheck-null", "Emit warning on selection of nullable reference")
+  val Xmainclass    = StringSetting     ("-Xmainclass", "classname", "Name of the class to call as main", "").dependsOn(target, "llvm")
 
   /** Compatibility stubs for options whose value name did
    *  not previously match the option name.
