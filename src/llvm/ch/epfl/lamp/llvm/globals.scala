@@ -9,14 +9,14 @@ class LMGlobalVariable[T<:ConcreteType](val name: String, val tpe: T, val linkag
 
 class LMGlobalVariableDecl(gv: LMGlobalVariable[_<:ConcreteType]) extends ModuleComp {
   def syntax = {
-    val constsyn = if (gv.isConstant) "constant" else ""
-    "@"+gv.name+" = "+gv.linkage.syntax+" "+constsyn+" "+gv.tpe.rep
+    val constsyn = if (gv.isConstant) "constant" else "global"
+    "@\""+gv.name+"\" = external "+constsyn+" "+gv.tpe.rep
   }
 }
 class LMGlobalVariableDefn[T <:ConcreteType](gv: LMGlobalVariable[T], v: Constant[T]) extends ModuleComp {
   require(gv.tpe == v.tpe)
   def syntax = {
-    val constsyn = if (gv.isConstant) "constant" else ""
-    "@"+gv.name+" = "+gv.linkage.syntax+" "+constsyn+" "+v.tperep
+    val constsyn = if (gv.isConstant) "constant" else "global"
+    "@\""+gv.name+"\" = "+gv.linkage.syntax+" "+constsyn+" "+v.tperep
   }
 }
