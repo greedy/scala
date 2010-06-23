@@ -27,7 +27,7 @@ class CInt(val tpe: LMInt, v: BigInt) extends Constant[LMInt] {
 }
 class CFloat(f: Float) extends Constant[LMFloat.type] {
   val tpe = LMFloat
-  def rep = "0x"+java.lang.Integer.toHexString(java.lang.Float.floatToRawIntBits(f))
+  def rep = "0x"+java.lang.Long.toHexString(java.lang.Double.doubleToRawLongBits(f))
 }
 class CDouble(d: Double) extends Constant[LMDouble.type] {
   val tpe = LMDouble
