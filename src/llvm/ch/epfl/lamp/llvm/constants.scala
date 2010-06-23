@@ -67,165 +67,165 @@ class CFunctionAddress(func: LMFunction) extends Constant[LMPointer] {
 }
 class Ctrunc(v: Constant[LMInt], val tpe: LMInt) extends Constant[LMInt] {
   require(v.tpe.bits > tpe.bits )
-  def rep = "trunc ("+v.rep+" to "+tpe.rep+")"
+  def rep = "trunc ("+v.tperep+" to "+tpe.rep+")"
 }
 class Czext(v: Constant[LMInt], val tpe: LMInt) extends Constant[LMInt] {
   require(v.tpe.bits <= tpe.bits)
-  def rep = "zext ("+v.rep+" to "+tpe.rep+")"
+  def rep = "zext ("+v.tperep+" to "+tpe.rep+")"
 }
 class Csext(v: Constant[LMInt], val tpe: LMInt) extends Constant[LMInt] {
   require(v.tpe.bits <= tpe.bits)
-  def rep = "sext ("+v.rep+" to "+tpe.rep+")"
+  def rep = "sext ("+v.tperep+" to "+tpe.rep+")"
 }
 class Cfptrunc[T <: LMFloatingPointType with ConcreteType](v: Constant[_ <: LMFloatingPointType with ConcreteType], val tpe: T) extends Constant[T] {
   require(v.tpe.bits > tpe.bits)
-  def rep = "fptrunc ("+v.rep+" to "+tpe.rep+")"
+  def rep = "fptrunc ("+v.tperep+" to "+tpe.rep+")"
 }
 class Cfpext[T <: LMFloatingPointType with ConcreteType](v: Constant[_ <: LMFloatingPointType with ConcreteType], val tpe: T) extends Constant[T] {
   require(v.tpe.bits <= tpe.bits)
-  def rep = "fpext ("+v.rep+" to "+tpe.rep+")"
+  def rep = "fpext ("+v.tperep+" to "+tpe.rep+")"
 }
 class Cfptoui(v: Constant[_ <: LMFloatingPointType with ConcreteType], val tpe: LMInt) extends Constant[LMInt] {
-  def rep = "fptoui ("+v.rep+" to "+tpe.rep+")"
+  def rep = "fptoui ("+v.tperep+" to "+tpe.rep+")"
 }
 class Cfptosi(v: Constant[_ <: LMFloatingPointType with ConcreteType], val tpe: LMInt) extends Constant[LMInt] {
-  def rep = "fptosi ("+v.rep+" to "+tpe.rep+")"
+  def rep = "fptosi ("+v.tperep+" to "+tpe.rep+")"
 }
 class Cuitofp[T <: LMFloatingPointType with ConcreteType](v: Constant[LMInt], val tpe: T) extends Constant[T] {
-  def rep = "uitofp ("+v.rep+" to "+tpe.rep+")"
+  def rep = "uitofp ("+v.tperep+" to "+tpe.rep+")"
 }
 class Csitofp[T <: LMFloatingPointType with ConcreteType](v: Constant[LMInt], val tpe: T) extends Constant[T] {
-  def rep = "sitofp ("+v.rep+" to "+tpe.rep+")"
+  def rep = "sitofp ("+v.tperep+" to "+tpe.rep+")"
 }
 class Cptrtoint(v: Constant[LMPointer], val tpe: LMInt) extends Constant[LMInt] {
-  def rep = "ptrtoint ("+v.rep+" to "+tpe.rep+")"
+  def rep = "ptrtoint ("+v.tperep+" to "+tpe.rep+")"
 }
 class Cinttoptr(v: Constant[LMInt], val tpe: LMPointer) extends Constant[LMPointer] {
-  def rep = "inttoptr ("+v.rep+" to "+tpe.rep+")"
+  def rep = "inttoptr ("+v.tperep+" to "+tpe.rep+")"
 }
 class Cbitcast[T <: ConcreteType](v: Constant[ConcreteType], val tpe: T) extends Constant[T] {
-  def rep = "bitcast ("+v.rep+" to "+tpe.rep+")"
+  def rep = "bitcast ("+v.tperep+" to "+tpe.rep+")"
 }
 class Cgetelementptr[T <: ConcreteType](p: Constant[LMPointer], val indexes: Seq[Constant[LMInt]], val tpe: T) extends Constant[T] {
-  def rep = "getelementptr ("+p.rep+", "+indexes.mkString(", ")+")"
+  def rep = "getelementptr ("+p.tperep+", "+indexes.map(_.tperep).mkString(", ")+")"
 }
 class Cgetelementptr_inbounds[T <: ConcreteType](p: Constant[LMPointer], val indexes: Seq[Constant[LMInt]], val tpe: T) extends Constant[T] {
-  def rep = "getelementptr inbounds ("+p.rep+", "+indexes.mkString(", ")+")"
+  def rep = "getelementptr inbounds ("+p.tperep+", "+indexes.map(_.tperep).mkString(", ")+")"
 }
 class Cselect[T <: ConcreteType](v: Constant[LMInt], val tpe: T, v1: Constant[T], v2: Constant[T]) extends Constant[T] {
-  def rep = "select ("+v.rep+", "+v1.rep+", "+v2.rep+")"
+  def rep = "select ("+v.tperep+", "+v1.tperep+", "+v2.tperep+")"
 }
-class Cicmp(op: ICond, v1: LMInt, v2: LMInt) extends Constant[LMInt] {
+class Cicmp(op: ICond, v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   def tpe = LMInt.i1
-  def rep = "icmp "+op.name+" ("+v1.rep+", "+v2.rep+")"
+  def rep = "icmp "+op.name+" ("+v1.tperep+", "+v2.tperep+")"
 }
-class Cfcmp[T <: LMFloatingPointType with ConcreteType](op: FCond, v1: T, v2: T) extends Constant[LMInt] {
+class Cfcmp[T <: LMFloatingPointType with ConcreteType](op: FCond, v1: Constant[T], v2: Constant[T]) extends Constant[LMInt] {
   def tpe = LMInt.i1
-  def rep = "fcmp "+op.name+" ("+v1.rep+", "+v2.rep+")"
+  def rep = "fcmp "+op.name+" ("+v1.tperep+", "+v2.tperep+")"
 }
 class Cextractelement[T <: LMPrimitiveType with ConcreteType](v: Constant[LMVector], index: Constant[LMInt], val tpe: T) extends Constant[T] {
   require(v.tpe.elementtype == tpe)
-  def rep = "extractelement ("+v.rep+", "+index.rep+")"
+  def rep = "extractelement ("+v.tperep+", "+index.tperep+")"
 }
 class Cinsertelement[T <: LMPrimitiveType with ConcreteType](v: Constant[LMVector], elt: Constant[T], index: Constant[LMInt]) extends Constant[LMVector] {
   def tpe = v.tpe
-  def rep = "insertelement ("+v.rep+", "+elt.rep+", "+index.rep+")"
+  def rep = "insertelement ("+v.tperep+", "+elt.tperep+", "+index.tperep+")"
 }
 class Cshufflevector[T <: LMPrimitiveType with ConcreteType](v1: Constant[LMVector], v2: Constant[LMVector], mask: Constant[LMVector]) extends Constant[LMVector] {
   require(v1.tpe == v2.tpe)
   require(mask.tpe.elementtype.isInstanceOf[LMInt])
   def tpe = new LMVector(mask.tpe.n, v1.tpe.elementtype)
-  def rep = "shufflevector ("+v1.rep+", "+v2.rep+", "+mask.rep+")"
+  def rep = "shufflevector ("+v1.tperep+", "+v2.tperep+", "+mask.tperep+")"
 }
 class Cextractvalue[T <: ConcreteType](v: Constant[_ <: LMAggregateType with ConcreteType], indexes: Seq[Constant[LMInt]], val tpe: T) extends Constant[T] {
-  def rep = "extractvalue ("+v.rep+", "+indexes.map(_.rep).mkString(", ")+")"
+  def rep = "extractvalue ("+v.tperep+", "+indexes.map(_.tperep).mkString(", ")+")"
 }
 class Cinsertvalue[S <: LMAggregateType with ConcreteType, T <: ConcreteType](v: Constant[S], elt: Constant[T], indexes: Seq[Constant[LMInt]]) extends Constant[S] {
   def tpe = v.tpe
-  def rep = "insertvalue ("+v.rep+", "+elt.rep+", "+indexes.map(_.rep).mkString(", ")+")"
+  def rep = "insertvalue ("+v.tperep+", "+elt.tperep+", "+indexes.map(_.tperep).mkString(", ")+")"
 }
 class Cadd(v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   require(v1.tpe == v2.tpe)
   def tpe = v1.tpe
-  def rep = "add ("+v1.rep+", "+v2.rep+")"
+  def rep = "add ("+v1.tperep+", "+v2.tperep+")"
 }
 class Cfadd[T <: LMFloatingPointType with ConcreteType](v1: Constant[T], v2: Constant[T]) extends Constant[T] {
   def tpe = v1.tpe
-  def rep = "fadd ("+v1.rep+", "+v2.rep+")"
+  def rep = "fadd ("+v1.tperep+", "+v2.tperep+")"
 }
 class Csub(v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   require(v1.tpe == v2.tpe)
   def tpe = v1.tpe
-  def rep = "sub ("+v1.rep+", "+v2.rep+")"
+  def rep = "sub ("+v1.tperep+", "+v2.tperep+")"
 }
 class Cfsub[T <: LMFloatingPointType with ConcreteType](v1: Constant[T], v2: Constant[T]) extends Constant[T] {
   def tpe = v1.tpe
-  def rep = "fsub ("+v1.rep+", "+v2.rep+")"
+  def rep = "fsub ("+v1.tperep+", "+v2.tperep+")"
 }
 class Cmul(v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   require(v1.tpe == v2.tpe)
   def tpe = v1.tpe
-  def rep = "mul ("+v1.rep+", "+v2.rep+")"
+  def rep = "mul ("+v1.tperep+", "+v2.tperep+")"
 }
 class Cfmul[T <: LMFloatingPointType with ConcreteType](v1: Constant[T], v2: Constant[T]) extends Constant[T] {
   def tpe = v1.tpe
-  def rep = "fmul ("+v1.rep+", "+v2.rep+")"
+  def rep = "fmul ("+v1.tperep+", "+v2.tperep+")"
 }
 class Cudiv(v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   require(v1.tpe == v2.tpe)
   def tpe = v1.tpe
-  def rep = "udiv ("+v1.rep+", "+v2.rep+")"
+  def rep = "udiv ("+v1.tperep+", "+v2.tperep+")"
 }
 class Csdiv(v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   require(v1.tpe == v2.tpe)
   def tpe = v1.tpe
-  def rep = "sdiv ("+v1.rep+", "+v2.rep+")"
+  def rep = "sdiv ("+v1.tperep+", "+v2.tperep+")"
 }
 class Cfdiv[T <: LMFloatingPointType with ConcreteType](v1: Constant[T], v2: Constant[T]) extends Constant[T] {
   def tpe = v1.tpe
-  def rep = "fdiv ("+v1.rep+", "+v2.rep+")"
+  def rep = "fdiv ("+v1.tperep+", "+v2.tperep+")"
 }
 class Curem(v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   require(v1.tpe == v2.tpe)
   def tpe = v1.tpe
-  def rep = "urem ("+v1.rep+", "+v2.rep+")"
+  def rep = "urem ("+v1.tperep+", "+v2.tperep+")"
 }
 class Csrem(v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   require(v1.tpe == v2.tpe)
   def tpe = v1.tpe
-  def rep = "srem ("+v1.rep+", "+v2.rep+")"
+  def rep = "srem ("+v1.tperep+", "+v2.tperep+")"
 }
 class Cfrem[T <: LMFloatingPointType with ConcreteType](v1: Constant[T], v2: Constant[T]) extends Constant[T] {
   def tpe = v1.tpe
-  def rep = "frem ("+v1.rep+", "+v2.rep+")"
+  def rep = "frem ("+v1.tperep+", "+v2.tperep+")"
 }
 class Cshl(v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   require(v1.tpe == v2.tpe)
   def tpe = v1.tpe
-  def rep = "shl ("+v1.rep+", "+v2.rep+")"
+  def rep = "shl ("+v1.tperep+", "+v2.tperep+")"
 }
 class Clshr(v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   require(v1.tpe == v2.tpe)
   def tpe = v1.tpe
-  def rep = "lshr ("+v1.rep+", "+v2.rep+")"
+  def rep = "lshr ("+v1.tperep+", "+v2.tperep+")"
 }
 class Cashr(v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   require(v1.tpe == v2.tpe)
   def tpe = v1.tpe
-  def rep = "ashr ("+v1.rep+", "+v2.rep+")"
+  def rep = "ashr ("+v1.tperep+", "+v2.tperep+")"
 }
 class Cand(v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   require(v1.tpe == v2.tpe)
   def tpe = v1.tpe
-  def rep = "and ("+v1.rep+", "+v2.rep+")"
+  def rep = "and ("+v1.tperep+", "+v2.tperep+")"
 }
 class Cor(v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   require(v1.tpe == v2.tpe)
   def tpe = v1.tpe
-  def rep = "or ("+v1.rep+", "+v2.rep+")"
+  def rep = "or ("+v1.tperep+", "+v2.tperep+")"
 }
 class Cxor(v1: Constant[LMInt], v2: Constant[LMInt]) extends Constant[LMInt] {
   require(v1.tpe == v2.tpe)
   def tpe = v1.tpe
-  def rep = "xor ("+v1.rep+", "+v2.rep+")"
+  def rep = "xor ("+v1.tperep+", "+v2.tperep+")"
 }

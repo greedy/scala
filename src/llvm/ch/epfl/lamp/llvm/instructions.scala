@@ -40,7 +40,7 @@ object ret {
   def void = retvoid
 }
 class br_cond(cond: LMValue[LMInt], l1: Label, l2: Label) extends Instruction {
-  require(cond.tpe == LMInt.i1)
+  //require(cond.tpe == LMInt.i1)
   def syntax = "br "+cond.tperep+", "+l1.tperep+", "+l2.tperep
 }
 class br(l: Label) extends Instruction {
@@ -86,8 +86,8 @@ object unreachable extends Instruction {
   def syntax = "unreachable"
 }
 class binop[T<:ConcreteType](op: String, v: LocalVariable[T], op1: LMValue[T], op2: LMValue[T]) extends Instruction {
-  require(v.tpe == op1.tpe && op1.tpe == op2.tpe)
-  def syntax = v.rep+" = "+op+" "+v.tpe.rep+" "+op1.rep+" "+op2.rep
+  //require(v.tpe == op1.tpe && op1.tpe == op2.tpe)
+  def syntax = v.rep+" = "+op+" "+v.tpe.rep+" "+op1.rep+", "+op2.rep
 }
 class add(v: LocalVariable[LMInt], op1: LMValue[LMInt], op2: LMValue[LMInt]) extends binop[LMInt]("add",v,op1,op2)
 class add_nuw(v: LocalVariable[LMInt], op1: LMValue[LMInt], op2: LMValue[LMInt]) extends binop[LMInt]("add nuw",v,op1,op2)
@@ -118,15 +118,15 @@ class and(v: LocalVariable[LMInt], op1: LMValue[LMInt], op2: LMValue[LMInt]) ext
 class or(v: LocalVariable[LMInt], op1: LMValue[LMInt], op2: LMValue[LMInt]) extends binop[LMInt]("or",v,op1,op2)
 class xor(v: LocalVariable[LMInt], op1: LMValue[LMInt], op2: LMValue[LMInt]) extends binop[LMInt]("xor",v,op1,op2)
 class extractelement[T <: LMPrimitiveType with ConcreteType](v: LocalVariable[T], arg: LMValue[LMVector], idx: LMValue[LMInt]) extends Instruction {
-  require(v.tpe == arg.tpe.elementtype && idx.tpe == LMInt.i32)
+  //require(v.tpe == arg.tpe.elementtype && idx.tpe == LMInt.i32)
   def syntax = v.rep+" = extractelement "+arg.tperep+", "+idx.tperep
 }
 class insertelement(v: LocalVariable[LMVector], arg: LMValue[LMVector], elt: LMValue[_<:LMPrimitiveType with ConcreteType], idx: LMValue[LMInt]) extends Instruction {
-  require(v.tpe == arg.tpe && arg.tpe.elementtype == elt.tpe && idx.tpe == LMInt.i32)
+  //require(v.tpe == arg.tpe && arg.tpe.elementtype == elt.tpe && idx.tpe == LMInt.i32)
   def syntax = v.rep+" = insertelement "+arg.tperep+", "+elt.tperep+", "+idx.tperep
 }
 class shufflevector(v: LocalVariable[LMVector], v1: LMValue[LMVector], v2: LMValue[LMVector], mask: LMValue[LMVector]) extends Instruction {
-  require(v1.tpe == v2.tpe && v.tpe.elementtype == v1.tpe.elementtype && v.tpe.n == mask.tpe.n && mask.tpe.elementtype == LMInt.i32)
+  //require(v1.tpe == v2.tpe && v.tpe.elementtype == v1.tpe.elementtype && v.tpe.n == mask.tpe.n && mask.tpe.elementtype == LMInt.i32)
   def syntax = v.rep+" = shufflevector "+v1.tperep+", "+v2.tperep+", "+mask.tperep
 }
 class extractvalue(v: LocalVariable[_<:ConcreteType], arg: LMValue[_<:LMAggregateType with ConcreteType], idxs: Seq[Constant[LMInt]]) extends Instruction {
@@ -139,19 +139,19 @@ class alloca(v: LocalVariable[LMPointer], tpe: ConcreteType, numelts: LMValue[LM
   def syntax = v.rep+" = alloca "+tpe.rep+", "+numelts.tperep+", align "+align.toString
 }
 class load(v: LocalVariable[_<:ConcreteType], ptr: LMValue[LMPointer], align: Int = 0) extends Instruction {
-  require(v.tpe == ptr.tpe.target)
+  //require(v.tpe == ptr.tpe.target)
   def syntax = v.rep+" = load "+ptr.tperep+", align "+align.toString
 }
 class volatile_load(v: LocalVariable[_<:ConcreteType], ptr: LMValue[LMPointer], align: Int = 0) extends Instruction {
-  require(v.tpe == ptr.tpe.target)
+  //require(v.tpe == ptr.tpe.target)
   def syntax = v.rep+" = volatile load "+ptr.tperep+", align "+align.toString
 }
 class store(value: LMValue[_<:ConcreteType], ptr: LMValue[LMPointer], align: Int = 0) extends Instruction {
-  require(value.tpe == ptr.tpe.target)
+  //require(value.tpe == ptr.tpe.target)
   def syntax = "store "+value.tperep+", "+ptr.tperep
 }
 class volatile_store(value: LMValue[_<:ConcreteType], ptr: LMValue[LMPointer], align: Int = 0) extends Instruction {
-  require(value.tpe == ptr.tpe.target)
+  //require(value.tpe == ptr.tpe.target)
   def syntax = "volatile store "+value.tperep+", "+ptr.tperep
 }
 class getelementptr(v: LocalVariable[LMPointer], ptr: LMValue[LMPointer], idxs: Seq[LMValue[LMInt]]) extends Instruction {
@@ -161,22 +161,22 @@ class getelementptr_inbounds(v: LocalVariable[LMPointer], ptr: LMValue[LMPointer
   def syntax = v.rep+" = getelementptr inbounds "+ptr.tperep+", "+idxs.map(_.tperep).mkString(", ")
 }
 abstract class convertop[T1<:ConcreteType,T2<:ConcreteType](op: String, v: LocalVariable[T1], value: LMValue[T2]) extends Instruction {
-  def syntax = v.rep+" = "+op+" "+value.tperep+" to "+v.tpe
+  def syntax = v.rep+" = "+op+" "+value.tperep+" to "+v.tpe.rep
 }
 class trunc(v: LocalVariable[LMInt], value: LMValue[LMInt]) extends convertop[LMInt,LMInt]("trunc",v,value) {
-  require(v.tpe.bits < value.tpe.bits)
+  //require(v.tpe.bits < value.tpe.bits)
 }
 class zext(v: LocalVariable[LMInt], value: LMValue[LMInt]) extends convertop[LMInt,LMInt]("zext",v,value) {
-  require(v.tpe.bits >= value.tpe.bits)
+  //require(v.tpe.bits >= value.tpe.bits)
 }
 class sext(v: LocalVariable[LMInt], value: LMValue[LMInt]) extends convertop[LMInt,LMInt]("sext",v,value) {
-  require(v.tpe.bits >= value.tpe.bits)
+  //require(v.tpe.bits >= value.tpe.bits)
 }
 class fptrunc[T1<:LMFloatingPointType with ConcreteType,T2<:LMFloatingPointType with ConcreteType](v: LocalVariable[T1], value: LMValue[T2]) extends convertop[T1,T2]("fptrunc",v,value) {
-  require(v.tpe.bits < value.tpe.bits)
+  //require(v.tpe.bits < value.tpe.bits)
 }
 class fpext[T1<:LMFloatingPointType with ConcreteType,T2<:LMFloatingPointType with ConcreteType](v: LocalVariable[T1], value: LMValue[T2]) extends convertop[T1,T2]("fpext",v,value) {
-  require(v.tpe.bits >= value.tpe.bits)
+  //require(v.tpe.bits >= value.tpe.bits)
 }
 class fptoui[FT<:LMFloatingPointType with ConcreteType](v: LocalVariable[LMInt], value: LMValue[FT]) extends convertop[LMInt,FT]("fptoui",v,value)
 class fptosi[FT<:LMFloatingPointType with ConcreteType](v: LocalVariable[LMInt], value: LMValue[FT]) extends convertop[LMInt,FT]("fptosi",v,value)
@@ -186,53 +186,52 @@ class ptrtoint(v: LocalVariable[LMInt], value: LMValue[LMPointer]) extends conve
 class inttoptr(v: LocalVariable[LMPointer], value: LMValue[LMInt]) extends convertop[LMPointer,LMInt]("inttoptr",v,value)
 class bitcast[T1<:ConcreteType,T2<:ConcreteType](v: LocalVariable[T1], value: LMValue[T2]) extends convertop[T1,T2]("bitcast",v,value)
 abstract class cmpop[R<:ConcreteType,T<:ConcreteType](op: String, v: LocalVariable[R], cond: Cond, op1: LMValue[T], op2: LMValue[T]) extends Instruction {
-  def syntax = v.rep+" = "+op+" "+cond.name+" "+op1.tpe+" "+op1.rep+", "+op2.rep
+  def syntax = v.rep+" = "+op+" "+cond.name+" "+op1.tpe.rep+" "+op1.rep+", "+op2.rep
 }
 class icmp(v: LocalVariable[LMInt], cond: ICond, op1: LMValue[LMInt], op2: LMValue[LMInt]) extends cmpop[LMInt,LMInt]("icmp",v,cond,op1,op2) {
-  require(v.tpe == LMInt.i1 && op1.tpe == op2.tpe)
+  //require(v.tpe == LMInt.i1 && op1.tpe == op2.tpe)
 }
 class icmp_p(v: LocalVariable[LMInt], cond: ICond, op1: LMValue[LMPointer], op2: LMValue[LMPointer]) extends cmpop[LMInt,LMPointer]("icmp",v,cond,op1,op2) {
-  require(v.tpe == LMInt.i1)
+  //require(v.tpe == LMInt.i1)
 }
 class icmp_v(v: LocalVariable[LMVector], cond: ICond, op1: LMValue[LMVector], op2: LMValue[LMVector]) extends cmpop[LMVector,LMVector]("icmp",v,cond,op1,op2) {
-  require(v.tpe.elementtype == LMInt.i1 && v.tpe.n == op1.tpe.n && op1.tpe == op2.tpe)
+  //require(v.tpe.elementtype == LMInt.i1 && v.tpe.n == op1.tpe.n && op1.tpe == op2.tpe)
 }
 class fcmp[T <: LMFloatingPointType with ConcreteType](v: LocalVariable[LMInt], cond: FCond, op1: LMValue[T], op2: LMValue[T]) extends cmpop[LMInt,T]("fcmp",v,cond,op1,op2) {
-  require(v.tpe == LMInt.i1)
+  //require(v.tpe == LMInt.i1)
 }
 class fcmp_v(v: LocalVariable[LMVector], cond: FCond, op1: LMValue[LMVector], op2: LMValue[LMVector]) extends cmpop[LMVector,LMVector]("fcmp",v,cond,op1,op2) {
-  require(v.tpe.elementtype == LMInt.i1 && v.tpe.n == op1.tpe.n && op1.tpe == op2.tpe && op1.tpe.isInstanceOf[LMFloatingPointType with ConcreteType])
+  //require(v.tpe.elementtype == LMInt.i1 && v.tpe.n == op1.tpe.n && op1.tpe == op2.tpe && op1.tpe.isInstanceOf[LMFloatingPointType with ConcreteType])
 }
 class phi[T<:ConcreteType](v: LocalVariable[T], predecessors: Seq[(Label,LMValue[T])]) extends Instruction {
-  require(predecessors.forall(_._2.tpe == v.tpe))
+  //require(predecessors.forall(_._2.tpe == v.tpe))
   def syntax = {
-    def predsyn(l: Label, v: LMValue[T]) = "[ "+v.rep+", "+l.rep+" ]"
-    v.rep+" = phi "+v.tpe+predecessors.map((predsyn _).tupled).mkString(" ",", ","")
+    v.rep+" = phi "+v.tpe.rep+predecessors.map{case (l,v) => "[ "+v.rep+", "+l.rep+" ]"}.mkString(" ",", ","")
   }
 }
 class select[T<:ConcreteType](v: LocalVariable[T], cond: LMValue[LMInt], v1: LMValue[T], v2: LMValue[T]) extends Instruction {
-  require(cond.tpe == LMInt.i1 && v1.tpe == v2.tpe && v.tpe == v1.tpe)
+  //require(cond.tpe == LMInt.i1 && v1.tpe == v2.tpe && v.tpe == v1.tpe)
   def syntax = v.rep+" = select "+cond.tperep+", "+v1.tperep+", "+v2.tperep
 }
 class select_v(v: LocalVariable[LMVector], cond: LMValue[LMVector], v1: LMValue[LMVector], v2: LMValue[LMVector]) extends Instruction {
-  require(cond.tpe.elementtype == LMInt.i1 && v1.tpe == v2.tpe && v.tpe == v1.tpe && cond.tpe.n == v.tpe.n)
+  //require(cond.tpe.elementtype == LMInt.i1 && v1.tpe == v2.tpe && v.tpe == v1.tpe && cond.tpe.n == v.tpe.n)
   def syntax = v.rep+" = select "+cond.tperep+", "+v1.tperep+", "+v2.tperep
 }
 class call(v: LocalVariable[_<:ConcreteType], cconv: CallingConvention, ret_attrs: Seq[ReturnAttribute], fnptr: LMValue[LMPointer], args: Seq[LMValue[_<:ConcreteType]], fn_attrs: Seq[FunctionAttribute]) extends Instruction {
   def this(v: LocalVariable[_<:ConcreteType], fun: LMFunction, args: Seq[LMValue[_<:ConcreteType]]) = this(v, fun.cconv, fun.ret_attrs, new CFunctionAddress(fun), args, fun.fn_attrs)
-  def syntax = v.rep+" = call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tperep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
+  def syntax = v.rep+" = call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tpe.target.asInstanceOf[LMFunctionType].returnType.rep+" "+fnptr.rep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
 }
 class tail_call(v: LocalVariable[_<:ConcreteType], cconv: CallingConvention, ret_attrs: Seq[ReturnAttribute], fnptr: LMValue[LMPointer], args: Seq[LMValue[_<:ConcreteType]], fn_attrs: Seq[FunctionAttribute]) extends Instruction {
   def this(v: LocalVariable[_<:ConcreteType], fun: LMFunction, args: Seq[LMValue[_<:ConcreteType]]) = this(v, fun.cconv, fun.ret_attrs, new CFunctionAddress(fun), args, fun.fn_attrs)
-  def syntax = v.rep+" = tail call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tperep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
+  def syntax = v.rep+" = tail call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tpe.target.asInstanceOf[LMFunctionType].returnType.rep+" "+fnptr.rep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
 }
 class call_void(cconv: CallingConvention, ret_attrs: Seq[ReturnAttribute], fnptr: LMValue[LMPointer], args: Seq[LMValue[_<:ConcreteType]], fn_attrs: Seq[FunctionAttribute]) extends Instruction {
   def this(fun: LMFunction, args: Seq[LMValue[_<:ConcreteType]]) = this(fun.cconv, fun.ret_attrs, new CFunctionAddress(fun), args, fun.fn_attrs)
-  def syntax = "call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tperep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
+  def syntax = "call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tpe.target.asInstanceOf[LMFunctionType].returnType.rep+" "+fnptr.rep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
 }
 class tail_call_void(cconv: CallingConvention, ret_attrs: Seq[ReturnAttribute], fnptr: LMValue[LMPointer], args: Seq[LMValue[_<:ConcreteType]], fn_attrs: Seq[FunctionAttribute]) extends Instruction {
   def this(fun: LMFunction, args: Seq[LMValue[_<:ConcreteType]]) = this(fun.cconv, fun.ret_attrs, new CFunctionAddress(fun), args, fun.fn_attrs)
-  def syntax = "tail call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tperep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
+  def syntax = "tail call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tpe.target.asInstanceOf[LMFunctionType].returnType.rep+" "+fnptr.rep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
 }
 class va_arg(v: LocalVariable[_<:ConcreteType], list: LMValue[LMPointer]) extends Instruction {
   def syntax = v.rep+" = va_arg "+list.tperep+", "+v.tpe
