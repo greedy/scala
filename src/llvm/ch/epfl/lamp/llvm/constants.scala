@@ -59,11 +59,11 @@ class CZeroInit[T <: ConcreteType](val tpe: T) extends Constant[T] {
 }
 class CGlobalAddress(global: LMGlobalVariable[_<:ConcreteType]) extends Constant[LMPointer] {
   def tpe = global.tpe.pointer
-  def rep = "@"+global.name
+  def rep = "@\""+global.name+"\""
 }
 class CFunctionAddress(func: LMFunction) extends Constant[LMPointer] {
   def tpe = func.tpe.pointer
-  def rep = "@"+func.name
+  def rep = "@\""+func.name+"\""
 }
 class Ctrunc(v: Constant[LMInt], val tpe: LMInt) extends Constant[LMInt] {
   require(v.tpe.bits > tpe.bits )
