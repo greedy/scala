@@ -7,12 +7,13 @@ trait ConcreteType extends LMType {
   def pointer = new LMPointer(this)
 }
 abstract class LMType {
-  def rep: Document
+  def rep: String
   def aliased(n: String): ConcreteType
 }
 trait AliasedType extends ConcreteType {
   val name: String
-  override def rep = Document.text("%"+name)
+  abstract override def rep = "%\""+name+"\""
+  def realrep = super.rep
 }
 abstract class LMPrimitiveType extends LMType
 class LMInt(val bits: Int) extends LMPrimitiveType with ConcreteType {
@@ -21,7 +22,7 @@ class LMInt(val bits: Int) extends LMPrimitiveType with ConcreteType {
     case _ => false
   }
   override def hashCode = bits.hashCode
-  def rep = Document.text("i"+bits.toString)
+  def rep = "i"+bits.toString
   def aliased(n: String) = new LMInt(bits) with AliasedType { val name = n }
 }
 object LMInt {
@@ -32,7 +33,7 @@ object LMInt {
   val i64 = new LMInt(64)
 }
 abstract class LMFloatingPointType(val bits: Int, val syntax: String) extends LMPrimitiveType {
-  def rep = Document.text(syntax)
+  def rep = syntax
   override def equals(ot: Any) = ot match {
     case ot:LMFloatingPointType => this.syntax == ot.syntax
     case _ => false
@@ -60,18 +61,33 @@ class LMppc_fp128 extends LMFloatingPointType(128,"ppc_fp128") with ConcreteType
 }
 object LMppc_fp128
 class LMVoid extends LMPrimitiveType with ConcreteType {
-  def rep = Document.text("void")
+  def rep = "void"
   def aliased(n: String) = new LMVoid with AliasedType { val name = n }
+  override def equals(ot: Any) = ot match {
+    case _:LMVoid => true
+    case _ => false
+  }
+  override def hashCode = 0
 }
 object LMVoid extends LMVoid
 class LMLabel extends LMPrimitiveType with ConcreteType {
-  def rep = Document.text("label")
+  def rep = "label"
   def aliased(n: String) = new LMLabel with AliasedType { val name = n }
+  override def equals(ot: Any) = ot match {
+    case _:LMLabel => true
+    case _ => false
+  }
+  override def hashCode = 0
 }
 object LMLabel extends LMLabel
 class LMMetadata extends LMPrimitiveType with ConcreteType {
-  def rep = Document.text("metadata")
+  def rep = "metadata"
   def aliased(n: String) = new LMMetadata with AliasedType { val name = n }
+  override def equals(ot: Any) = ot match {
+    case _:LMMetadata => true
+    case _ => false
+  }
+  override def hashCode = 0
 }
 object LMMetadata extends LMMetadata
 abstract class LMDerivedType extends LMType
@@ -83,10 +99,10 @@ class LMArray(val num: Int, _elementtype: =>ConcreteType) extends LMAggregateTyp
   }
   override def hashCode = elementtype.hashCode ^ num
   lazy val elementtype = _elementtype
-  def rep = Document.text("[")::Document.text(num.toString):/:Document.text("x"):/:elementtype.rep::Document.text("]")
+  def rep = "[ "+num.toString+" x "+elementtype.rep+" ]"
   def aliased(n: String) = new LMArray(num, _elementtype) with AliasedType { val name = n }
 }
-class LMFunctionType(_returnType: =>LMType, _argTypes: =>Seq[ConcreteType], varargs: Boolean) extends LMDerivedType with ConcreteType {
+class LMFunctionType(_returnType: =>ConcreteType, _argTypes: =>Seq[ConcreteType], varargs: Boolean) extends LMDerivedType with ConcreteType {
   override def equals(ot: Any) = ot match {
     case ot:LMFunctionType => this.returnType == ot.returnType && this.argTypes.sameElements(ot.argTypes)
     case _ => false
@@ -94,11 +110,10 @@ class LMFunctionType(_returnType: =>LMType, _argTypes: =>Seq[ConcreteType], vara
   override def hashCode = JenkinsHash.hashSeq(returnType +: argTypes)
   lazy val returnType = _returnType
   lazy val argTypes = _argTypes
-  def argDoc = {
-    val args = if (varargs) argTypes.map(_.rep) :+ Document.text("...") else argTypes.map(_.rep)
-    args.reduceLeftOption(_::",":/:_).getOrElse(Document.empty)
+  def rep = {
+    val args = if (varargs) argTypes.map(_.rep) :+ "..." else argTypes.map(_.rep)
+    returnType.rep+args.mkString("(",", ",")")
   }
-  def rep = returnType.rep::Document.text("(")::Document.group(argDoc)::Document.text(")")
   def aliased(n: String) = new LMFunctionType(_returnType, _argTypes, varargs) with AliasedType { val name = n }
 }
 class LMStructure(_types: =>Seq[ConcreteType]) extends LMAggregateType with ConcreteType {
@@ -108,7 +123,7 @@ class LMStructure(_types: =>Seq[ConcreteType]) extends LMAggregateType with Conc
     case _ => false
   }
   override def hashCode = JenkinsHash.hashSeq(types)
-  def rep = Document.text("{"):/:Document.nest(2,Document.group(types.map(_.rep).reduceLeft(_::Document.text(","):/:_))):/:Document.text("}")
+  def rep = types.map(_.rep).mkString("{ ",", "," }")
   def aliased(n: String) = new LMStructure(_types) with AliasedType { val name = n }
 }
 class LMPackedStructure(_types: =>Seq[ConcreteType]) extends LMAggregateType with ConcreteType {
@@ -118,7 +133,7 @@ class LMPackedStructure(_types: =>Seq[ConcreteType]) extends LMAggregateType wit
     case _ => false
   }
   override def hashCode = JenkinsHash.hashSeq(types)
-  def rep = Document.text("< {"):/:Document.nest(2,Document.group(types.map(_.rep).reduceLeft(_::Document.text(","):/:_))):/:Document.text("} >")
+  def rep = types.map(_.rep).mkString("<{ ",", "," }>")
   def aliased(n: String) = new LMPackedStructure(_types) with AliasedType { val name = n }
 }
 class LMUnion(_types: =>Seq[ConcreteType]) extends LMAggregateType with ConcreteType {
@@ -128,7 +143,7 @@ class LMUnion(_types: =>Seq[ConcreteType]) extends LMAggregateType with Concrete
     case _ => false
   }
   override def hashCode = JenkinsHash.hashSeq(types)
-  def rep = Document.text("union {"):/:Document.nest(2,Document.group(types.map(_.rep).reduceLeft(_::Document.text(","):/:_))):/:Document.text("}")
+  def rep = types.map(_.rep).mkString("union { ",", "," }")
   def aliased(n: String) = new LMUnion(_types) with AliasedType { val name = n }
 }
 class LMPointer(_target: =>ConcreteType) extends LMDerivedType with ConcreteType {
@@ -138,7 +153,7 @@ class LMPointer(_target: =>ConcreteType) extends LMDerivedType with ConcreteType
     case _ => false
   }
   override def hashCode = target.hashCode
-  def rep = target.rep::Document.text("*")
+  def rep = target.rep+"*"
   def aliased(n: String) = new LMPointer(_target) with AliasedType { val name = n }
 }
 class LMVector(val n: Int, val elementtype: LMPrimitiveType with ConcreteType) extends LMAggregateType with ConcreteType {
@@ -147,7 +162,7 @@ class LMVector(val n: Int, val elementtype: LMPrimitiveType with ConcreteType) e
     case _ => false
   }
   override def hashCode = elementtype.hashCode ^ n
-  def rep = Document.text("<")::Document.text(n.toString):/:Document.text("x"):/:elementtype.rep::Document.text(">")
+  def rep = "< "+n.toString+" x "+elementtype.rep+" >"
   def aliased(nme: String) = new LMVector(n, elementtype) with AliasedType { val name = nme }
 }
 class LMOpaque extends LMType with ConcreteType {
@@ -156,7 +171,7 @@ class LMOpaque extends LMType with ConcreteType {
     case _ => false
   }
   override def hashCode = 0
-  def rep = Document.text("opaque")
+  def rep = "opaque"
   def aliased(n: String) = new LMOpaque with AliasedType { val name = n }
 }
 object LMOpaque extends LMOpaque
@@ -166,6 +181,6 @@ case class LMUpreference(n: Int) extends LMType with ConcreteType {
     case _ => false
   }
   override def hashCode = n.hashCode
-  def rep = Document.text("\\"+n.toString)
+  def rep = "\\"+n.toString
   def aliased(n: String) = error("cannot alias up references")
 }
