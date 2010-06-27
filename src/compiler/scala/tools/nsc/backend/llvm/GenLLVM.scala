@@ -237,8 +237,6 @@ abstract class GenLLVM extends SubComponent {
         }
         val blocks: mutable.ListBuffer[LMBlock] = new mutable.ListBuffer
         var varidx = 0
-        val locals: mutable.Map[Symbol,LMValue[_<:ConcreteType]] = mutable.Map()
-        m.params.foreach(p => locals(p.sym) = new LocalVariable(llvmName(p.sym), localType(p)))
         def nextvar[T <: ConcreteType](t: T) = {
           val v = new LocalVariable(varidx.toString, t)
           varidx = varidx + 1
@@ -264,6 +262,16 @@ abstract class GenLLVM extends SubComponent {
             val sources = bb.predecessors.map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".out."+n.toString,tpe)))
             insns.append(new phi(reg, sources))
             stack.push((reg, sym))
+          }
+          val locals: mutable.HashMap[Symbol,LocalVariable[_<:ConcreteType]] = new mutable.HashMap
+          m.locals.foreach { l =>
+            val tpe = typeKindType(l.kind)
+            val sym = l.sym
+            val reg = new LocalVariable(blockName(bb)+".local.in."+llvmName(sym), tpe)
+            locals(sym) = reg
+            val sources = bb.predecessors.map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".local.out."+llvmName(sym),tpe)))
+            val insn = if (sources.isEmpty) new select(reg, CTrue, new CUndef(reg.tpe), new CUndef(reg.tpe)) else new phi(reg, sources)
+            insns.append(insn)
           }
           bb.foreach { i =>
             i match {
@@ -301,7 +309,10 @@ abstract class GenLLVM extends SubComponent {
               }
               case STORE_ARRAY_ITEM(kind) => warning("unhandled " + i)
               case STORE_LOCAL(local) => {
-                locals(local.sym) = stack.pop._1
+                val l = nextvar(symType(local.sym))
+                val v = stack.pop._1
+                insns.append(new select(l, CTrue, v, v))
+                locals(local.sym) = l
               }
               case STORE_FIELD(field, isStatic) => {
                 val v = nextvar(symType(field))
@@ -630,6 +641,12 @@ abstract class GenLLVM extends SubComponent {
               }
             }
           }
+
+          locals.foreach { case (l,v) =>
+            val reg = new LocalVariable(blockName(bb)+".local.out."+llvmName(l), v.tpe)
+            insns.insert(insns.length-1, new select(reg, CTrue, v, v))
+          }
+
           producedTypes.zip(stack.takeRight(producedTypes.length)).zipWithIndex.foreach { case ((sym,(src,ssym)),n) =>
             val tpe = symType(sym)
             insns.insert(insns.length-1,new select(new LocalVariable(blockName(bb)+".out."+n.toString, tpe), CTrue, src, new CUndef(tpe)))
