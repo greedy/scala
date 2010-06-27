@@ -335,15 +335,15 @@ abstract class GenLLVM extends SubComponent {
                     }
                     stack.push((v,argsym))
                   }
-                  case Test(op, _, z) => {
+                  case Test(op, k, z) => {
+                    val cmpto = if (z) new CZeroInit(typeKindType(k)) else stack.pop._1
                     val arg = stack.pop._1
-                    val cmpto = if (z) new CZeroInit(arg.tpe) else stack.pop._1
                     val result = nextvar(LMInt.i1)
                     def cmp(intop: ICond, floatop: FCond) = {
                       arg.tpe match {
                         case _:LMInt => insns.append(new icmp(result, intop, arg.asInstanceOf[LMValue[LMInt]], cmpto.asInstanceOf[LMValue[LMInt]]))
                         case _:LMFloat => insns.append(new fcmp(result, floatop, arg.asInstanceOf[LMValue[LMFloat]], cmpto.asInstanceOf[LMValue[LMFloat]]))
-                        case _:LMDouble => insns.append(new fcmp(result, floatop, arg.asInstanceOf[LMValue[LMDouble]], cmpto.asInstanceOf[LMValue[LMFloat]]))
+                        case _:LMDouble => insns.append(new fcmp(result, floatop, arg.asInstanceOf[LMValue[Double]], cmpto.asInstanceOf[LMValue[LMDouble]]))
                         case _:LMPointer => insns.append(new icmp_p(result, intop, arg.asInstanceOf[LMValue[LMPointer]], cmpto.asInstanceOf[LMValue[LMPointer]]))
                       }
                     }
@@ -551,8 +551,8 @@ abstract class GenLLVM extends SubComponent {
               }
               case JUMP(whereto) => insns.append(new br(blockLabel(whereto)))
               case CJUMP(success, failure, op, kind) => {
-                val arg = stack.pop._1
                 val cmpto = stack.pop._1
+                val arg = stack.pop._1
                 val result = nextvar(LMInt.i1)
                 def cmp(intop: ICond, floatop: FCond) = {
                   arg.tpe match {
