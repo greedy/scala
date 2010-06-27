@@ -8,12 +8,13 @@ trait ConcreteType extends LMType {
 }
 abstract class LMType {
   def rep: String
+  def realrep = rep
   def aliased(n: String): ConcreteType
 }
 trait AliasedType extends ConcreteType {
   val name: String
   abstract override def rep = "%\""+name+"\""
-  def realrep = super.rep
+  override def realrep = super.rep
 }
 abstract class LMPrimitiveType extends LMType
 class LMInt(val bits: Int) extends LMPrimitiveType with ConcreteType {
