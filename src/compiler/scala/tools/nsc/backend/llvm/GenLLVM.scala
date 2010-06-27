@@ -186,11 +186,8 @@ abstract class GenLLVM extends SubComponent {
         val supers = Stream.iterate(c.symbol.superClass)(_.superClass).takeWhile(s => s != NoSymbol)
         supers.map(classType).foreach(recordType)
         recordType(ct)
-        println(c.symbol)
         val basevirts = virtualMethods(c.symbol)
         val virts = basevirts.map(m => c.symbol.info.member(m.name).filter(_.info <:< m.info))
-        println(basevirts.map(m => (m.owner, m.toString, m.info)).mkString("\n"))
-        println(virts.map(m => (m.owner, m.toString, m.info)).mkString("\n"))
         val vfuns = virts.map(externFun)
         val vtable = new CArray(LMInt.i8.pointer, vfuns.map(f => new Cbitcast(new CFunctionAddress(f), LMInt.i8.pointer)))
         val vtableg = new LMGlobalVariable(".vtable", vtable.tpe, Private, Default, true)
@@ -203,9 +200,6 @@ abstract class GenLLVM extends SubComponent {
                                  new CInt(LMInt.i32, 0),
                                  new CArray(rtTraitInfo, Seq.empty)))
         val cig = new LMGlobalVariable[LMStructure](classInfoName(c.symbol), rtClass, Externally_visible, Default, true)
-        println(ci.tpe.rep)
-        println(cig.tpe.rep)
-        println(ci.tpe == cig.tpe)
         Seq(cig.define(ci), ng.define(n), vtableg.define(vtable))
       }
 
@@ -288,7 +282,7 @@ abstract class GenLLVM extends SubComponent {
                 }
                 stack.push((value,const.tpe.typeSymbol))
               }
-              case LOAD_ARRAY_ITEM(kind) => println("unhandled " + i)
+              case LOAD_ARRAY_ITEM(kind) => warning("unhandled " + i)
               case LOAD_LOCAL(local) => {
                 stack.push((locals(local.sym), local.sym.tpe.typeSymbol))
               }
@@ -305,7 +299,7 @@ abstract class GenLLVM extends SubComponent {
               case LOAD_MODULE(module) => {
                 stack.push((new CGlobalAddress(externModule(module)), module))
               }
-              case STORE_ARRAY_ITEM(kind) => println("unhandled " + i)
+              case STORE_ARRAY_ITEM(kind) => warning("unhandled " + i)
               case STORE_LOCAL(local) => {
                 locals(local.sym) = stack.pop._1
               }
@@ -483,11 +477,10 @@ abstract class GenLLVM extends SubComponent {
                     }
                     stack.push((result,dk.toType.typeSymbol))
                   }
-                  case _ => println("unsupported primitive op " + primitive)
+                  case _ => warning("unsupported primitive op " + primitive)
                 }
               }
               case CALL_METHOD(method, style) => {
-                println((method.owner, method, method.info))
                 val funtype = symType(method).asInstanceOf[LMFunctionType]
                 val args = stack.take(funtype.argTypes.size).map(_._1).reverse
                 val efffuntype = new LMFunctionType(if (method.isClassConstructor) LMVoid else typeType(method.tpe.resultType), args.map(_.tpe), false)
@@ -533,9 +526,9 @@ abstract class GenLLVM extends SubComponent {
                 recordType(casted.tpe)
                 insns.append(new bitcast(casted, asobject))
               }
-              case CREATE_ARRAY(elem, dims) => println("unhandled " + i)
-              case IS_INSTANCE(tpe) => println("unhandled " + i)
-              case CHECK_CAST(tpe) => println("unhandled " + i)
+              case CREATE_ARRAY(elem, dims) => warning("unhandled " + i)
+              case IS_INSTANCE(tpe) => warning("unhandled " + i)
+              case CHECK_CAST(tpe) => warning("unhandled " + i)
               case SWITCH(tags, labels) => {
                 val v = stack.pop._1.asInstanceOf[LMValue[LMInt]]
                 val deflabel = blockLabel(labels.last)
@@ -597,14 +590,14 @@ abstract class GenLLVM extends SubComponent {
                   insns.append(new ret(stack.pop._1))
                 }
               }
-              case THROW() => println("unhandled " + i)
+              case THROW() => warning("unhandled " + i)
               case DROP(kind) => stack.pop
               case DUP(kind) => stack.push(stack.top)
-              case MONITOR_ENTER() => println("unhandled " + i)
-              case MONITOR_EXIT() => println("unhandled " + i)
-              case SCOPE_ENTER(lv) => println("unhandled " + i)
-              case SCOPE_EXIT(lv) => println("unhandled " + i)
-              case LOAD_EXCEPTION() => println("unhandled " + i)
+              case MONITOR_ENTER() => warning("unhandled " + i)
+              case MONITOR_EXIT() => warning("unhandled " + i)
+              case SCOPE_ENTER(lv) => ()
+              case SCOPE_EXIT(lv) => ()
+              case LOAD_EXCEPTION() => warning("unhandled " + i)
               case BOX(_) => {
                 val (unboxed,unboxedsym) = stack.pop
                 val fun = unboxed.tpe match {
@@ -672,7 +665,7 @@ abstract class GenLLVM extends SubComponent {
         case DoubleTag => c.doubleValue
         case StringTag => new CArray(LMInt.i8, (c.stringValue+"\0").getBytes("UTF-8").map(new CInt(LMInt.i8, _)))
         case _ => {
-          error("Can't handle " + c + " tagged " + c.tag)
+          warning("Can't handle " + c + " tagged " + c.tag)
           new CUndef(LMVoid)
         }
       }
@@ -798,12 +791,10 @@ abstract class GenLLVM extends SubComponent {
           case i => i.producedTypes.map(_.toType.typeSymbol)
         }
         if (instruction.consumed != consumedTypes.length) {
-          println("Consumption mismatch for " + instruction)
-          println(instruction.consumed.toString +" "+ consumedTypes)
+          warning("Consumption mismatch for " + instruction+": "+instruction.consumed.toString +" "+ consumedTypes)
         }
         if (instruction.produced != producedTypes.length) {
-          println("Production mismatch for " + instruction)
-          println(instruction.produced.toString +" "+ producedTypes)
+          warning("Production mismatch for " + instruction+": "+instruction.produced.toString +" "+ producedTypes)
         }
         val takenInternally = consumedTypes.length.min(produced.length)
         if (takenInternally > 0) produced.remove(produced.length-takenInternally, takenInternally) else ()
