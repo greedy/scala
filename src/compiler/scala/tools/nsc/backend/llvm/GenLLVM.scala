@@ -787,24 +787,26 @@ abstract class GenLLVM extends SubComponent {
       val needed = new mutable.ListBuffer[Symbol]
       bb foreach { instruction =>
         val consumedTypes = instruction match {
-          case RETURN(UNIT) => Nil
-          case RETURN(k) => k.toType.typeSymbol::Nil
-          case CJUMP(_,_,_,k) => Seq.fill(2)(k.toType.typeSymbol).toList
-          case CALL_METHOD(m,SuperCall(_)) => m.owner.tpe.typeSymbol::Nil
-          case DROP(k) => k.toType.typeSymbol::Nil
+          case RETURN(UNIT) => Seq.empty
+          case RETURN(k) => Seq(k.toType.typeSymbol)
+          case CJUMP(_,_,_,k) => Seq(k.toType.typeSymbol, k.toType.typeSymbol)
+          case CALL_METHOD(m,SuperCall(_)) => Seq(m.owner.tpe.typeSymbol)
+          case DROP(k) => Seq(k.toType.typeSymbol)
+          case DUP(k) => Seq(k.toType.typeSymbol)
           case i => i.consumedTypes.map(_.toType.typeSymbol)
         }
         val producedTypes = instruction match {
           case CALL_METHOD(m, _) => {
             if (m.tpe.resultType.typeSymbol == definitions.UnitClass)
-              Nil
+              Seq.empty
             else if (m.isConstructor)
-              Nil
+              Seq.empty
             else
-              m.tpe.resultType.typeSymbol::Nil
+              Seq(m.tpe.resultType.typeSymbol)
           }
-          case BOX(bt) => bt.toType.typeSymbol::Nil
-          case UNBOX(bt) => bt.toType.typeSymbol::Nil
+          case BOX(bt) => Seq(bt.toType.typeSymbol)
+          case UNBOX(bt) => Seq(bt.toType.typeSymbol)
+          case DUP(k) => Seq(k.toType.typeSymbol,k.toType.typeSymbol)
           case i => i.producedTypes.map(_.toType.typeSymbol)
         }
         if (instruction.consumed != consumedTypes.length) {
