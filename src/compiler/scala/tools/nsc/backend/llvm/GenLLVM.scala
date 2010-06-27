@@ -678,6 +678,7 @@ abstract class GenLLVM extends SubComponent {
           }
           blocks.append(LMBlock(Some(blockLabel(bb)), insns))
         }
+        blocks.prepend(LMBlock(None, Seq(new br(blocks.head.label.get))))
         fun.define(blocks)
       }
 
