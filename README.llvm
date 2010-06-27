@@ -33,6 +33,7 @@ What's done
  * Fields load and store
  * Primitive operations
  * Instance creation
+ * Dynamic method dispatch
 
 What's not
 ----------
@@ -40,7 +41,6 @@ What's not
  * Separate compilation
  * Garbage collection
  * Arrays
- * Dynamic method dispatch
  * Exceptions
  * Strings
 
