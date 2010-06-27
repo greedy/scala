@@ -47,6 +47,7 @@ abstract class GenLLVM extends SubComponent {
       val rtObject = new LMStructure(Seq(rtClass.pointer)).aliased(".object")
       val rtDispatch = new LMStructure(Seq(rtClass.pointer, LMInt.i8.pointer)).aliased(".dispatch")
       val rtNew = new LMFunction(rtObject.pointer, ".rt.new", Seq(ArgSpec(new LocalVariable("cls", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
+      val rtInitobj= new LMFunction(rtObject.pointer, ".rt.initobj", Seq(ArgSpec(new LocalVariable("object", rtObject.pointer)), ArgSpec(new LocalVariable("cls", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtGetClass = new LMFunction(rtClass.pointer, ".rt.get_class", Seq(ArgSpec(new LocalVariable("object", rtObject.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtLookupMethod = new LMFunction(LMInt.i8.pointer, ".rt.lookup_method", Seq(ArgSpec(new LocalVariable("dtable", rtDispatch.pointer)), ArgSpec(new LocalVariable("cls", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtBoxi1 = new LMFunction(symType(definitions.BoxedBooleanClass), ".rt.box.i1", Seq(ArgSpec(new LocalVariable("v", LMInt.i1))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
@@ -81,6 +82,7 @@ abstract class GenLLVM extends SubComponent {
         new TypeAlias(rtDispatch),
         rtLookupMethod.declare,
         rtNew.declare,
+        rtInitobj.declare,
         rtGetClass.declare,
         rtLookupMethod.declare,
         rtBoxi1.declare,
@@ -216,11 +218,8 @@ abstract class GenLLVM extends SubComponent {
           val asvalue = new LocalVariable("value", symType(c.symbol).asInstanceOf[LMPointer].target)
           val initFundef = initFun.define(Seq(
             LMBlock(None, Seq(
-              new call(asobject, rtNew, Seq(new CGlobalAddress(externClass(c.symbol)))),
-              new bitcast(asinstance, asobject),
-              new call_void(externFun(c.lookupMethod("<init>").get.symbol), Seq(asinstance)),
-              new load(asvalue, asinstance),
-              new store(asvalue, new CGlobalAddress(ig)),
+              new call(asobject, rtInitobj, Seq(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), new CGlobalAddress(externClass(c.symbol)))),
+              new call_void(externFun(c.lookupMethod("<init>").get.symbol), Seq(new CGlobalAddress(ig))),
               retvoid
             ))))
           val ctors = new LMGlobalVariable("llvm.global_ctors", new LMArray(1, new LMStructure(Seq(LMInt.i32, new LMFunctionType(LMVoid, Seq.empty, false).pointer))), Appending, Default, false)

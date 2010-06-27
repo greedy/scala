@@ -118,6 +118,12 @@ define fastcc %.object* @.rt.new(%.class* %clsp) {
   %memory = malloc i8, i32 %objectsize
   call void @llvm.memset.i32(i8* %memory, i8 0, i32 %objectsize, i32 0)
   %object = bitcast i8* %memory to %java.lang.Object*
+  %initted = call fastcc %.object* @.rt.initobj(%java.lang.Object* %object, %.class* %clsp)
+  ret %java.lang.Object* %initted
+}
+
+define fastcc %.object* @.rt.initobj(%java.lang.Object* %object, %.class* %clsp) {
+  %cls = load %.class* %clsp
   %classp = getelementptr %java.lang.Object* %object, i32 0, i32 0
   store %.class* %clsp, %.class** %classp
   ret %java.lang.Object* %object
