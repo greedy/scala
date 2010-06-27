@@ -368,7 +368,7 @@ abstract class GenLLVM extends SubComponent {
                       arg.tpe match {
                         case _:LMInt => insns.append(new icmp(result, intop, arg.asInstanceOf[LMValue[LMInt]], cmpto.asInstanceOf[LMValue[LMInt]]))
                         case _:LMFloat => insns.append(new fcmp(result, floatop, arg.asInstanceOf[LMValue[LMFloat]], cmpto.asInstanceOf[LMValue[LMFloat]]))
-                        case _:LMDouble => insns.append(new fcmp(result, floatop, arg.asInstanceOf[LMValue[Double]], cmpto.asInstanceOf[LMValue[LMDouble]]))
+                        case _:LMDouble => insns.append(new fcmp(result, floatop, arg.asInstanceOf[LMValue[LMDouble]], cmpto.asInstanceOf[LMValue[LMDouble]]))
                         case _:LMPointer => insns.append(new icmp_p(result, intop, arg.asInstanceOf[LMValue[LMPointer]], cmpto.asInstanceOf[LMValue[LMPointer]]))
                       }
                     }
