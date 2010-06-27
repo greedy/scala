@@ -39,6 +39,9 @@ abstract class GenLLVM extends SubComponent {
 
   class ModuleGenerator {
 
+    val LlvmimplAnnotSym = definitions.getClass("scala.llvmimpl")
+    val LlvmdefsAnnotSym = definitions.getClass("scala.llvmdefs")
+
     object Runtime {
       val rtVtable = new LMArray(0, LMInt.i8.pointer).aliased(".vtable")
       val rtClass: LMStructure with AliasedType = new LMStructure(Seq(LMInt.i8.pointer, LMInt.i32, rtClass.pointer, rtVtable.pointer, LMInt.i32, new LMArray(0, rtTraitInfo))).aliased(".class")
@@ -116,6 +119,12 @@ abstract class GenLLVM extends SubComponent {
       val externModules: mutable.Map[Symbol,LMGlobalVariable[_<:ConcreteType]] = new mutable.HashMap
       val externTypes: mutable.ListBuffer[AliasedType] = new mutable.ListBuffer
       var globidx = 0
+
+      c.symbol.getAnnotation(LlvmdefsAnnotSym) match {
+        case Some(AnnotationInfo(_, List(Literal(Constant(s: String))), _)) => extraDefs += new ModuleComp { val syntax = s }
+        case Some(x) => error("Invalid llvmdefs annotation")
+        case None => ()
+      }
 
       externTypes ++= rtOpaqueTypes
 
@@ -224,6 +233,22 @@ abstract class GenLLVM extends SubComponent {
         }
       }
 
+      def genNativeFun(m: IMethod) = {
+        val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
+        val args = thisarg +: m.params.map(p => ArgSpec(new LocalVariable(llvmName(p.sym), localType(p))))
+        val fun = new LMFunction(typeType(m.returnType.toType), llvmName(m.symbol), args, false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
+        recordType(fun.tpe)
+        fun.args.map(_.lmvar.tpe).foreach(recordType)
+        if (isMain(c) && m.params.isEmpty && m.symbol.simpleName.toString().trim() == "main" && fun.resultType == LMVoid) {
+          extraDefs += generateMain(fun)
+        }
+        val body = m.symbol.getAnnotation(LlvmimplAnnotSym) match {
+          case Some(AnnotationInfo(_,List(Literal(Constant(s: String))),_)) => s
+          case Some(x) => error("Invalid llvmimpl annotation"); ""
+          case None => error("Generating native funtion but no llvmimpl annotation"); ""
+        }
+        fun.define(body)
+      }
       def genFun(m: IMethod) = {
         internalFuns += m.symbol
         //m.dump
@@ -660,10 +685,11 @@ abstract class GenLLVM extends SubComponent {
       val outfile = getFile(c.symbol, ".ll")
       val outstream = new OutputStreamWriter(outfile.bufferedOutput,"US-ASCII")
       val header_comment = new Comment("Module for " + c.symbol.fullName('.'))
-      val methods = c.methods.filter(!_.native).map(genFun _)
+      val methods = c.methods.filter(!_.native).filter(!_.symbol.hasAnnotation(LlvmimplAnnotSym)).map(genFun _)
+      val llvmmethods = c.methods.filter(_.symbol.hasAnnotation(LlvmimplAnnotSym)).map(genNativeFun _)
       c.methods.filter(_.native).map(_.symbol).foreach(externFun)
       val externDecls = externFuns.filterKeys(!internalFuns.contains(_)).values.map(_.declare)++externClasses.values.map(_.declare)
-      val module = new Module(Seq(header_comment)++externTypes.groupBy(_.name).values.map(ats => new TypeAlias(ats.first))++rtHeader++externDecls++externModules.values.map(_.declare)++classInfo++methods++extraDefs++moduleInfo)
+      val module = new Module(Seq(header_comment)++externTypes.groupBy(_.name).values.map(ats => new TypeAlias(ats.first))++rtHeader++externDecls++externModules.values.map(_.declare)++classInfo++methods++llvmmethods++extraDefs++moduleInfo)
       outstream.write(module.syntax)
       outstream.write("\n")
       outstream.close()
