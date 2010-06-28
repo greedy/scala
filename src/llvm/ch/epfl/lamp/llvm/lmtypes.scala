@@ -19,6 +19,7 @@ trait AliasedType extends ConcreteType {
 abstract class LMPrimitiveType extends LMType
 class LMInt(val bits: Int) extends LMPrimitiveType with ConcreteType {
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case ot:LMInt => this.bits == ot.bits
     case _ => false
   }
@@ -36,6 +37,7 @@ object LMInt {
 abstract class LMFloatingPointType(val bits: Int, val syntax: String) extends LMPrimitiveType {
   def rep = syntax
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case ot:LMFloatingPointType => this.syntax == ot.syntax
     case _ => false
   }
@@ -65,6 +67,7 @@ class LMVoid extends LMPrimitiveType with ConcreteType {
   def rep = "void"
   def aliased(n: String) = new LMVoid with AliasedType { val name = n }
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case _:LMVoid => true
     case _ => false
   }
@@ -75,6 +78,7 @@ class LMLabel extends LMPrimitiveType with ConcreteType {
   def rep = "label"
   def aliased(n: String) = new LMLabel with AliasedType { val name = n }
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case _:LMLabel => true
     case _ => false
   }
@@ -85,6 +89,7 @@ class LMMetadata extends LMPrimitiveType with ConcreteType {
   def rep = "metadata"
   def aliased(n: String) = new LMMetadata with AliasedType { val name = n }
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case _:LMMetadata => true
     case _ => false
   }
@@ -95,6 +100,7 @@ abstract class LMDerivedType extends LMType
 abstract class LMAggregateType extends LMDerivedType
 class LMArray(val num: Int, _elementtype: =>ConcreteType) extends LMAggregateType with ConcreteType {
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case ot:LMArray => this.num == ot.num && this.elementtype == ot.elementtype
     case _ => false
   }
@@ -105,6 +111,7 @@ class LMArray(val num: Int, _elementtype: =>ConcreteType) extends LMAggregateTyp
 }
 class LMFunctionType(_returnType: =>ConcreteType, _argTypes: =>Seq[ConcreteType], varargs: Boolean) extends LMDerivedType with ConcreteType {
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case ot:LMFunctionType => this.returnType == ot.returnType && this.argTypes.sameElements(ot.argTypes)
     case _ => false
   }
@@ -120,16 +127,18 @@ class LMFunctionType(_returnType: =>ConcreteType, _argTypes: =>Seq[ConcreteType]
 class LMStructure(_types: =>Seq[ConcreteType]) extends LMAggregateType with ConcreteType {
   lazy val types = _types
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case ot:LMStructure => this.types.sameElements(ot.types)
     case _ => false
   }
-  override def hashCode = JenkinsHash.hashSeq(types)
+  override def hashCode = types.length
   def rep = types.map(_.rep).mkString("{ ",", "," }")
   def aliased(n: String) = new LMStructure(_types) with AliasedType { val name = n }
 }
 class LMPackedStructure(_types: =>Seq[ConcreteType]) extends LMAggregateType with ConcreteType {
   lazy val types = _types
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case ot:LMPackedStructure => this.types.sameElements(ot.types)
     case _ => false
   }
@@ -140,6 +149,7 @@ class LMPackedStructure(_types: =>Seq[ConcreteType]) extends LMAggregateType wit
 class LMUnion(_types: =>Seq[ConcreteType]) extends LMAggregateType with ConcreteType {
   lazy val types = _types
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case ot:LMUnion => this.types.sameElements(ot.types)
     case _ => false
   }
@@ -150,6 +160,7 @@ class LMUnion(_types: =>Seq[ConcreteType]) extends LMAggregateType with Concrete
 class LMPointer(_target: =>ConcreteType) extends LMDerivedType with ConcreteType {
   lazy val target = _target
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case ot:LMPointer => this.target == ot.target
     case _ => false
   }
@@ -159,6 +170,7 @@ class LMPointer(_target: =>ConcreteType) extends LMDerivedType with ConcreteType
 }
 class LMVector(val n: Int, val elementtype: LMPrimitiveType with ConcreteType) extends LMAggregateType with ConcreteType {
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case ot:LMVector => this.n == ot.n && this.elementtype == ot.elementtype
     case _ => false
   }
@@ -168,6 +180,7 @@ class LMVector(val n: Int, val elementtype: LMPrimitiveType with ConcreteType) e
 }
 class LMOpaque extends LMType with ConcreteType {
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case _:LMOpaque => true
     case _ => false
   }
@@ -178,6 +191,7 @@ class LMOpaque extends LMType with ConcreteType {
 object LMOpaque extends LMOpaque
 case class LMUpreference(n: Int) extends LMType with ConcreteType {
   override def equals(ot: Any) = ot match {
+    case ar:AnyRef if (ar eq this) => true
     case ot:LMUpreference => this.n == ot.n
     case _ => false
   }
