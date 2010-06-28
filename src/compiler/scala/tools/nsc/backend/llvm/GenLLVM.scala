@@ -42,6 +42,10 @@ abstract class GenLLVM extends SubComponent {
     val LlvmimplAnnotSym = definitions.getClass("scala.llvmimpl")
     val LlvmdefsAnnotSym = definitions.getClass("scala.llvmdefs")
 
+    def fields(s: Symbol) = {
+      classes.get(s).map(_.fields)
+    }
+
     object Runtime {
       val rtVtable = new LMArray(0, LMInt.i8.pointer).aliased(".vtable")
       val rtClass: LMStructure with AliasedType = new LMStructure(Seq(LMInt.i8.pointer, LMInt.i32, rtClass.pointer, rtVtable.pointer, LMInt.i32, new LMArray(0, rtTraitInfo))).aliased(".class")
@@ -60,6 +64,7 @@ abstract class GenLLVM extends SubComponent {
       val rtBoxi64 = new LMFunction(symType(definitions.BoxedLongClass), ".rt.box.i64", Seq(ArgSpec(new LocalVariable("v", LMInt.i64))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtBoxFloat = new LMFunction(symType(definitions.BoxedFloatClass), ".rt.box.float", Seq(ArgSpec(new LocalVariable("v", LMFloat))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtBoxDouble = new LMFunction(symType(definitions.BoxedDoubleClass), ".rt.box.double", Seq(ArgSpec(new LocalVariable("v", LMDouble))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
+      val rtBoxChar = new LMFunction(symType(definitions.BoxedCharacterClass), ".rt.box.char", Seq(ArgSpec(new LocalVariable("v", LMInt.i16))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtUnboxi1 = new LMFunction(LMInt.i1, ".rt.unbox.i1", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedBooleanClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtUnboxi8 = new LMFunction(LMInt.i8, ".rt.unbox.i8", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedByteClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtUnboxi16 = new LMFunction(LMInt.i16, ".rt.unbox.i16", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedShortClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
@@ -67,7 +72,9 @@ abstract class GenLLVM extends SubComponent {
       val rtUnboxi64 = new LMFunction(LMInt.i64, ".rt.unbox.i64", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedLongClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtUnboxFloat = new LMFunction(LMFloat, ".rt.unbox.float", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedFloatClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtUnboxDouble = new LMFunction(LMDouble, ".rt.unbox.double", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedDoubleClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
+      val rtUnboxChar = new LMFunction(LMInt.i16, ".rt.unbox.char", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedCharacterClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtMakeString = new LMFunction(symType(definitions.StringClass), ".rt.makestring", Seq(ArgSpec(new LocalVariable("s", LMInt.i8.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
+      val rtBoxedUnit = new LMGlobalVariable(".rt.boxedUnit", symType(definitions.BoxedUnitClass), Externally_visible, Default, true)
       val rtOpaqueTypes = Seq(
         LMOpaque.aliased("java.lang.Boolean"),
         LMOpaque.aliased("java.lang.Byte"),
@@ -76,7 +83,9 @@ abstract class GenLLVM extends SubComponent {
         LMOpaque.aliased("java.lang.Long"),
         LMOpaque.aliased("java.lang.Float"),
         LMOpaque.aliased("java.lang.Double"),
-        LMOpaque.aliased("java.lang.String")
+        LMOpaque.aliased("java.lang.String"),
+        LMOpaque.aliased("java.lang.Character"),
+        LMOpaque.aliased("scala.runtime.BoxedUnit")
       )
       val rtHeader = Seq(
         new TypeAlias(rtVtable),
@@ -95,6 +104,7 @@ abstract class GenLLVM extends SubComponent {
         rtBoxi64.declare,
         rtBoxFloat.declare,
         rtBoxDouble.declare,
+        rtBoxChar.declare,
         rtUnboxi1.declare,
         rtUnboxi8.declare,
         rtUnboxi16.declare,
@@ -102,7 +112,9 @@ abstract class GenLLVM extends SubComponent {
         rtUnboxi64.declare,
         rtUnboxFloat.declare,
         rtUnboxDouble.declare,
-        rtMakeString.declare
+        rtUnboxChar.declare,
+        rtMakeString.declare,
+        rtBoxedUnit.declare
       )
     }
 
@@ -187,7 +199,8 @@ abstract class GenLLVM extends SubComponent {
 
       def virtualMethods(s: Symbol) = {
         val supers = Stream.iterate(s)(_.superClass).takeWhile(s => s != NoSymbol)
-        supers.reverse.flatMap(_.info.decls.toList.filter(d => !d.isConstructor && !d.isOverride && !d.isEffectivelyFinal))
+        val virtdecls = supers.reverse.flatMap(_.info.decls.toList.filter(d => d.isMethod && !d.isConstructor && !d.isOverride && !d.isEffectivelyFinal))
+        virtdecls
       }
 
       val classInfo: Seq[ModuleComp] = {
@@ -268,12 +281,12 @@ abstract class GenLLVM extends SubComponent {
           v
         }
         m.code.blocks.foreach { bb =>
-          val stack: mutable.Stack[(LMValue[_<:ConcreteType],Symbol)] = mutable.Stack()
+          val stack: mutable.Stack[LMValue[_<:ConcreteType]] = mutable.Stack()
           def popn(n: Int) {
             for (_ <- 0 until n) stack.pop
           }
           val insns: mutable.ListBuffer[LMInstruction] = new mutable.ListBuffer
-          def upcast(src: LMValue[LMPointer], srcsym: Symbol, targetsym: Symbol): LMValue[LMPointer] = {
+          def cast(src: LMValue[LMPointer], targetsym: Symbol): LMValue[LMPointer] = {
             recordType(symType(targetsym))
             val v = nextvar(symType(targetsym).asInstanceOf[LMPointer])
             insns.append(new bitcast(v, src))
@@ -286,7 +299,7 @@ abstract class GenLLVM extends SubComponent {
             val reg = new LocalVariable(blockName(bb)+".in."+n.toString,tpe)
             val sources = bb.predecessors.map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".out."+n.toString,tpe)))
             insns.append(new phi(reg, sources))
-            stack.push((reg, sym))
+            stack.push(reg)
           }
           val locals: mutable.HashMap[Symbol,LocalVariable[_<:ConcreteType]] = new mutable.HashMap
           m.locals.foreach { l =>
@@ -301,7 +314,7 @@ abstract class GenLLVM extends SubComponent {
           bb.foreach { i =>
             i match {
               case THIS(clasz) => {
-                stack.push((thisarg.lmvar,clasz))
+                stack.push(thisarg.lmvar)
               }
               case CONSTANT(const) => {
                 val value = constValue(const) match {
@@ -313,56 +326,78 @@ abstract class GenLLVM extends SubComponent {
                   }
                   case v => v
                 }
-                stack.push((value,const.tpe.typeSymbol))
+                stack.push(value)
               }
-              case LOAD_ARRAY_ITEM(kind) => warning("unhandled " + i)
+              case LOAD_ARRAY_ITEM(kind) => {
+                warning("unhandled " + i)
+                popn(i.consumed)
+                stack.push(new CUndef(typeKindType(kind)))
+              }
               case LOAD_LOCAL(local) => {
-                stack.push((locals(local.sym), local.sym.tpe.typeSymbol))
+                stack.push(locals(local.sym))
               }
-              case LOAD_FIELD(field, isStatic) => {
+              case LOAD_FIELD(field, isStatic) if (field == definitions.BoxedUnit_UNIT) => {
+                stack.push(new CGlobalAddress(rtBoxedUnit))
+              }
+              case i@LOAD_FIELD(field, isStatic) => {
                 val v = nextvar(symType(field))
                 val fieldptr = nextvar(v.tpe.pointer)
-                val fieldidx = classes(field.owner).fields.indexWhere(f => f.symbol == field)
-                val (ivar,isym) = stack.pop
-                val instance = upcast(ivar.asInstanceOf[LMValue[LMPointer]],isym,field.owner)
-                insns.append(new getelementptr(fieldptr, instance.asInstanceOf[LMValue[LMPointer]], Seq(new CInt(LMInt.i8,0),new CInt(LMInt.i32,fieldidx+1))))
-                insns.append(new load(v, fieldptr))
-                stack.push((v,field.tpe.typeSymbol))
+                fields(field.owner) match {
+                  case Some(fi) =>
+                    val fieldidx = fi.indexWhere(f => f.symbol == field)
+                    val ivar = stack.pop
+                    val instance = cast(ivar.asInstanceOf[LMValue[LMPointer]],field.owner)
+                    insns.append(new getelementptr(fieldptr, instance.asInstanceOf[LMValue[LMPointer]], Seq(new CInt(LMInt.i8,0),new CInt(LMInt.i32,fieldidx+1))))
+                    insns.append(new load(v, fieldptr))
+                    stack.push(v)
+                  case None =>
+                    error("No field info for "+field.owner+" needed to lookup position of "+field)
+                    m.dump
+                    stack.push(new CUndef(v.tpe))
+                }
               }
               case LOAD_MODULE(module) => {
-                stack.push((new CGlobalAddress(externModule(module)), module))
+                stack.push(new CGlobalAddress(externModule(module)))
               }
-              case STORE_ARRAY_ITEM(kind) => warning("unhandled " + i)
+              case STORE_ARRAY_ITEM(kind) => {
+                warning("unhandled " + i)
+                popn(i.consumed)
+              }
               case STORE_LOCAL(local) => {
                 val l = nextvar(symType(local.sym))
-                val v = stack.pop._1
+                val v = stack.pop
                 insns.append(new select(l, CTrue, v, v))
                 locals(local.sym) = l
               }
               case STORE_FIELD(field, isStatic) => {
                 val v = nextvar(symType(field))
                 val fieldptr = nextvar(v.tpe.pointer)
-                val fieldidx = classes(field.owner).fields.indexWhere(f => f.symbol == field)
-                val value = stack.pop._1
-                val instance = stack.pop._1
-                insns.append(new getelementptr(fieldptr, instance.asInstanceOf[LMValue[LMPointer]], Seq(new CInt(LMInt.i8,0),new CInt(LMInt.i32,fieldidx+1))))
-                insns.append(new store(value, fieldptr))
+                fields(field.owner) match {
+                  case Some(fi) =>
+                    val fieldidx = fi.indexWhere(f => f.symbol == field)
+                    val value = stack.pop
+                    val instance = stack.pop
+                    insns.append(new getelementptr(fieldptr, instance.asInstanceOf[LMValue[LMPointer]], Seq(new CInt(LMInt.i8,0),new CInt(LMInt.i32,fieldidx+1))))
+                    insns.append(new store(value, fieldptr))
+                  case None =>
+                    error("No field info for "+field.owner+" needed to lookup position of "+field)
+                }
               }
               case CALL_PRIMITIVE(primitive) => {
                 primitive match {
                   case Negation(_) => {
-                    val (arg,argsym) = stack.pop
+                    val arg = stack.pop
                     val v = nextvar(arg.tpe)
                     arg.tpe match {
                       case i:LMInt => insns.append(new mul(v.asInstanceOf[LocalVariable[LMInt]], arg.asInstanceOf[LMValue[LMInt]], new CInt(i,-1)))
                       case f:LMFloat => insns.append(new fmul(v.asInstanceOf[LocalVariable[LMFloat]], arg.asInstanceOf[LMValue[LMFloat]], new CFloat(-1)))
                       case d:LMDouble => insns.append(new fmul(v.asInstanceOf[LocalVariable[LMDouble]], arg.asInstanceOf[LMValue[LMDouble]], new CDouble(-1)))
                     }
-                    stack.push((v,argsym))
+                    stack.push(v)
                   }
                   case Test(op, k, z) => {
-                    val cmpto = if (z) new CZeroInit(typeKindType(k)) else stack.pop._1
-                    val arg = stack.pop._1
+                    val cmpto = if (z) new CZeroInit(typeKindType(k)) else stack.pop
+                    val arg = stack.pop
                     val result = nextvar(LMInt.i1)
                     def cmp(intop: ICond, floatop: FCond) = {
                       arg.tpe match {
@@ -380,11 +415,11 @@ abstract class GenLLVM extends SubComponent {
                       case LE => cmp(ICond.sle, FCond.ole)
                       case GT => cmp(ICond.sgt, FCond.ogt)
                     }
-                    stack.push((result, definitions.BooleanClass))
+                    stack.push(result)
                   }
                   case Comparison(op, _) => {
-                    val v2 = stack.pop._1
-                    val v1 = stack.pop._1
+                    val v2 = stack.pop
+                    val v1 = stack.pop
                     val result = nextvar(LMInt.i32)
                     v1.tpe match {
                       case _:LMFloatingPointType => {
@@ -415,18 +450,18 @@ abstract class GenLLVM extends SubComponent {
                         insns.append(new select(result, equal, new CInt(LMInt.i32, 0), temp))
                       }
                     }
-                    stack.push((result, definitions.IntClass))
+                    stack.push(result)
                   }
                   case Arithmetic(NOT, _) => {
-                    val (argt, s) = stack.pop
+                    val argt = stack.pop
                     val arg = argt.asInstanceOf[LMValue[LMInt]]
                     val res = nextvar(arg.tpe)
                     insns.append(new xor(res, arg.asInstanceOf[LMValue[LMInt]], new CInt(arg.tpe, -1)))
-                    stack.push((res,s))
+                    stack.push(res)
                   }
                   case Arithmetic(op, k) => {
-                    val (v2,ressym) = stack.pop
-                    val v1 = stack.pop._1
+                    val v2 = stack.pop
+                    val v1 = stack.pop
                     val result = nextvar(typeKindType(k))
                     def choose(intop: =>LMInstruction, floatop: =>LMInstruction) {
                       v1.tpe match {
@@ -453,12 +488,12 @@ abstract class GenLLVM extends SubComponent {
                       case DIV => choose(new sdiv(cv(result), extend(c(v1)), extend(c(v2))), new fdiv(cv(result), c(v1), c(v2)))
                       case REM => choose(new srem(cv(result), extend(c(v1)), extend(c(v2))), new frem(cv(result), c(v1), c(v2)))
                     }
-                    stack.push((result, ressym))
+                    stack.push(result)
                   }
                   case Logical(op, _) => {
-                    val (v2t,ressym) = stack.pop
+                    val v2t = stack.pop
                     val v2 = v2t.asInstanceOf[LMValue[LMInt]]
-                    val v1 = stack.pop._1.asInstanceOf[LMValue[LMInt]]
+                    val v1 = stack.pop.asInstanceOf[LMValue[LMInt]]
                     val result = nextvar(v2.tpe)
                     val insn = op match {
                       case AND => new and(result, v1, v2)
@@ -466,12 +501,12 @@ abstract class GenLLVM extends SubComponent {
                       case XOR => new xor(result, v1, v2)
                     }
                     insns.append(insn)
-                    stack.push((result, ressym))
+                    stack.push(result)
                   }
                   case Shift(op, _) => {
-                    val (argt,ressym) = stack.pop
+                    val argt = stack.pop
                     val arg = argt.asInstanceOf[LMValue[LMInt]]
-                    val shiftamt = stack.pop._1.asInstanceOf[LMValue[LMInt]]
+                    val shiftamt = stack.pop.asInstanceOf[LMValue[LMInt]]
                     val temp = nextvar(arg.tpe)
                     val result = nextvar(arg.tpe)
                     insns.append(new zext(temp, shiftamt))
@@ -481,11 +516,11 @@ abstract class GenLLVM extends SubComponent {
                       case LSR => new lshr(result, arg, temp)
                     }
                     insns.append(insn)
-                    stack.push((result, ressym))
+                    stack.push(result)
                   }
                   case Conversion(_, dk) => {
                     val dt = typeKindType(dk)
-                    val src = stack.pop._1
+                    val src = stack.pop
                     val result = nextvar(dt)
                     dt match {
                       case dit:LMInt => {
@@ -511,14 +546,14 @@ abstract class GenLLVM extends SubComponent {
                         }
                       }
                     }
-                    stack.push((result,dk.toType.typeSymbol))
+                    stack.push(result)
                   }
                   case _ => warning("unsupported primitive op " + primitive)
                 }
               }
               case CALL_METHOD(method, style) => {
                 val funtype = symType(method).asInstanceOf[LMFunctionType]
-                val args = stack.take(funtype.argTypes.size).map(_._1).reverse
+                val args = stack.take(funtype.argTypes.size).reverse
                 val efffuntype = new LMFunctionType(if (method.isClassConstructor) LMVoid else typeType(method.tpe.resultType), args.map(_.tpe), false)
                 val fun = style match {
                   case Dynamic if method.isEffectivelyFinal => new CFunctionAddress(externFun(method))
@@ -552,7 +587,7 @@ abstract class GenLLVM extends SubComponent {
                 } else {
                   val v = nextvar(funtype.returnType)
                   insns.append(new call(v, Fastcc, Seq.empty, castedfun, args, Seq.empty))
-                  stack.push((v,method.tpe.resultType.typeSymbol))
+                  stack.push(v)
                 }
               }
               case NEW(kind) => {
@@ -561,12 +596,25 @@ abstract class GenLLVM extends SubComponent {
                 val casted = nextvar(typeKindType(kind).pointer)
                 recordType(casted.tpe)
                 insns.append(new bitcast(casted, asobject))
+                stack.push(casted)
               }
-              case CREATE_ARRAY(elem, dims) => warning("unhandled " + i)
-              case IS_INSTANCE(tpe) => warning("unhandled " + i)
-              case CHECK_CAST(tpe) => warning("unhandled " + i)
+              case CREATE_ARRAY(elem, dims) => {
+                warning("unhandled " + i)
+                popn(i.consumed)
+                stack.push(new CUndef(rtObject.pointer))
+              }
+              case IS_INSTANCE(tpe) => {
+                warning("unhandled " + i)
+                popn(i.consumed)
+                stack.push(new CUndef(LMInt.i1))
+              }
+              case CHECK_CAST(tpe) => {
+                warning("unhandled " + i)
+                popn(i.consumed)
+                stack.push(new CUndef(typeKindType(tpe)))
+              }
               case SWITCH(tags, labels) => {
-                val v = stack.pop._1.asInstanceOf[LMValue[LMInt]]
+                val v = stack.pop.asInstanceOf[LMValue[LMInt]]
                 val deflabel = blockLabel(labels.last)
                 val taggedlabels = tags.zip(labels.dropRight(1))
                 val dests = taggedlabels.flatMap { case (tvs,b) =>
@@ -576,8 +624,8 @@ abstract class GenLLVM extends SubComponent {
               }
               case JUMP(whereto) => insns.append(new br(blockLabel(whereto)))
               case CJUMP(success, failure, op, kind) => {
-                val cmpto = stack.pop._1
-                val arg = stack.pop._1
+                val cmpto = stack.pop
+                val arg = stack.pop
                 val result = nextvar(LMInt.i1)
                 def cmp(intop: ICond, floatop: FCond) = {
                   arg.tpe match {
@@ -598,7 +646,7 @@ abstract class GenLLVM extends SubComponent {
                 insns.append(new br_cond(result, blockLabel(success), blockLabel(failure)))
               }
               case CZJUMP(success, failure, op, kind) => {
-                val arg = stack.pop._1
+                val arg = stack.pop
                 val cmpto = new CZeroInit(arg.tpe)
                 val result = nextvar(LMInt.i1)
                 def cmp(intop: ICond, floatop: FCond) = {
@@ -623,46 +671,60 @@ abstract class GenLLVM extends SubComponent {
                 if (kind == UNIT) {
                   insns.append(retvoid)
                 } else {
-                  insns.append(new ret(stack.pop._1))
+                  insns.append(new ret(stack.pop))
                 }
               }
-              case THROW() => warning("unhandled " + i)
+              case THROW() => {
+                warning("unhandled " + i)
+                popn(i.consumed)
+                insns.append(unwind)
+              }
               case DROP(kind) => stack.pop
               case DUP(kind) => stack.push(stack.top)
-              case MONITOR_ENTER() => warning("unhandled " + i)
-              case MONITOR_EXIT() => warning("unhandled " + i)
+              case MONITOR_ENTER() => {
+                warning("unhandled " + i)
+                popn(i.consumed)
+              }
+              case MONITOR_EXIT() => {
+                warning("unhandled " + i)
+                popn(i.consumed)
+              }
               case SCOPE_ENTER(lv) => ()
               case SCOPE_EXIT(lv) => ()
               case LOAD_EXCEPTION() => warning("unhandled " + i)
-              case BOX(_) => {
-                val (unboxed,unboxedsym) = stack.pop
-                val fun = unboxed.tpe match {
-                  case LMInt.i1 => rtBoxi1
-                  case LMInt.i8 => rtBoxi8
-                  case LMInt.i16 => rtBoxi16
-                  case LMInt.i32 => rtBoxi32
-                  case LMInt.i64 => rtBoxi64
-                  case LMFloat => rtBoxFloat
-                  case LMDouble => rtBoxDouble
+              case BOX(k) => {
+                val unboxed = stack.pop
+                val fun = k match {
+                  case BOOL => rtBoxi1
+                  case BYTE => rtBoxi8
+                  case SHORT => rtBoxi16
+                  case INT => rtBoxi32
+                  case LONG => rtBoxi64
+                  case FLOAT => rtBoxFloat
+                  case DOUBLE => rtBoxDouble
+                  case CHAR => rtBoxChar
+                  case x => error("Don't know how to box "+x); rtBoxi1
                 }
                 val boxed = nextvar(fun.resultType)
                 insns.append(new call(boxed, fun, Seq(unboxed)))
-                stack.push((boxed, definitions.boxedClass(unboxedsym)))
+                stack.push(boxed)
               }
-              case UNBOX(_) => {
-                val (boxed,boxedsym) = stack.pop
-                val (fun,sym) = boxedsym match {
-                  case definitions.BoxedBooleanClass => (rtUnboxi1, definitions.BooleanClass)
-                  case definitions.BoxedByteClass => (rtUnboxi8, definitions.ByteClass)
-                  case definitions.BoxedShortClass => (rtUnboxi16, definitions.ShortClass)
-                  case definitions.BoxedIntClass => (rtUnboxi32, definitions.IntClass)
-                  case definitions.BoxedLongClass => (rtUnboxi64, definitions.LongClass)
-                  case definitions.BoxedFloatClass => (rtUnboxFloat, definitions.FloatClass)
-                  case definitions.BoxedDoubleClass => (rtUnboxDouble, definitions.DoubleClass)
+              case UNBOX(k) => {
+                val boxed = stack.pop
+                val (fun,sym) = k match {
+                  case BOOL => (rtUnboxi1, definitions.BooleanClass)
+                  case BYTE => (rtUnboxi8, definitions.ByteClass)
+                  case SHORT => (rtUnboxi16, definitions.ShortClass)
+                  case INT => (rtUnboxi32, definitions.IntClass)
+                  case LONG => (rtUnboxi64, definitions.LongClass)
+                  case FLOAT => (rtUnboxFloat, definitions.FloatClass)
+                  case DOUBLE => (rtUnboxDouble, definitions.DoubleClass)
+                  case CHAR => (rtUnboxChar, definitions.CharClass)
+                  case x => error("Don't know how to unbox "+x); (rtUnboxi1, definitions.BooleanClass)
                 }
                 val unboxed = nextvar(fun.resultType)
                 insns.append(new call(unboxed, fun, Seq(unboxed)))
-                stack.push((unboxed, sym))
+                stack.push(unboxed)
               }
             }
           }
@@ -672,13 +734,13 @@ abstract class GenLLVM extends SubComponent {
             insns.insert(insns.length-1, new select(reg, CTrue, v, v))
           }
 
-          producedTypes.zip(stack.takeRight(producedTypes.length)).zipWithIndex.foreach { case ((sym,(src,ssym)),n) =>
+          producedTypes.zip(stack.takeRight(producedTypes.length)).zipWithIndex.foreach { case ((sym,src),n) =>
             val tpe = symType(sym)
             insns.insert(insns.length-1,new select(new LocalVariable(blockName(bb)+".out."+n.toString, tpe), CTrue, src, new CUndef(tpe)))
           }
           blocks.append(LMBlock(Some(blockLabel(bb)), insns))
         }
-        blocks.prepend(LMBlock(None, Seq(new br(blocks.head.label.get))))
+        blocks.prepend(LMBlock(Some(Label("entry")), Seq(new br(blocks.head.label.get))))
         fun.define(blocks)
       }
 
@@ -686,11 +748,13 @@ abstract class GenLLVM extends SubComponent {
       val outfile = getFile(c.symbol, ".ll")
       val outstream = new OutputStreamWriter(outfile.bufferedOutput,"US-ASCII")
       val header_comment = new Comment("Module for " + c.symbol.fullName('.'))
-      val methods = c.methods.filter(!_.native).filter(!_.symbol.hasAnnotation(LlvmimplAnnotSym)).map(genFun _)
-      val llvmmethods = c.methods.filter(_.symbol.hasAnnotation(LlvmimplAnnotSym)).map(genNativeFun _)
+      val concreteMethods = c.methods.filter(!_.isDeferred)
+      val (llvmmethods, methods) = concreteMethods.partition(_.symbol.hasAnnotation(LlvmimplAnnotSym))
+      val methodFuns = methods.map(genFun)
+      val llvmmethodFuns = llvmmethods.map(genNativeFun)
       c.methods.filter(_.native).map(_.symbol).foreach(externFun)
       val externDecls = externFuns.filterKeys(!internalFuns.contains(_)).values.map(_.declare)++externClasses.values.map(_.declare)
-      val module = new Module(Seq(header_comment)++externTypes.groupBy(_.name).values.map(ats => new TypeAlias(ats.first))++rtHeader++externDecls++externModules.values.map(_.declare)++classInfo++methods++llvmmethods++extraDefs++moduleInfo)
+      val module = new Module(Seq(header_comment)++externTypes.groupBy(_.name).values.map(ats => new TypeAlias(ats.first))++rtHeader++externDecls++externModules.values.map(_.declare)++classInfo++methodFuns++llvmmethodFuns++extraDefs++moduleInfo)
       outstream.write(module.syntax)
       outstream.write("\n")
       outstream.close()
@@ -820,6 +884,10 @@ abstract class GenLLVM extends SubComponent {
           case CALL_METHOD(m,SuperCall(_)) => Seq(m.owner.tpe.typeSymbol)
           case DROP(k) => Seq(k.toType.typeSymbol)
           case DUP(k) => Seq(k.toType.typeSymbol)
+          case CZJUMP(_, _, _, k) => Seq(k.toType.typeSymbol)
+          case THROW() => Seq(definitions.ThrowableClass)
+          case CALL_PRIMITIVE(StringConcat(kind)) => Seq(NoSymbol, kind.toType.typeSymbol)
+          case CALL_PRIMITIVE(EndConcat) => Seq(NoSymbol)
           case i => i.consumedTypes.map(_.toType.typeSymbol)
         }
         val producedTypes = instruction match {
@@ -834,6 +902,10 @@ abstract class GenLLVM extends SubComponent {
           case BOX(bt) => Seq(bt.toType.typeSymbol)
           case UNBOX(bt) => Seq(bt.toType.typeSymbol)
           case DUP(k) => Seq(k.toType.typeSymbol,k.toType.typeSymbol)
+          case NEW(k) => Seq(k.toType.typeSymbol)
+          case IS_INSTANCE(_) => Seq(definitions.BooleanClass)
+          case CALL_PRIMITIVE(StartConcat) => Seq(NoSymbol)
+          case CALL_PRIMITIVE(StringConcat(_)) => Seq(NoSymbol)
           case i => i.producedTypes.map(_.toType.typeSymbol)
         }
         if (instruction.consumed != consumedTypes.length) {
