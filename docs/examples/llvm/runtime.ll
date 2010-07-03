@@ -1,8 +1,6 @@
 ; class = { i8* name, i32 size, %.class* parent, i32 nummethods, [ 0 x i32 numtraits, [0 x { %trait* trait, i32 offset }] traits }
-%.vtable = type [0 x i8*]
-%.class = type { i8*, i32, %.class*, %.vtable*, i32, [0 x { %.trait*, i32 }] }
-; trait = { i8* name, i32 size }
-%.trait = type { i8* }
+%.vtable = type i8**
+%.class = type { i8*, i32, %.class*, %.vtable, [0 x %.vtable] }
 ; dispatch = { %.class* class, i8* funptr }
 %.dispatch = type { %.class*, i8* }
 ; array = { i32 size, [0 x elttype] data }
@@ -38,73 +36,64 @@
   i8* getelementptr ([ 7 x i8 ]* @".object.classname", i32 0, i32 0), 
   i32 ptrtoint (%".object"* getelementptr (%".object"* null, i32 1) to i32), 
   %".class"* null, 
-  %.vtable* null,
-  i32 0, 
-  [ 0 x { %".trait"*, i32 } ] [  ] 
+  %.vtable null,
+  [ 0 x %.vtable ] [  ] 
 }
 @.classinfo.java.lang.Boolean = constant %.class { 
   i8* getelementptr ([ 18 x i8]* @.boolean.classname, i32 0, i32 0), 
   i32 ptrtoint (%java.lang.Boolean* getelementptr (%java.lang.Boolean* null, i32 1) to i32), 
   %.class* @.classinfo.java.lang.Object, 
-  %.vtable* null,
-  i32 0, 
-  [ 0 x { %.trait*, i32 } ] [ ] 
+  %.vtable null,
+  [ 0 x %.vtable ] [  ] 
 }
 @.classinfo.java.lang.Byte = constant %.class { 
   i8* getelementptr ([ 15 x i8]* @.byte.classname, i32 0, i32 0), 
   i32 ptrtoint (%java.lang.Byte* getelementptr (%java.lang.Byte* null, i32 1) to i32), 
   %.class* @.classinfo.java.lang.Object, 
-  %.vtable* null,
-  i32 0, 
-  [ 0 x { %.trait*, i32 } ] [ ] 
+  %.vtable null,
+  [ 0 x %.vtable ] [  ] 
 }
 @.classinfo.java.lang.Short = constant %.class { 
   i8* getelementptr ([ 16 x i8]* @.short.classname, i32 0, i32 0), 
   i32 ptrtoint (%java.lang.Short* getelementptr (%java.lang.Short* null, i32 1) to i32), 
   %.class* @.classinfo.java.lang.Object, 
-  %.vtable* null,
-  i32 0, 
-  [ 0 x { %.trait*, i32 } ] [ ] 
+  %.vtable null,
+  [ 0 x %.vtable ] [  ] 
 }
 @.classinfo.java.lang.Integer = constant %.class {
   i8* getelementptr ([ 18 x i8]* @.integer.classname, i32 0, i32 0),
   i32 ptrtoint (%java.lang.Integer* getelementptr (%java.lang.Integer* null, i32 1) to i32),
   %.class* @.classinfo.java.lang.Object,
-  %.vtable* null,
-  i32 0,
-  [ 0 x { %.trait*, i32 } ] [ ]
+  %.vtable null,
+  [ 0 x %.vtable ] [  ] 
 }
 @.classinfo.java.lang.Long = constant %.class {
   i8* getelementptr ([ 15 x i8]* @.long.classname, i32 0, i32 0),
   i32 ptrtoint (%java.lang.Long* getelementptr (%java.lang.Long* null, i32 1) to i32),
   %.class* @.classinfo.java.lang.Object,
-  %.vtable* null,
-  i32 0,
-  [ 0 x { %.trait*, i32 } ] [ ]
+  %.vtable null,
+  [ 0 x %.vtable ] [  ] 
 }
 @.classinfo.java.lang.Float = constant %.class {
   i8* getelementptr ([ 16 x i8]* @.float.classname, i32 0, i32 0),
   i32 ptrtoint (%java.lang.Float* getelementptr (%java.lang.Float* null, i32 1) to i32),
   %.class* @.classinfo.java.lang.Object,
-  %.vtable* null,
-  i32 0,
-  [ 0 x { %.trait*, i32 } ] [ ]
+  %.vtable null,
+  [ 0 x %.vtable ] [  ] 
 }
 @.classinfo.java.lang.Double = constant %.class {
   i8* getelementptr ([ 17 x i8]* @.double.classname, i32 0, i32 0),
   i32 ptrtoint (%java.lang.Double* getelementptr (%java.lang.Double* null, i32 1) to i32),
   %.class* @.classinfo.java.lang.Object,
-  %.vtable* null,
-  i32 0,
-  [ 0 x { %.trait*, i32 } ] [ ]
+  %.vtable null,
+  [ 0 x %.vtable ] [  ] 
 }
 @.classinfo.java.lang.String = constant %.class {
   i8* getelementptr ([ 17 x i8]* @.string.classname, i32 0, i32 0),
   i32 ptrtoint (%java.lang.String* getelementptr (%java.lang.String* null, i32 1) to i32),
   %.class* @.classinfo.java.lang.Object,
-  %.vtable* null,
-  i32 0,
-  [ 0 x { %.trait*, i32 } ] [ ]
+  %.vtable null,
+  [ 0 x %.vtable ] [  ] 
 }
 
 %.object = type { %.class* }
