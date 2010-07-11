@@ -179,23 +179,11 @@ class LMVector(val n: Int, val elementtype: LMPrimitiveType with ConcreteType) e
   def aliased(nme: String) = new LMVector(n, elementtype) with AliasedType { val name = nme }
 }
 class LMOpaque extends LMType with ConcreteType {
-  override def equals(ot: Any) = ot match {
-    case ar:AnyRef if (ar eq this) => true
-    case _:LMOpaque => true
-    case _ => false
-  }
-  override def hashCode = 0
   def rep = "opaque"
   def aliased(n: String) = new LMOpaque with AliasedType { val name = n }
 }
 object LMOpaque extends LMOpaque
 case class LMUpreference(n: Int) extends LMType with ConcreteType {
-  override def equals(ot: Any) = ot match {
-    case ar:AnyRef if (ar eq this) => true
-    case ot:LMUpreference => this.n == ot.n
-    case _ => false
-  }
-  override def hashCode = n.hashCode
   def rep = "\\"+n.toString
   def aliased(n: String) = error("cannot alias up references")
 }
