@@ -137,6 +137,8 @@ abstract class GenLLVM extends SubComponent {
       val extraDefs: mutable.ListBuffer[ModuleComp] = new mutable.ListBuffer
       val externModules: mutable.Map[Symbol,LMGlobalVariable[_<:ConcreteType]] = new mutable.HashMap
       val externTypes: mutable.ListBuffer[AliasedType] = new mutable.ListBuffer
+      val recorded: mutable.Set[LMType] = new mutable.HashSet
+
       var globidx = 0
 
       c.symbol.getAnnotation(LlvmdefsAnnotSym) match {
@@ -166,10 +168,23 @@ abstract class GenLLVM extends SubComponent {
 
       def recordType(t: LMType) {
         t match {
-          case a:AliasedType => externTypes += a
-          case p:LMPointer => recordType(p.target)
-          case f:LMFunctionType => { recordType(f.returnType); f.argTypes.foreach(recordType) }
+          case t:AliasedType => {
+            println(t.name)
+            externTypes += t
+          }
           case _ => ()
+        }
+        if (!recorded(t)) {
+          recorded += t
+          t match {
+            case s:LMStructure => s.types.foreach(recordType)
+            case s:LMPackedStructure => s.types.foreach(recordType)
+            case u:LMUnion => u.types.foreach(recordType)
+            case a:LMArray => recordType(a.elementtype)
+            case p:LMPointer => recordType(p.target)
+            case f:LMFunctionType => { recordType(f.returnType); f.argTypes.foreach(recordType) }
+            case _ => ()
+          }
         }
       }
 
@@ -848,7 +863,7 @@ abstract class GenLLVM extends SubComponent {
           insns.append(terminator)
           blocks.append(LMBlock(Some(blockLabel(bb)), insns))
         }
-        blocks.prepend(LMBlock(Some(Label("entry")), Seq(new br(blocks.head.label.get))))
+        blocks.prepend(LMBlock(Some(Label("entry")), Seq(new br(blockLabel(m.code.startBlock)))))
         fun.define(blocks)
       }
 
@@ -870,7 +885,7 @@ abstract class GenLLVM extends SubComponent {
 
     def constValue(c: Constant): LMConstant[_<:ConcreteType] = {
       c.tag match {
-        case UnitTag => new CUndef(LMVoid)
+        case UnitTag => new CGlobalAddress(rtBoxedUnit)
         case BooleanTag => c.booleanValue
         case ByteTag => c.byteValue
         case ShortTag => c.shortValue
@@ -880,15 +895,17 @@ abstract class GenLLVM extends SubComponent {
         case FloatTag => c.floatValue
         case DoubleTag => c.doubleValue
         case StringTag => new CArray(LMInt.i8, (c.stringValue+"\0").getBytes("UTF-8").map(new CInt(LMInt.i8, _)))
+        case NullTag => new CStruct(Seq(new CNull(rtObject.pointer), new CNull(rtVtable)))
         case _ => {
           warning("Can't handle " + c + " tagged " + c.tag)
-          new CUndef(LMVoid)
+          new CUndef(typeType(c.tpe))
         }
       }
     }
 
     def classType(s: Symbol): ConcreteType with AliasedType = {
-      classes.get(s) match {
+      println("classType("+s+") "+classes.get(s))
+      classes.get(s.tpe.typeSymbol) match {
         case Some(c) => classType(c)
         case None => externalType(s)
       }
@@ -924,8 +941,8 @@ abstract class GenLLVM extends SubComponent {
         case definitions.DoubleClass => LMDouble
         case definitions.CharClass => LMInt.i16
         case definitions.UnitClass => LMVoid
-        case x if x.isTrait => externalType(x)
-        case x => externalType(x).pointer
+        case x if x.isTrait => rtIfaceRef
+        case x => classType(x).pointer
       }
     }
 
@@ -1061,4 +1078,5 @@ abstract class GenLLVM extends SubComponent {
     }
 
   }
+
 }
