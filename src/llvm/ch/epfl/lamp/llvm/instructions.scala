@@ -139,15 +139,15 @@ class insertvalue[T <: LMAggregateType with ConcreteType](v: LocalVariable[T], a
   def syntax = v.rep+" = insertvalue "+arg.tperep+", "+elt.tperep+", "+idxs.map(_.rep).mkString(", ")
 }
 class alloca(v: LocalVariable[LMPointer], tpe: ConcreteType, numelts: LMValue[LMInt] = 1:Constant[LMInt], align: Int = 0) extends Instruction {
-  def syntax = v.rep+" = alloca "+tpe.rep+", "+numelts.tperep+", align "+align.toString
+  def syntax = v.rep+" = alloca "+tpe.rep+", "+numelts.tperep+(if (align == 0) "" else ", align "+align.toString)
 }
 class load(v: LocalVariable[_<:ConcreteType], ptr: LMValue[LMPointer], align: Int = 0) extends Instruction {
   //require(v.tpe == ptr.tpe.target)
-  def syntax = v.rep+" = load "+ptr.tperep+", align "+align.toString
+  def syntax = v.rep+" = load "+ptr.tperep+(if (align == 0) "" else ", align "+align.toString)
 }
 class volatile_load(v: LocalVariable[_<:ConcreteType], ptr: LMValue[LMPointer], align: Int = 0) extends Instruction {
   //require(v.tpe == ptr.tpe.target)
-  def syntax = v.rep+" = volatile load "+ptr.tperep+", align "+align.toString
+  def syntax = v.rep+" = volatile load "+ptr.tperep+(if (align == 0) "" else ", align "+align.toString)
 }
 class store(value: LMValue[_<:ConcreteType], ptr: LMValue[LMPointer], align: Int = 0) extends Instruction {
   //require(value.tpe == ptr.tpe.target)
