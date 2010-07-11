@@ -1,6 +1,5 @@
 package ch.epfl.lamp.llvm
 
-import scala.util.JenkinsHash
 import scala.text.Document
 
 trait ConcreteType extends LMType {
@@ -23,7 +22,7 @@ class LMInt(val bits: Int) extends LMPrimitiveType with ConcreteType {
     case ot:LMInt => this.bits == ot.bits
     case _ => false
   }
-  override def hashCode = bits.hashCode
+  override def hashCode = bits.hashCode ^ 0x10000
   def rep = "i"+bits.toString
   def aliased(n: String) = new LMInt(bits) with AliasedType { val name = n }
 }
@@ -41,7 +40,7 @@ abstract class LMFloatingPointType(val bits: Int, val syntax: String) extends LM
     case ot:LMFloatingPointType => this.syntax == ot.syntax
     case _ => false
   }
-  override def hashCode = syntax.hashCode
+  override def hashCode = syntax.hashCode ^ 0x20000
 }
 class LMFloat extends LMFloatingPointType(32,"float") with ConcreteType {
   def aliased(n: String) = new LMFloat with AliasedType { val name = n }
@@ -71,7 +70,7 @@ class LMVoid extends LMPrimitiveType with ConcreteType {
     case _:LMVoid => true
     case _ => false
   }
-  override def hashCode = 0
+  override def hashCode = 0x30000
 }
 object LMVoid extends LMVoid
 class LMLabel extends LMPrimitiveType with ConcreteType {
@@ -82,7 +81,7 @@ class LMLabel extends LMPrimitiveType with ConcreteType {
     case _:LMLabel => true
     case _ => false
   }
-  override def hashCode = 0
+  override def hashCode = 0x40000
 }
 object LMLabel extends LMLabel
 class LMMetadata extends LMPrimitiveType with ConcreteType {
@@ -93,7 +92,7 @@ class LMMetadata extends LMPrimitiveType with ConcreteType {
     case _:LMMetadata => true
     case _ => false
   }
-  override def hashCode = 0
+  override def hashCode = 0x50000
 }
 object LMMetadata extends LMMetadata
 abstract class LMDerivedType extends LMType
@@ -104,7 +103,7 @@ class LMArray(val num: Int, _elementtype: =>ConcreteType) extends LMAggregateTyp
     case ot:LMArray => this.num == ot.num && this.elementtype == ot.elementtype
     case _ => false
   }
-  override def hashCode = elementtype.hashCode ^ num
+  override def hashCode = elementtype.hashCode ^ num ^ 0x60000
   lazy val elementtype = _elementtype
   def rep = "[ "+num.toString+" x "+elementtype.rep+" ]"
   def aliased(n: String) = new LMArray(num, _elementtype) with AliasedType { val name = n }
@@ -115,7 +114,7 @@ class LMFunctionType(_returnType: =>ConcreteType, _argTypes: =>Seq[ConcreteType]
     case ot:LMFunctionType => this.returnType == ot.returnType && this.argTypes.sameElements(ot.argTypes)
     case _ => false
   }
-  override def hashCode = JenkinsHash.hashSeq(returnType +: argTypes)
+  override def hashCode = argTypes.length ^ 0x70000
   lazy val returnType = _returnType
   lazy val argTypes = _argTypes
   def rep = {
@@ -131,7 +130,7 @@ class LMStructure(_types: =>Seq[ConcreteType]) extends LMAggregateType with Conc
     case ot:LMStructure => this.types.sameElements(ot.types)
     case _ => false
   }
-  override def hashCode = types.length
+  override def hashCode = types.length ^ 0x80000
   def rep = types.map(_.rep).mkString("{ ",", "," }")
   def aliased(n: String) = new LMStructure(_types) with AliasedType { val name = n }
 }
@@ -142,7 +141,7 @@ class LMPackedStructure(_types: =>Seq[ConcreteType]) extends LMAggregateType wit
     case ot:LMPackedStructure => this.types.sameElements(ot.types)
     case _ => false
   }
-  override def hashCode = JenkinsHash.hashSeq(types)
+  override def hashCode = types.length ^ 0x90000
   def rep = types.map(_.rep).mkString("<{ ",", "," }>")
   def aliased(n: String) = new LMPackedStructure(_types) with AliasedType { val name = n }
 }
@@ -153,7 +152,7 @@ class LMUnion(_types: =>Seq[ConcreteType]) extends LMAggregateType with Concrete
     case ot:LMUnion => this.types.sameElements(ot.types)
     case _ => false
   }
-  override def hashCode = JenkinsHash.hashSeq(types)
+  override def hashCode = types.length ^ 0xA0000
   def rep = types.map(_.rep).mkString("union { ",", "," }")
   def aliased(n: String) = new LMUnion(_types) with AliasedType { val name = n }
 }
@@ -164,7 +163,7 @@ class LMPointer(_target: =>ConcreteType) extends LMDerivedType with ConcreteType
     case ot:LMPointer => this.target == ot.target
     case _ => false
   }
-  override def hashCode = target.hashCode
+  override def hashCode = target.hashCode ^ 0xB0000
   def rep = target.rep+"*"
   def aliased(n: String) = new LMPointer(_target) with AliasedType { val name = n }
 }
@@ -174,7 +173,7 @@ class LMVector(val n: Int, val elementtype: LMPrimitiveType with ConcreteType) e
     case ot:LMVector => this.n == ot.n && this.elementtype == ot.elementtype
     case _ => false
   }
-  override def hashCode = elementtype.hashCode ^ n
+  override def hashCode = elementtype.hashCode ^ n ^ 0xC0000
   def rep = "< "+n.toString+" x "+elementtype.rep+" >"
   def aliased(nme: String) = new LMVector(n, elementtype) with AliasedType { val name = nme }
 }
