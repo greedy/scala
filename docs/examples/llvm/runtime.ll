@@ -1,8 +1,7 @@
-; class = { i8* name, i32 size, %.class* parent, i32 nummethods, [ 0 x i32 numtraits, [0 x { %trait* trait, i32 offset }] traits }
+%.ifaceref = type { %.object*, %.vtable }
+%.ifaceinfo = type { %.class*, %.vtable }
 %.vtable = type i8**
-%.class = type { i8*, i32, %.class*, %.vtable, [0 x %.vtable] }
-; dispatch = { %.class* class, i8* funptr }
-%.dispatch = type { %.class*, i8* }
+%.class = type { i8*, i32, %.class*, %.vtable, i32, [0 x %.ifaceinfo] }
 ; array = { i32 size, [0 x elttype] data }
 %.array.i1 = type { i32, [0 x i8] }
 %.array.i8 = type { i32, [0 x i8] }
@@ -37,63 +36,72 @@
   i32 ptrtoint (%".object"* getelementptr (%".object"* null, i32 1) to i32), 
   %".class"* null, 
   %.vtable null,
-  [ 0 x %.vtable ] [  ] 
+  i32 0,
+  [ 0 x %.ifaceinfo ] [  ] 
 }
 @.classinfo.java.lang.Boolean = constant %.class { 
   i8* getelementptr ([ 18 x i8]* @.boolean.classname, i32 0, i32 0), 
   i32 ptrtoint (%java.lang.Boolean* getelementptr (%java.lang.Boolean* null, i32 1) to i32), 
   %.class* @.classinfo.java.lang.Object, 
   %.vtable null,
-  [ 0 x %.vtable ] [  ] 
+  i32 0,
+  [ 0 x %.ifaceinfo ] [  ] 
 }
 @.classinfo.java.lang.Byte = constant %.class { 
   i8* getelementptr ([ 15 x i8]* @.byte.classname, i32 0, i32 0), 
   i32 ptrtoint (%java.lang.Byte* getelementptr (%java.lang.Byte* null, i32 1) to i32), 
   %.class* @.classinfo.java.lang.Object, 
   %.vtable null,
-  [ 0 x %.vtable ] [  ] 
+  i32 0,
+  [ 0 x %.ifaceinfo ] [  ] 
 }
 @.classinfo.java.lang.Short = constant %.class { 
   i8* getelementptr ([ 16 x i8]* @.short.classname, i32 0, i32 0), 
   i32 ptrtoint (%java.lang.Short* getelementptr (%java.lang.Short* null, i32 1) to i32), 
   %.class* @.classinfo.java.lang.Object, 
   %.vtable null,
-  [ 0 x %.vtable ] [  ] 
+  i32 0,
+  [ 0 x %.ifaceinfo ] [  ] 
 }
 @.classinfo.java.lang.Integer = constant %.class {
   i8* getelementptr ([ 18 x i8]* @.integer.classname, i32 0, i32 0),
   i32 ptrtoint (%java.lang.Integer* getelementptr (%java.lang.Integer* null, i32 1) to i32),
   %.class* @.classinfo.java.lang.Object,
   %.vtable null,
-  [ 0 x %.vtable ] [  ] 
+  i32 0,
+  [ 0 x %.ifaceinfo ] [  ] 
 }
 @.classinfo.java.lang.Long = constant %.class {
   i8* getelementptr ([ 15 x i8]* @.long.classname, i32 0, i32 0),
   i32 ptrtoint (%java.lang.Long* getelementptr (%java.lang.Long* null, i32 1) to i32),
   %.class* @.classinfo.java.lang.Object,
   %.vtable null,
-  [ 0 x %.vtable ] [  ] 
+  i32 0,
+  [ 0 x %.ifaceinfo ] [  ] 
 }
 @.classinfo.java.lang.Float = constant %.class {
   i8* getelementptr ([ 16 x i8]* @.float.classname, i32 0, i32 0),
   i32 ptrtoint (%java.lang.Float* getelementptr (%java.lang.Float* null, i32 1) to i32),
   %.class* @.classinfo.java.lang.Object,
   %.vtable null,
-  [ 0 x %.vtable ] [  ] 
+  i32 0,
+  [ 0 x %.ifaceinfo ] [  ] 
 }
 @.classinfo.java.lang.Double = constant %.class {
   i8* getelementptr ([ 17 x i8]* @.double.classname, i32 0, i32 0),
   i32 ptrtoint (%java.lang.Double* getelementptr (%java.lang.Double* null, i32 1) to i32),
   %.class* @.classinfo.java.lang.Object,
   %.vtable null,
-  [ 0 x %.vtable ] [  ] 
+  i32 0,
+  [ 0 x %.ifaceinfo ] [  ] 
 }
 @.classinfo.java.lang.String = constant %.class {
   i8* getelementptr ([ 17 x i8]* @.string.classname, i32 0, i32 0),
   i32 ptrtoint (%java.lang.String* getelementptr (%java.lang.String* null, i32 1) to i32),
   %.class* @.classinfo.java.lang.Object,
   %.vtable null,
-  [ 0 x %.vtable ] [  ] 
+  i32 0,
+  [ 0 x %.ifaceinfo ] [  ] 
 }
 
 %.object = type { %.class* }
@@ -128,22 +136,6 @@ define fastcc %.class* @.rt.get_class(%.object* %object) {
   %classpp = getelementptr %java.lang.Object* %object, i32 0, i32 0
   %classp = load %.class** %classpp
   ret %.class* %classp
-}
-
-define fastcc i8* @.rt.lookup_method(%.dispatch* %dtable, %.class* %cls) {
-  loopinit:
-    br label %loop
-  loop:
-    %n = phi i32 [ 0, %loopinit ], [ %n.next, %loop ]
-    %n.next = add i32 %n, 1
-    %dentryp = getelementptr %.dispatch* %dtable, i32 %n
-    %dentry = load %.dispatch* %dentryp
-    %dentry.class = extractvalue %.dispatch %dentry, 0
-    %iseq = icmp eq %.class* %dentry.class, %cls
-    br i1 %iseq, label %out, label %loop
-  out:
-    %dentry.fun = extractvalue %.dispatch %dentry, 1
-    ret i8* %dentry.fun
 }
 
 define fastcc void @"java.lang.Object/<init>()"(%java.lang.Object* %object) {
@@ -233,6 +225,70 @@ define  default fastcc double @".rt.unbox.double"(%"java.lang.Double"* %v) {
   %1 = getelementptr %java.lang.Double* %v, i32 0, i32 1
   %2 = load double* %1
   ret double %2
+}
+
+define default fastcc %.vtable @.rt.iface.vtable(%.class* %cls, %.class* %iface) {
+start:
+  %np = getelementptr %.class* %cls, i32 0, i32 4
+  %ifacesp = getelementptr %.class* %cls, i32 0, i32 5
+  %n = load i32* %np
+  br label %search
+search:
+  %i = phi i32 [ 0, %start ], [ %i.next, %cont ]
+  %oob = icmp uge i32 %i, %n
+  br i1 %oob, label %notfound, label %cont
+cont:
+  %iip = getelementptr [0 x %.ifaceinfo]* %ifacesp, i32 0, i32 %i
+  %ii = load %.ifaceinfo* %iip
+  %iclass = extractvalue %.ifaceinfo %ii, 0
+  %rightclass = icmp eq %.class* %iclass, %iface
+  %i.next = add i32 %i, 1
+  br i1 %rightclass, label %found, label %search
+found:
+  %vtbl = extractvalue %.ifaceinfo %ii, 1
+  ret %.vtable %vtbl
+notfound:
+  ret %.vtable null
+}
+
+define default fastcc i1 @.rt.isinstance.iface(%.object* %obj, %.class* %iface) {
+  %cls = call fastcc %.class* @.rt.get_class(%.object* %obj)
+  %vtbl = call fastcc %.vtable @.rt.iface.vtable(%.class* %cls, %.class* %iface)
+  %vtbl.isnotnull = icmp ne %.vtable %vtbl, null
+  ret i1 %vtbl.isnotnull
+}
+
+define default fastcc i1 @.rt.isinstance.class(%.object* %obj, %.class* %cls) {
+start:
+  %oclass = call fastcc %.class* @.rt.get_class(%.object* %obj)
+  br label %maybe
+maybe:
+  %curclass = phi %.class* [ %oclass, %start ], [ %nextclass, %cont ]
+  %curclass.isnull = icmp eq %.class* %curclass, null
+  br i1 %curclass.isnull, label %no, label %cont
+cont:
+  %nextclassp = getelementptr %.class* %curclass, i32 0, i32 2
+  %nextclass = load %.class** %nextclassp
+  %ismatch = icmp eq %.class* %curclass, %cls
+  br i1 %ismatch, label %yes, label %maybe
+no:
+  ret i1 false
+yes:
+  ret i1 true
+}
+
+define default fastcc %.ifaceref @.rt.iface.cast(%.object* %obj, %.class* %iface) {
+start:
+  %cls = call fastcc %.class* @.rt.get_class(%.object* %obj)
+  %vtbl = call fastcc %.vtable @.rt.iface.vtable(%.class* %cls, %.class* %iface)
+  %vtbl.isnull = icmp eq %.vtable %vtbl, null
+  br i1 %vtbl.isnull, label %bad, label %good
+good:
+  %iref.temp = insertvalue %.ifaceref undef, %.object* %obj, 0
+  %iref = insertvalue %.ifaceref %iref.temp, %.vtable %vtbl, 1
+  ret %.ifaceref %iref
+bad:
+  unwind
 }
 
 define default fastcc i32 @"java.lang.Object/hashCode()"(%".object"*) { unreachable }
