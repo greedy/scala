@@ -29,6 +29,9 @@ case class LocalVariable[+T <: ConcreteType](name: String, tpe: T) extends LMVal
 sealed abstract class Instruction {
   def syntax: String
 }
+class icomment(s: String) extends Instruction {
+  def syntax = "; "+s
+}
 object retvoid extends Instruction {
   def syntax = "ret void"
 }
