@@ -1043,6 +1043,7 @@ abstract class GenLLVM extends SubComponent {
           case IS_INSTANCE(_) => Seq(definitions.BooleanClass)
           case CALL_PRIMITIVE(StartConcat) => Seq(NoSymbol)
           case CALL_PRIMITIVE(StringConcat(_)) => Seq(NoSymbol)
+          case CREATE_ARRAY(elem, dims) => Seq(definitions.ArrayClass)
           case i => i.producedTypes.map(_.toType.typeSymbol)
         }
         if (instruction.consumed != consumedTypes.length) {
