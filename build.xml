@@ -1406,6 +1406,25 @@ LIBRARIES (MSIL, FJBG maybe later)
     </uptodate>
   </target>
 
+  <target name="libs.llvm.starr" depends="init">
+    <mkdir dir="${build-libs.dir}/classes/llvm"/>
+    <scalacfork
+      destdir="${build-libs.dir}/classes/llvm"
+      compilerpathref="starr.classpath"
+      params="${scalac.args.all}"
+      srcdir="${src.dir}/llvm"
+      jvmargs="${scalacfork.jvmargs}">
+      <include name="**/*.scala"/>
+      <compilationpath>
+        <pathelement location="${lib.starr.jar}"/>
+      </compilationpath>
+    </scalacfork>
+    <touch file="${build-libs.dir}/llvm.complete" verbose="no"/>
+    <jar destfile="${build-libs.dir}/llvm.jar">
+      <fileset dir="${build-libs.dir}/classes/llvm"/>
+    </jar>
+  </target>
+
   <target name="libs.llvm" depends="libs.pre-llvm" unless="libs.llvm.available">
     <mkdir dir="${build-libs.dir}/classes/llvm"/>
     <scalacfork

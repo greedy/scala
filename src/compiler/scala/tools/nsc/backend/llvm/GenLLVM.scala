@@ -787,7 +787,7 @@ abstract class GenLLVM extends SubComponent {
                   insns.append(new ret(cast(v,s,m.returnType.toType.typeSymbol)))
                 }
               }
-              case THROW() => {
+              case THROW(_) => {
                 warning("unhandled " + i)
                 popn(i.consumed)
                 insns.append(unwind)
@@ -804,7 +804,7 @@ abstract class GenLLVM extends SubComponent {
               }
               case SCOPE_ENTER(lv) => ()
               case SCOPE_EXIT(lv) => ()
-              case LOAD_EXCEPTION() => warning("unhandled " + i)
+              case LOAD_EXCEPTION(_) => warning("unhandled " + i)
               case BOX(k) => {
                 val unboxed = stack.pop._1
                 val fun = k match {
@@ -871,7 +871,7 @@ abstract class GenLLVM extends SubComponent {
       val outfile = getFile(c.symbol, ".ll")
       val outstream = new OutputStreamWriter(outfile.bufferedOutput,"US-ASCII")
       val header_comment = new Comment("Module for " + c.symbol.fullName('.'))
-      val concreteMethods = c.methods.filter(!_.isDeferred)
+      val concreteMethods = c.methods.filter(!_.symbol.isDeferred)
       val (llvmmethods, methods) = concreteMethods.partition(_.symbol.hasAnnotation(LlvmimplAnnotSym))
       val methodFuns = methods.map(genFun)
       val llvmmethodFuns = llvmmethods.map(genNativeFun)
@@ -1038,7 +1038,7 @@ abstract class GenLLVM extends SubComponent {
           case DROP(k) => Seq(k.toType.typeSymbol)
           case DUP(k) => Seq(k.toType.typeSymbol)
           case CZJUMP(_, _, _, k) => Seq(k.toType.typeSymbol)
-          case THROW() => Seq(definitions.ThrowableClass)
+          case THROW(_) => Seq(definitions.ThrowableClass)
           case CALL_PRIMITIVE(StringConcat(kind)) => Seq(NoSymbol, kind.toType.typeSymbol)
           case CALL_PRIMITIVE(EndConcat) => Seq(NoSymbol)
           case SWITCH(_,_) => Seq(definitions.IntClass)
