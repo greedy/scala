@@ -190,7 +190,7 @@ abstract class GenLLVM extends SubComponent {
 
       def externModule(s: Symbol) = {
         recordType(symType(s))
-        if (c.symbol == s.moduleClass) {
+        if (c.symbol == s) {
             new LMGlobalVariable(moduleInstanceName(s), symType(s).asInstanceOf[LMPointer].target, Externally_visible, Default, false)
         } else {
           externModules.getOrElseUpdate(s, {
@@ -209,13 +209,11 @@ abstract class GenLLVM extends SubComponent {
         })
       }
 
-      var cig: LMGlobalVariable[LMStructure] = null
-
       def externClassP(s: Symbol) = new Cbitcast(new CGlobalAddress(externClass(s)), rtClass.pointer)
 
       def externClass(s: Symbol) = {
         if (c.symbol == s) {
-          cig
+          new LMGlobalVariable(classInfoName(s), LMOpaque.aliased("thisclass"), Externally_visible, Default, true)
         } else {
           externClasses.getOrElseUpdate(s, {
             new LMGlobalVariable(classInfoName(s), rtClass, Externally_visible, Default, true)
@@ -224,9 +222,12 @@ abstract class GenLLVM extends SubComponent {
       }
 
       def virtualMethods(s: Symbol) = {
-        val supers = Stream.iterate(s)(_.superClass).takeWhile(s => s != NoSymbol).filter(s => s.isFinal || s.isClassOfModule)
+        val supers = Stream.iterate(s)(_.superClass).takeWhile(s => s != NoSymbol).filterNot(s => s.isFinal || s.isClassOfModule)
+        println("supers of " + s + " are")
+        supers.foreach(s => println(s))
         val virtdecls = supers.reverse.flatMap(_.info.decls.toList.filter(d => d.isMethod && !d.isConstructor && !d.isOverride && !d.isEffectivelyFinal))
-        virtdecls
+        println("virtual methods of " + s + " are " + virtdecls.toList)
+        virtdecls.toList
       }
 
       val classInfo: Seq[ModuleComp] = {
@@ -256,8 +257,8 @@ abstract class GenLLVM extends SubComponent {
                                  new Cgetelementptr(vtableg, Seq[CInt](0,0), rtVtable),
                                  new CInt(LMInt.i32, traitinfo.length),
                                  new CArray(rtIfaceInfo, traits.zip(traitinfo).map{ case (t, (tvg, _)) => new CStruct(Seq(externClassP(t), new Cgetelementptr(new CGlobalAddress(tvg), Seq[CInt](0,0), rtVtable)))})))
-        cig = new LMGlobalVariable[LMStructure](classInfoName(c.symbol), ci.tpe, Externally_visible, Default, true)
-        Seq[LMGlobalVariableDefn[_<:ConcreteType]](cig.define(ci), ng.define(n), vtableg.define(vtable))++traitinfo.map(ti => ti._1.define(ti._2))
+        val cig = new LMGlobalVariable[LMStructure](classInfoName(c.symbol), ci.tpe, Externally_visible, Default, true)
+        Seq(new TypeAlias(cig.tpe.aliased("thisclass")), cig.define(ci), ng.define(n), vtableg.define(vtable))++traitinfo.map(ti => ti._1.define(ti._2))
       }
 
       val moduleInfo: Seq[ModuleComp] = {
@@ -863,7 +864,7 @@ abstract class GenLLVM extends SubComponent {
           insns.append(terminator)
           blocks.append(LMBlock(Some(blockLabel(bb)), insns))
         }
-        blocks.prepend(LMBlock(Some(Label("entry")), Seq(new br(blockLabel(m.code.startBlock)))))
+        blocks.insert(0,LMBlock(Some(Label("entry")), Seq(new br(blockLabel(m.code.startBlock)))))
         fun.define(blocks)
       }
 
@@ -996,6 +997,10 @@ abstract class GenLLVM extends SubComponent {
 
     def blockLabel(bb: BasicBlock) = Label(blockName(bb))
     def blockName(bb: BasicBlock) = "bb."+bb.label
+
+    def privateClassInfoName(s: Symbol) = {
+      ".priv.classinfo."+llvmName(s)
+    }
 
     def classInfoName(s: Symbol) = {
       ".classinfo."+llvmName(s)

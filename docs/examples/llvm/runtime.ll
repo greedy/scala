@@ -30,6 +30,7 @@
 @.float.classname = private constant [ 16 x i8] c"java.lang.Float\00"
 @.double.classname = private constant [ 17 x i8] c"java.lang.Double\00"
 @.string.classname = private constant [ 17 x i8] c"java.lang.String\00"
+@.scalaobject.classname = private constant [ 18 x i8 ] c"scala.ScalaObject\00"
 
 @.classinfo.java.lang.Object = constant %.class { 
   i8* getelementptr ([ 7 x i8 ]* @".object.classname", i32 0, i32 0), 
@@ -103,6 +104,14 @@
   i32 0,
   [ 0 x %.ifaceinfo ] [  ] 
 }
+@.classinfo.scala.ScalaObject = constant %.class { 
+  i8* getelementptr ([ 18 x i8 ]* @".scalaobject.classname", i32 0, i32 0), 
+  i32 0,
+  %".class"* @.classinfo.java.lang.Object, 
+  %.vtable null,
+  i32 0,
+  [ 0 x %.ifaceinfo ] [  ] 
+}
 
 %.object = type { %.class* }
 %java.lang.Object = type %.object
@@ -138,7 +147,7 @@ define fastcc %.class* @.rt.get_class(%.object* %object) {
   ret %.class* %classp
 }
 
-define fastcc void @"java.lang.Object/<init>()"(%java.lang.Object* %object) {
+define fastcc void @"java.lang.Object/<init>()java.lang.Object"(%java.lang.Object* %object) {
   ret void
 }
 
@@ -291,8 +300,8 @@ bad:
   unwind
 }
 
-define default fastcc i32 @"java.lang.Object/hashCode()"(%".object"*) { unreachable }
-define default fastcc %".object"* @"java.lang.Object/clone()"(%".object"*) { unreachable }
-define default fastcc i1 @"java.lang.Object/equals(java.lang.Object)"(%".object"*,%".object"*) { unreachable }
-define default fastcc void @"java.lang.Object/finalize()"(%".object"*) { unreachable }
-define default fastcc %"java.lang.String"* @"java.lang.Object/toString()"(%".object"*) { unreachable }
+define default fastcc i32 @"java.lang.Object/hashCode()scala.Int"(%".object"*) { unreachable }
+define default fastcc %".object"* @"java.lang.Object/clone()java.lang.Object"(%".object"*) { unreachable }
+define default fastcc i1 @"java.lang.Object/equals(java.lang.Object)scala.Boolean"(%".object"*,%".object"*) { unreachable }
+define default fastcc void @"java.lang.Object/finalize()scala.Unit"(%".object"*) { unreachable }
+define default fastcc %"java.lang.String"* @"java.lang.Object/toString()java.lang.String"(%".object"*) { unreachable }
