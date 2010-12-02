@@ -1,5 +1,6 @@
 trait Magic {
   def xyzzy: Double
+  def shazam = 2 * xyzzy
 }
 class examplec {
   val s: Short = 1
@@ -8,7 +9,7 @@ class examplec {
   def x: Double = s+i+l
   def z = x*2
 
-  def cast(x: Magic) = x.xyzzy
+  def cast(x: Magic) = x.xyzzy + x.shazam
 }
 @llvmdefs("""
 declare default ccc i32 @printf(i8*, ...)
