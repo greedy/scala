@@ -127,7 +127,7 @@ abstract class GenLLVM extends SubComponent {
 
     import Runtime._
 
-    def isMain(c: IClass) = c.symbol.isClassOfModule && c.symbol.fullName('.') == settings.Xmainclass.value
+    def isMain(c: IClass) = c.symbol.isModuleClass && c.symbol.fullName('.') == settings.Xmainclass.value
 
     def genClass(c: IClass) {
       val externFuns: mutable.Map[Symbol,LMFunction] = new mutable.HashMap
@@ -222,7 +222,7 @@ abstract class GenLLVM extends SubComponent {
       }
 
       def virtualMethods(s: Symbol) = {
-        val supers = Stream.iterate(s)(_.superClass).takeWhile(s => s != NoSymbol).filterNot(s => s.isFinal || s.isClassOfModule)
+        val supers = Stream.iterate(s)(_.superClass).takeWhile(s => s != NoSymbol).filterNot(s => s.isFinal || s.isModuleClass)
         println("supers of " + s + " are")
         supers.foreach(s => println(s))
         val virtdecls = supers.reverse.flatMap(_.info.decls.toList.filter(d => d.isMethod && !d.isConstructor && !d.isOverride && !d.isEffectivelyFinal))
@@ -262,7 +262,7 @@ abstract class GenLLVM extends SubComponent {
       }
 
       val moduleInfo: Seq[ModuleComp] = {
-        if (c.symbol.isClassOfModule) {
+        if (c.symbol.isModuleClass) {
           val ig = new LMGlobalVariable(moduleInstanceName(c.symbol), symType(c.symbol).asInstanceOf[LMPointer].target, Externally_visible, Default, false)
           val initFun = new LMFunction(LMVoid, ".init."+moduleInstanceName(c.symbol), Seq.empty, false, Internal, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
           val asobject = new LocalVariable("object", rtObject.pointer)
@@ -978,16 +978,16 @@ abstract class GenLLVM extends SubComponent {
     def getFile(sym: Symbol, suffix: String): AbstractFile = {
       val sourceFile = atPhase(currentRun.phaseNamed("llvm").prev)(sym.sourceFile)
       val dir: AbstractFile = settings.outputDirs.outputDirFor(sourceFile)
-      if (sym.isClassOfModule)
+      if (sym.isModuleClass)
         dir.fileNamed(sym.fullName('_')+"#module" + suffix)
       else
         dir.fileNamed(sym.fullName('_') + suffix)
     }
 
     def llvmName(sym: Symbol): String = {
-      if (sym.isClass && !sym.isModule && !sym.isClassOfModule)
+      if (sym.isClass && !sym.isModule && !sym.isModuleClass)
         sym.fullName('.')
-      else if (sym.isClassOfModule || (sym.isModule && !sym.isMethod))
+      else if (sym.isModuleClass || (sym.isModule && !sym.isMethod))
 	sym.fullName('.')+"!module"
       else if (sym.isMethod)
         llvmName(sym.owner)+"/"+sym.simpleName.toString.trim()+sym.info.paramss.flatten.map(ps => llvmName(ps.info.typeSymbol)).mkString("(",",",")")+llvmName(sym.info.resultType.typeSymbol)
