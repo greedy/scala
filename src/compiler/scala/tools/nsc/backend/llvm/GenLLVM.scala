@@ -78,6 +78,7 @@ abstract class GenLLVM extends SubComponent {
       val rtIsinstanceIface = new LMFunction(LMInt.i1, ".rt.isinstance.iface", Seq(ArgSpec(new LocalVariable("obj", rtObject.pointer)), ArgSpec(new LocalVariable("iface", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtIsinstanceClass = new LMFunction(LMInt.i1, ".rt.isinstance.class", Seq(ArgSpec(new LocalVariable("obj", rtObject.pointer)), ArgSpec(new LocalVariable("iface", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtBoxedUnit = new LMGlobalVariable(".rt.boxedUnit", symType(definitions.BoxedUnitClass), Externally_visible, Default, true)
+      val rtCurrentException = new LMGlobalVariable(".rt.currentException", rtObject.pointer, Externally_visible, Default, false)
       val rtOpaqueTypes = Seq(
         LMOpaque.aliased("java.lang.Boolean"),
         LMOpaque.aliased("java.lang.Byte"),
@@ -121,7 +122,8 @@ abstract class GenLLVM extends SubComponent {
         rtIsinstanceIface.declare,
         rtIsinstanceClass.declare,
         rtIfaceCast.declare,
-        rtBoxedUnit.declare
+        rtBoxedUnit.declare,
+        rtCurrentException.declare
       )
     }
 
@@ -262,7 +264,8 @@ abstract class GenLLVM extends SubComponent {
       }
 
       val moduleInfo: Seq[ModuleComp] = {
-        if (c.symbol.isModuleClass) {
+        if (c.symbol.isModuleClass && !c.symbol.isImplClass) {
+          println(c.symbol)
           val ig = new LMGlobalVariable(moduleInstanceName(c.symbol), symType(c.symbol).asInstanceOf[LMPointer].target, Externally_visible, Default, false)
           val initFun = new LMFunction(LMVoid, ".init."+moduleInstanceName(c.symbol), Seq.empty, false, Internal, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
           val asobject = new LocalVariable("object", rtObject.pointer)
@@ -321,7 +324,10 @@ abstract class GenLLVM extends SubComponent {
             for (_ <- 0 until n) stack.pop
           }
           val insns: mutable.ListBuffer[LMInstruction] = new mutable.ListBuffer
-          insns.append(new icomment("predecessors: "+bb.predecessors.filter(reachable).map(_.flagsString).mkString(",")+" successors: "+bb.successors.map(_.flagsString).mkString(" ")))
+          val excpreds = bb.code.blocks.filter(pb => (pb.exceptionSuccessors ++ pb.indirectExceptionSuccessors).headOption == Some(bb) && pb.iterator.exists({case THROW(_) => true; case _ => false}))
+          val dirpreds = bb.code.blocks.filter(_.directSuccessors contains bb)
+          val preds = (excpreds ++ dirpreds).filter(reachable)
+          insns.append(new icomment("predecessors: "+preds.map(_.fullString).mkString(",")+" successors: "+bb.successors.map(_.fullString).mkString(" ")))
           def cast(src: LMValue[_<:ConcreteType], srcsym: Symbol, targetsym: Symbol): LMValue[_<:ConcreteType] = {
             insns.append(new icomment("cast "+src.rep+" from "+srcsym+" to "+targetsym))
             if (srcsym == targetsym) {
@@ -377,19 +383,23 @@ abstract class GenLLVM extends SubComponent {
           val (consumedTypes,producedTypes) = stackUsage(bb)
           insns.append(new icomment("consumed types: " + consumedTypes.mkString(", ")))
           insns.append(new icomment("produced types: " + producedTypes.mkString(", ")))
+          insns.append(new icomment("blockinfo: " + bb.fullString))
+          insns.append(new icomment("direct successors: " + bb.directSuccessors.map(_.fullString).mkString("; ")))
+          insns.append(new icomment("exception successors: " + bb.exceptionSuccessors.map(_.fullString).mkString("; ")))
+          insns.append(new icomment("indirect exception successors: " + bb.indirectExceptionSuccessors.map(_.fullString).mkString("; ")))
           val predcasts = new mutable.ListBuffer[LMInstruction]
           consumedTypes.zipWithIndex.foreach { case (sym,n) =>
             val tpe = symType(sym)
             recordType(tpe)
             if (definitions.isValueClass(sym) || sym.isTrait) {
               val reg = new LocalVariable(blockName(bb)+".in."+n.toString,tpe)
-              val sources = bb.predecessors.filter(reachable).map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".out."+n.toString,tpe)))
+              val sources = preds.map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".out."+n.toString,tpe)))
               insns.append(new phi(reg, sources))
               stack.push((reg, sym))
             } else {
               val reg = new LocalVariable(blockName(bb)+".in."+n.toString,tpe)
               val asobj = nextvar(rtObject.pointer)
-              val sources = bb.predecessors.filter(reachable).map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".out."+n.toString,rtObject.pointer)))
+              val sources = preds.filter(reachable).map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".out."+n.toString,rtObject.pointer)))
               insns.append(new phi(asobj, sources))
               predcasts.append(new bitcast(reg, asobj))
               stack.push((reg, sym))
@@ -401,7 +411,7 @@ abstract class GenLLVM extends SubComponent {
             val sym = l.sym
             val reg = new LocalVariable(blockName(bb)+".local.in."+llvmName(sym)+"."+sym.id, tpe)
             locals(sym) = reg
-            val sources = bb.predecessors.filter(reachable).map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".local.out."+llvmName(sym)+"."+sym.id,tpe)))
+            val sources = preds.filter(reachable).map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".local.out."+llvmName(sym)+"."+sym.id,tpe)))
             val insn = if (sources.isEmpty) new select(reg, CTrue, args.find(_._2==sym).map(_._1.lmvar).getOrElse(new CUndef(reg.tpe)), new CUndef(reg.tpe)) else new phi(reg, sources)
             insns.append(insn)
           }
@@ -789,9 +799,13 @@ abstract class GenLLVM extends SubComponent {
                 }
               }
               case THROW(_) => {
-                warning("unhandled " + i)
-                popn(i.consumed)
-                insns.append(unwind)
+                val (exception,esym) = stack.pop
+                val excsuccs = bb.exceptionSuccessors ++ bb.indirectExceptionSuccessors
+                insns.append(new store(cast(exception, esym, definitions.ObjectClass), new CGlobalAddress(rtCurrentException)))
+                if (excsuccs.isEmpty)
+                  insns.append(unwind)
+                else
+                  insns.append(br(blockLabel(excsuccs.head)))
               }
               case DROP(kind) => stack.pop
               case DUP(kind) => stack.push(stack.top)
@@ -805,7 +819,11 @@ abstract class GenLLVM extends SubComponent {
               }
               case SCOPE_ENTER(lv) => ()
               case SCOPE_EXIT(lv) => ()
-              case LOAD_EXCEPTION(_) => warning("unhandled " + i)
+              case LOAD_EXCEPTION(klass) => {
+                val exception = nextvar(rtObject.pointer)
+                insns.append(new load(exception, new CGlobalAddress(rtCurrentException)))
+                stack.push((cast(exception,definitions.ObjectClass,klass), klass))
+              }
               case BOX(k) => {
                 val unboxed = stack.pop._1
                 val fun = k match {
@@ -1047,6 +1065,7 @@ abstract class GenLLVM extends SubComponent {
           case CALL_PRIMITIVE(StringConcat(kind)) => Seq(NoSymbol, kind.toType.typeSymbol)
           case CALL_PRIMITIVE(EndConcat) => Seq(NoSymbol)
           case SWITCH(_,_) => Seq(definitions.IntClass)
+          case LOAD_EXCEPTION(_) => Seq.empty
           case i => i.consumedTypes.map(_.toType.typeSymbol)
         }
         val producedTypes = instruction match {
@@ -1068,8 +1087,12 @@ abstract class GenLLVM extends SubComponent {
           case CREATE_ARRAY(elem, dims) => Seq(definitions.ArrayClass)
           case i => i.producedTypes.map(_.toType.typeSymbol)
         }
-        if (instruction.consumed != consumedTypes.length) {
-          error("Consumption mismatch for " + instruction+": "+instruction.consumed.toString +" "+ consumedTypes)
+        instruction match {
+          case LOAD_EXCEPTION(_) => ()
+          case _ =>
+            if (instruction.consumed != consumedTypes.length) {
+              error("Consumption mismatch for " + instruction+": "+instruction.consumed.toString +" "+ consumedTypes)
+          }
         }
         if (instruction.produced != producedTypes.length) {
           error("Production mismatch for " + instruction+": "+instruction.produced.toString +" "+ producedTypes)

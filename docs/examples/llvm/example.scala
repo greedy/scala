@@ -30,9 +30,23 @@ object example extends examplec with Magic {
       printdouble(q)
       q = q + 1
     }
-    printdouble(cast(this))
+    printdouble(-9)
+    printdouble(this.shazam)
+    printdouble(-8)
+    printdouble(toMagic(this).shazam)
+    //printdouble(cast(this))
+    try {
+      throw new Exception
+      printdouble(0)
+    } catch {
+      case e: Exception => { printdouble(-1) }
+    } finally {
+      printdouble(-2)
+    }
   }
   def main(args: Array[String]) { main() }
+
+  def toMagic(m: Magic) = m
 
   //@native def printdouble(d: Double): Unit = ()
   @llvmimpl("""

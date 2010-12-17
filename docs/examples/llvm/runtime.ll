@@ -20,6 +20,9 @@
 %java.lang.Float = type { %.object, float }
 %java.lang.Double = type { %.object, double }
 %java.lang.String = type { %.object, i8* }
+%java.lang.Exception = type { %.object }
+
+@.rt.currentException = global %.object* null
 
 @.object.classname = private constant [ 7 x i8 ] c"object\00"
 @.boolean.classname = private constant [ 18 x i8] c"java.lang.Boolean\00"
@@ -31,6 +34,7 @@
 @.double.classname = private constant [ 17 x i8] c"java.lang.Double\00"
 @.string.classname = private constant [ 17 x i8] c"java.lang.String\00"
 @.scalaobject.classname = private constant [ 18 x i8 ] c"scala.ScalaObject\00"
+@.exception.classname = private constant [ 20 x i8 ] c"java.lang.Exception\00"
 
 @.classinfo.java.lang.Object = constant %.class { 
   i8* getelementptr ([ 7 x i8 ]* @".object.classname", i32 0, i32 0), 
@@ -111,6 +115,14 @@
   %.vtable null,
   i32 0,
   [ 0 x %.ifaceinfo ] [  ] 
+}
+@.classinfo.java.lang.Exception = constant %.class {
+  i8* getelementptr ([ 20 x i8 ]* @".exception.classname", i32 0, i32 0),
+  i32 0,
+  %".class"* @.classinfo.java.lang.Object,
+  %.vtable null,
+  i32 0,
+  [ 0 x %.ifaceinfo ] [  ]
 }
 
 %.object = type { %.class* }
@@ -305,3 +317,7 @@ define default fastcc %".object"* @"java.lang.Object/clone()java.lang.Object"(%"
 define default fastcc i1 @"java.lang.Object/equals(java.lang.Object)scala.Boolean"(%".object"*,%".object"*) { unreachable }
 define default fastcc void @"java.lang.Object/finalize()scala.Unit"(%".object"*) { unreachable }
 define default fastcc %"java.lang.String"* @"java.lang.Object/toString()java.lang.String"(%".object"*) { unreachable }
+define fastcc void @"java.lang.Exception/<init>()java.lang.Exception"(%java.lang.Exception* %object) {
+  ret void
+}
+
