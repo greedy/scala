@@ -32,8 +32,12 @@ object example extends examplec with Magic {
     }
     printdouble(-9)
     printdouble(this.shazam)
+    printdouble(this.xyzzy)
+    printdouble(cast(this))
     printdouble(-8)
     printdouble(toMagic(this).shazam)
+    printdouble(toMagic(this).xyzzy)
+    printdouble(cast(toMagic(this)))
     //printdouble(cast(this))
     try {
       throw new Exception
