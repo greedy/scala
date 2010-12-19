@@ -304,7 +304,8 @@ abstract class GenLLVM extends SubComponent {
       def genFun(m: IMethod) = {
         internalFuns += m.symbol
         val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
-        val args = (thisarg, c.symbol) +: m.params.map(p => (ArgSpec(new LocalVariable(llvmName(p.sym), localType(p))), p.sym))
+        val recvarg = if (m.symbol.isStaticMember) { Seq.empty } else { Seq((thisarg, c.symbol)) }
+        val args = recvarg ++ m.params.map(p => (ArgSpec(new LocalVariable(llvmName(p.sym), localType(p))), p.sym))
         val fun = new LMFunction(typeType(m.returnType.toType), llvmName(m.symbol), args.map(_._1), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
         recordType(fun.tpe)
         fun.args.map(_.lmvar.tpe).foreach(recordType)
