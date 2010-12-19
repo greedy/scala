@@ -671,6 +671,10 @@ abstract class GenLLVM extends SubComponent {
                   case Dynamic if method.isEffectivelyFinal => new CFunctionAddress(externFun(method))
                   case Dynamic => {
                     val vtbl = nextvar(rtVtable)
+                    /* TODO - don't cast to trait if method present in receiver vtable */
+                    if (method.owner.isTrait) {
+                      args(0) = (cast(args(0)._1, args(0)._2, method.owner), method.owner)
+                    }
                     val mnum = virtualMethods(method.owner).indexOf(method)
                     if (args.head._2.isTrait) {
                       val ifaceinfo = args.head._1.asInstanceOf[LMValue[rtIfaceRef.type]]
