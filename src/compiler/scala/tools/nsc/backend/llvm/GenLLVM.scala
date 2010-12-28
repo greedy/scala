@@ -75,8 +75,9 @@ abstract class GenLLVM extends SubComponent {
       val rtUnboxChar = new LMFunction(LMInt.i16, ".rt.unbox.char", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedCharacterClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtMakeString = new LMFunction(symType(definitions.StringClass), ".rt.makestring", Seq(ArgSpec(new LocalVariable("s", LMInt.i8.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtIfaceCast = new LMFunction(rtIfaceRef, ".rt.iface.cast", Seq(ArgSpec(new LocalVariable("obj", rtObject.pointer)), ArgSpec(new LocalVariable("iface", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
+      val rtIsinstance = new LMFunction(LMInt.i1, ".rt.isinstance", Seq(ArgSpec(new LocalVariable("obj", rtObject.pointer)), ArgSpec(new LocalVariable("clsoriface", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtIsinstanceIface = new LMFunction(LMInt.i1, ".rt.isinstance.iface", Seq(ArgSpec(new LocalVariable("obj", rtObject.pointer)), ArgSpec(new LocalVariable("iface", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtIsinstanceClass = new LMFunction(LMInt.i1, ".rt.isinstance.class", Seq(ArgSpec(new LocalVariable("obj", rtObject.pointer)), ArgSpec(new LocalVariable("iface", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
+      val rtIsinstanceClass = new LMFunction(LMInt.i1, ".rt.isinstance.class", Seq(ArgSpec(new LocalVariable("obj", rtObject.pointer)), ArgSpec(new LocalVariable("cls", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtBoxedUnit = new LMGlobalVariable(".rt.boxedUnit", symType(definitions.BoxedUnitClass), Externally_visible, Default, true)
       val rtCurrentException = new LMGlobalVariable(".rt.currentException", rtObject.pointer, Externally_visible, Default, false)
       val rtOpaqueTypes = Seq(
@@ -119,6 +120,7 @@ abstract class GenLLVM extends SubComponent {
         rtUnboxDouble.declare,
         rtUnboxChar.declare,
         rtMakeString.declare,
+        rtIsinstance.declare,
         rtIsinstanceIface.declare,
         rtIsinstanceClass.declare,
         rtIfaceCast.declare,
@@ -319,13 +321,27 @@ abstract class GenLLVM extends SubComponent {
           varidx = varidx + 1
           v
         }
+
+        def exSels(bb: BasicBlock): Seq[LMBlock] = {
+          val handlers = bb.method.exh.filter(_.covers(bb))
+          handlers.zipWithIndex.map { case (h,n) =>
+            val isinst = nextvar(LMInt.i1)
+            val exi = nextvar(rtObject.pointer)
+            LMBlock(Some(blockExSelLabel(bb,n)), Seq(
+              new load(exi, new CGlobalAddress(rtCurrentException)),
+              new call(isinst, rtIsinstance, Seq(exi, externClassP(h.loadExceptionClass))),
+              new br_cond(isinst, blockLabel(h.startBlock), blockExSelLabel(bb, n+1))
+            ))
+          } ++ Seq(LMBlock(Some(blockExSelLabel(bb, handlers.length)), Seq(unwind)))
+        }
+
         m.code.blocks.filter(reachable).foreach { bb =>
           val stack: mutable.Stack[(LMValue[_<:ConcreteType],Symbol)] = mutable.Stack()
           def popn(n: Int) {
             for (_ <- 0 until n) stack.pop
           }
           val insns: mutable.ListBuffer[LMInstruction] = new mutable.ListBuffer
-          val excpreds = bb.code.blocks.filter(pb => (pb.exceptionSuccessors ++ pb.indirectExceptionSuccessors).headOption == Some(bb) && pb.iterator.exists({case THROW(_) => true; case _ => false}))
+          val excpreds = bb.code.blocks.filter(pb => pb.exceptionSuccessors.contains(bb))
           val dirpreds = bb.code.blocks.filter(_.directSuccessors contains bb)
           val preds = (excpreds ++ dirpreds).filter(reachable)
           insns.append(new icomment("predecessors: "+preds.map(_.fullString).mkString(",")+" successors: "+bb.successors.map(_.fullString).mkString(" ")))
@@ -394,13 +410,17 @@ abstract class GenLLVM extends SubComponent {
             recordType(tpe)
             if (definitions.isValueClass(sym) || sym.isTrait) {
               val reg = new LocalVariable(blockName(bb)+".in."+n.toString,tpe)
-              val sources = preds.map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".out."+n.toString,tpe)))
+              val dirsources = dirpreds.map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".out."+n.toString,tpe)))
+              val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).findIndexOf(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,tpe)))
+              val sources = dirsources ++ excsources
               insns.append(new phi(reg, sources))
               stack.push((reg, sym))
             } else {
               val reg = new LocalVariable(blockName(bb)+".in."+n.toString,tpe)
               val asobj = nextvar(rtObject.pointer)
-              val sources = preds.filter(reachable).map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".out."+n.toString,rtObject.pointer)))
+              val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".out."+n.toString,rtObject.pointer)))
+              val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).findIndexOf(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,rtObject.pointer)))
+              val sources = dirsources ++ excsources
               insns.append(new phi(asobj, sources))
               predcasts.append(new bitcast(reg, asobj))
               stack.push((reg, sym))
@@ -412,7 +432,9 @@ abstract class GenLLVM extends SubComponent {
             val sym = l.sym
             val reg = new LocalVariable(blockName(bb)+".local.in."+llvmName(sym)+"."+sym.id, tpe)
             locals(sym) = reg
-            val sources = preds.filter(reachable).map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".local.out."+llvmName(sym)+"."+sym.id,tpe)))
+            val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".local.out."+llvmName(sym)+"."+sym.id,tpe)))
+            val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).findIndexOf(_.startBlock == bb)), new LocalVariable(blockName(pred)+".local.out."+llvmName(sym)+"."+sym.id,tpe)))
+            val sources = dirsources ++ excsources
             val insn = if (sources.isEmpty) new select(reg, CTrue, args.find(_._2==sym).map(_._1.lmvar).getOrElse(new CUndef(reg.tpe)), new CUndef(reg.tpe)) else new phi(reg, sources)
             insns.append(insn)
           }
@@ -805,12 +827,8 @@ abstract class GenLLVM extends SubComponent {
               }
               case THROW(_) => {
                 val (exception,esym) = stack.pop
-                val excsuccs = bb.exceptionSuccessors ++ bb.indirectExceptionSuccessors
                 insns.append(new store(cast(exception, esym, definitions.ObjectClass), new CGlobalAddress(rtCurrentException)))
-                if (excsuccs.isEmpty)
-                  insns.append(unwind)
-                else
-                  insns.append(br(blockLabel(excsuccs.head)))
+                insns.append(br(blockExSelLabel(bb,0)))
               }
               case DROP(kind) => stack.pop
               case DUP(kind) => stack.push(stack.top)
@@ -886,6 +904,7 @@ abstract class GenLLVM extends SubComponent {
           }
           insns.append(terminator)
           blocks.append(LMBlock(Some(blockLabel(bb)), insns))
+          blocks ++= exSels(bb)
         }
         blocks.insert(0,LMBlock(Some(Label("entry")), Seq(new br(blockLabel(m.code.startBlock)))))
         fun.define(blocks)
@@ -1020,6 +1039,8 @@ abstract class GenLLVM extends SubComponent {
 
     def blockLabel(bb: BasicBlock) = Label(blockName(bb))
     def blockName(bb: BasicBlock) = "bb."+bb.label
+    def blockExSelName(bb: BasicBlock, x: Int) = "bb."+bb.label+".exh."+x.toString
+    def blockExSelLabel(bb: BasicBlock, x: Int) = Label(blockExSelName(bb, x))
 
     def privateClassInfoName(s: Symbol) = {
       ".priv.classinfo."+llvmName(s)

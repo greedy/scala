@@ -124,6 +124,22 @@
   i32 0,
   [ 0 x %.ifaceinfo ] [  ]
 }
+@.classinfo.java.io.Serializable = constant %.class {
+  i8* getelementptr ([ 20 x i8 ]* @".exception.classname", i32 0, i32 0),
+  i32 0,
+  %".class"* @.classinfo.java.lang.Object,
+  %.vtable null,
+  i32 0,
+  [ 0 x %.ifaceinfo ] [  ]
+}
+@.classinfo.java.lang.Throwable = constant %.class {
+  i8* getelementptr ([ 20 x i8 ]* @".exception.classname", i32 0, i32 0),
+  i32 0,
+  %".class"* @.classinfo.java.lang.Object,
+  %.vtable null,
+  i32 0,
+  [ 0 x %.ifaceinfo ] [  ]
+}
 
 %.object = type { %.class* }
 %java.lang.Object = type %.object
@@ -272,6 +288,16 @@ notfound:
   ret %.vtable null
 }
 
+define default fastcc i1 @.rt.isinstance(%.object* %obj, %.class* %clsoriface) {
+  %isicls = call fastcc i1 @.rt.isinstance.class(%.object* %obj, %.class* %clsoriface)
+  br i1 %isicls, label %tru, label %checkiface
+tru:
+  ret i1 1
+checkiface:
+  %isiiface = call fastcc i1 @.rt.isinstance.iface(%.object* %obj, %.class* %clsoriface)
+  ret i1 %isiiface
+}
+
 define default fastcc i1 @.rt.isinstance.iface(%.object* %obj, %.class* %iface) {
   %cls = call fastcc %.class* @.rt.get_class(%.object* %obj)
   %vtbl = call fastcc %.vtable @.rt.iface.vtable(%.class* %cls, %.class* %iface)
@@ -320,4 +346,16 @@ define default fastcc %"java.lang.String"* @"java.lang.Object/toString()java.lan
 define fastcc void @"java.lang.Exception/<init>()java.lang.Exception"(%java.lang.Exception* %object) {
   ret void
 }
+
+define fastcc void @"java.lang.Throwable/toString()java.lang.String"() { unreachable }
+define fastcc void @"java.lang.Throwable/getMessage()java.lang.String"() { unreachable }
+define fastcc void @"java.lang.Throwable/getLocalizedMessage()java.lang.String"() { unreachable }
+define fastcc void @"java.lang.Throwable/getCause()java.lang.Throwable"() { unreachable }
+define fastcc void @"java.lang.Throwable/initCause(java.lang.Throwable)java.lang.Throwable"() { unreachable }
+define fastcc void @"java.lang.Throwable/printStackTrace()scala.Unit"() { unreachable }
+define fastcc void @"java.lang.Throwable/printStackTrace(java.io.PrintStream)scala.Unit"() { unreachable }
+define fastcc void @"java.lang.Throwable/printStackTrace(java.io.PrintWriter)scala.Unit"() { unreachable }
+define fastcc void @"java.lang.Throwable/fillInStackTrace()java.lang.Throwable"() { unreachable }
+define fastcc void @"java.lang.Throwable/getStackTrace()scala.Array"() { unreachable }
+define fastcc void @"java.lang.Throwable/setStackTrace(scala.Array)scala.Unit"() { unreachable }
 

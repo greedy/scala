@@ -11,6 +11,9 @@ class examplec {
 
   def cast(x: Magic) = x.xyzzy + x.shazam
 }
+
+class E extends java.lang.Exception
+
 @llvmdefs("""
 declare default ccc i32 @printf(i8*, ...)
 @fmt = internal constant [4 x i8] c"%g\0A\00"
@@ -40,12 +43,17 @@ object example extends examplec with Magic {
     printdouble(cast(toMagic(this)))
     //printdouble(cast(this))
     try {
-      throw new Exception
-      printdouble(0)
+      try {
+        throw new Exception
+        printdouble(0)
+      } catch {
+        case e: E => { printdouble(-1) }
+        case e: Exception => { printdouble(-3) }
+      } finally {
+        printdouble(-2)
+      }
     } catch {
-      case e: Exception => { printdouble(-1) }
-    } finally {
-      printdouble(-2)
+      case e: Exception => { printdouble(-4) }
     }
   }
   def main(args: Array[String]) { main() }
