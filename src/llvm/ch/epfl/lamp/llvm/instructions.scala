@@ -68,16 +68,18 @@ class indirectbr(v: LMValue[LMPointer], dests: Seq[Label]) extends Instruction {
 object indirectbr {
   def apply(v: LMValue[LMPointer], dests: Seq[Label]) = new indirectbr(v, dests)
 }
-class invoke[T<:ConcreteType](v: LocalVariable[T], funptr: LMValue[LMPointer], args: Seq[LMValue[_<:ConcreteType]], normal: Label, exception: Label, cconv: CallingConvention, ret_attrs: Seq[ReturnAttribute], fn_attrs: Seq[FunctionAttribute]) {
+class invoke[T<:ConcreteType](val v: LocalVariable[T], val funptr: LMValue[LMPointer], val args: Seq[LMValue[_<:ConcreteType]], val normal: Label, val exception: Label, val cconv: CallingConvention, val ret_attrs: Seq[ReturnAttribute], val fn_attrs: Seq[FunctionAttribute]) extends Instruction {
+  def this(v: LocalVariable[T], fun: LMFunction, args: Seq[LMValue[_<:ConcreteType]], normal: Label, exception: Label) = this(v, new CFunctionAddress(fun), args, normal, exception, fun.cconv, fun.ret_attrs, fun.fn_attrs)
   def syntax = {
-    v.tperep+" = invoke "+cconv.syntax+" "+ret_attrs.map(_.syntax).mkString(" ")+funptr.tperep+args.map(_.tperep).mkString("(",", ",")")+" "+fn_attrs.map(_.syntax).mkString(" ")+" to "+normal.tperep+" unwind "+exception.tperep
+    v.rep+" = invoke "+cconv.syntax+" "+ret_attrs.map(_.syntax).mkString(" ")+funptr.tperep+args.map(_.tperep).mkString("(",", ",")")+" "+fn_attrs.map(_.syntax).mkString(" ")+" to "+normal.tperep+" unwind "+exception.tperep
   }
 }
 object invoke {
   def apply[T <: ConcreteType](v: LocalVariable[T], funptr: LMValue[LMPointer], args: Seq[LMValue[_<:ConcreteType]], normal: Label, exception: Label, cconv: CallingConvention = Ccc, retattrs: Seq[ReturnAttribute] = Seq.empty, fnattrs: Seq[FunctionAttribute] = Seq.empty) = new invoke(v, funptr, args, normal, exception, cconv, retattrs, fnattrs)
   def apply[T <: ConcreteType](v: LocalVariable[T], fun: LMFunction, args: Seq[LMValue[_<:ConcreteType]], normal: Label, exception: Label) = new invoke(v, new CFunctionAddress(fun), args, normal, exception, fun.cconv, fun.ret_attrs, fun.fn_attrs)
 }
-class invoke_void(funptr: LMValue[LMPointer], args: Seq[LMValue[_<:ConcreteType]], normal: Label, exception: Label, cconv: CallingConvention, ret_attrs: Seq[ReturnAttribute], fn_attrs: Seq[FunctionAttribute]) {
+class invoke_void(val funptr: LMValue[LMPointer], val args: Seq[LMValue[_<:ConcreteType]], val normal: Label, val exception: Label, val cconv: CallingConvention, val ret_attrs: Seq[ReturnAttribute], val fn_attrs: Seq[FunctionAttribute]) extends Instruction {
+  def this(fun: LMFunction, args: Seq[LMValue[_<:ConcreteType]], normal: Label, exception: Label) = this(new CFunctionAddress(fun), args, normal, exception, fun.cconv, fun.ret_attrs, fun.fn_attrs)
   def syntax = {
     "invoke "+cconv.syntax+" "+ret_attrs.map(_.syntax).mkString(" ")+funptr.tperep+args.map(_.tperep).mkString("(",", ",")")+" "+fn_attrs.map(_.syntax).mkString(" ")+" to "+normal.tperep+" unwind "+exception.tperep
   }
