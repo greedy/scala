@@ -46,6 +46,8 @@ abstract class GenLLVM extends SubComponent {
       classes.get(s).map(_.fields)
     }
 
+    def localCell(l: Local) = LocalVariable("local."+llvmName(l.sym)+"."+l.sym.id, typeKindType(l.kind).pointer)
+
     object Runtime {
       val rtIfaceRef: LMStructure with AliasedType = new LMStructure(Seq(rtObject.pointer, rtVtable)).aliased(".ifaceref")
       val rtVtable = LMInt.i8.pointer.pointer.aliased(".vtable")
@@ -426,18 +428,6 @@ abstract class GenLLVM extends SubComponent {
               stack.push((reg, sym))
             }
           }
-          val locals: mutable.HashMap[Symbol,LocalVariable[_<:ConcreteType]] = new mutable.HashMap
-          m.locals.foreach { l =>
-            val tpe = typeKindType(l.kind)
-            val sym = l.sym
-            val reg = new LocalVariable(blockName(bb)+".local.in."+llvmName(sym)+"."+sym.id, tpe)
-            locals(sym) = reg
-            val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".local.out."+llvmName(sym)+"."+sym.id,tpe)))
-            val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).findIndexOf(_.startBlock == bb)), new LocalVariable(blockName(pred)+".local.out."+llvmName(sym)+"."+sym.id,tpe)))
-            val sources = dirsources ++ excsources
-            val insn = if (sources.isEmpty) new select(reg, CTrue, args.find(_._2==sym).map(_._1.lmvar).getOrElse(new CUndef(reg.tpe)), new CUndef(reg.tpe)) else new phi(reg, sources)
-            insns.append(insn)
-          }
           insns.appendAll(predcasts)
           bb.foreach { i =>
             insns.append(new icomment(i.toString))
@@ -464,7 +454,9 @@ abstract class GenLLVM extends SubComponent {
                 stack.push((new CUndef(typeKindType(kind)), kind.toType.typeSymbol))
               }
               case LOAD_LOCAL(local) => {
-                stack.push((locals(local.sym), local.sym.tpe.typeSymbol))
+                val v = nextvar(typeKindType(local.kind))
+                insns.append(new load(v, localCell(local)))
+                stack.push((v, local.sym.tpe.typeSymbol))
               }
               case LOAD_FIELD(field, isStatic) if (field == definitions.BoxedUnit_UNIT) => {
                 stack.push((new CGlobalAddress(rtBoxedUnit), definitions.BoxedUnitClass))
@@ -494,10 +486,8 @@ abstract class GenLLVM extends SubComponent {
                 popn(i.consumed)
               }
               case STORE_LOCAL(local) => {
-                val l = nextvar(symType(local.sym))
                 val (v,s) = stack.pop
-                insns.append(new select(l, CTrue, cast(v,s,local.sym.tpe.typeSymbol), cast(v,s,local.sym.tpe.typeSymbol)))
-                locals(local.sym) = l
+                insns.append(new store(v, localCell(local)))
               }
               case STORE_FIELD(field, isStatic) => {
                 val v = nextvar(symType(field))
@@ -888,11 +878,6 @@ abstract class GenLLVM extends SubComponent {
           // minus 2 to account for comment after
           val terminator = insns.remove(insns.length-2)
 
-          locals.foreach { case (l,v) =>
-            val reg = new LocalVariable(blockName(bb)+".local.out."+llvmName(l)+"."+l.id, v.tpe)
-            insns.append(new select(reg, CTrue, v, v))
-          }
-
           producedTypes.zip(stack.reverse).zipWithIndex.foreach { case ((sym,(src,ssym)),n) =>
             val tpe = symType(sym)
             if (definitions.isValueClass(sym) || sym.isTrait) {
@@ -906,7 +891,10 @@ abstract class GenLLVM extends SubComponent {
           blocks.append(LMBlock(Some(blockLabel(bb)), insns))
           blocks ++= exSels(bb)
         }
-        blocks.insert(0,LMBlock(Some(Label("entry")), Seq(new br(blockLabel(m.code.startBlock)))))
+
+        val allocaLocals = m.locals.map(l => new alloca(localCell(l), typeKindType(l.kind)))
+        val storeArgs = m.locals.flatMap(l => args.find(_._2==l.sym).map(a => new store(a._1.lmvar, localCell(l))))
+        blocks.insert(0,LMBlock(Some(Label("entry")), allocaLocals ++ storeArgs ++ Seq(new br(blockLabel(m.code.startBlock)))))
         fun.define(blocks)
       }
 
