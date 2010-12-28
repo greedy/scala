@@ -9,3 +9,7 @@ a.out a.out.bc: examplec.bc runtime.bc example\#module.bc Magic.bc Magic$$class\
 
 a.out.ll: a.out.bc
 	llvm-dis $<
+
+force:
+	touch example.scala
+	$(MAKE) a.out
