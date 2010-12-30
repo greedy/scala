@@ -175,7 +175,7 @@ define fastcc %.class* @.rt.get_class(%.object* %object) {
   ret %.class* %classp
 }
 
-define fastcc void @"java.lang.Object/<init>()java.lang.Object"(%java.lang.Object* %object) {
+define void @"java.lang.Object/<init>()java.lang.Object"(%java.lang.Object* %object) {
   ret void
 }
 
@@ -338,24 +338,23 @@ bad:
   unwind
 }
 
-define default fastcc i32 @"java.lang.Object/hashCode()scala.Int"(%".object"*) { unreachable }
-define default fastcc %".object"* @"java.lang.Object/clone()java.lang.Object"(%".object"*) { unreachable }
-define default fastcc i1 @"java.lang.Object/equals(java.lang.Object)scala.Boolean"(%".object"*,%".object"*) { unreachable }
-define default fastcc void @"java.lang.Object/finalize()scala.Unit"(%".object"*) { unreachable }
-define default fastcc %"java.lang.String"* @"java.lang.Object/toString()java.lang.String"(%".object"*) { unreachable }
-define fastcc void @"java.lang.Exception/<init>()java.lang.Exception"(%java.lang.Exception* %object) {
+define default i32 @"java.lang.Object/hashCode()scala.Int"(%".object"*) { unreachable }
+define default %".object"* @"java.lang.Object/clone()java.lang.Object"(%".object"*) { unreachable }
+define default i1 @"java.lang.Object/equals(java.lang.Object)scala.Boolean"(%".object"*,%".object"*) { unreachable }
+define default void @"java.lang.Object/finalize()scala.Unit"(%".object"*) { unreachable }
+define default %"java.lang.String"* @"java.lang.Object/toString()java.lang.String"(%".object"*) { unreachable }
+define void @"java.lang.Exception/<init>()java.lang.Exception"(%java.lang.Exception* %object) {
   ret void
 }
 
-define fastcc void @"java.lang.Throwable/toString()java.lang.String"() { unreachable }
-define fastcc void @"java.lang.Throwable/getMessage()java.lang.String"() { unreachable }
-define fastcc void @"java.lang.Throwable/getLocalizedMessage()java.lang.String"() { unreachable }
-define fastcc void @"java.lang.Throwable/getCause()java.lang.Throwable"() { unreachable }
-define fastcc void @"java.lang.Throwable/initCause(java.lang.Throwable)java.lang.Throwable"() { unreachable }
-define fastcc void @"java.lang.Throwable/printStackTrace()scala.Unit"() { unreachable }
-define fastcc void @"java.lang.Throwable/printStackTrace(java.io.PrintStream)scala.Unit"() { unreachable }
-define fastcc void @"java.lang.Throwable/printStackTrace(java.io.PrintWriter)scala.Unit"() { unreachable }
-define fastcc void @"java.lang.Throwable/fillInStackTrace()java.lang.Throwable"() { unreachable }
-define fastcc void @"java.lang.Throwable/getStackTrace()scala.Array"() { unreachable }
-define fastcc void @"java.lang.Throwable/setStackTrace(scala.Array)scala.Unit"() { unreachable }
-
+define void @"java.lang.Throwable/toString()java.lang.String"() { unreachable }
+define void @"java.lang.Throwable/getMessage()java.lang.String"() { unreachable }
+define void @"java.lang.Throwable/getLocalizedMessage()java.lang.String"() { unreachable }
+define void @"java.lang.Throwable/getCause()java.lang.Throwable"() { unreachable }
+define void @"java.lang.Throwable/initCause(java.lang.Throwable)java.lang.Throwable"() { unreachable }
+define void @"java.lang.Throwable/printStackTrace()scala.Unit"() { unreachable }
+define void @"java.lang.Throwable/printStackTrace(java.io.PrintStream)scala.Unit"() { unreachable }
+define void @"java.lang.Throwable/printStackTrace(java.io.PrintWriter)scala.Unit"() { unreachable }
+define void @"java.lang.Throwable/fillInStackTrace()java.lang.Throwable"() { unreachable }
+define void @"java.lang.Throwable/getStackTrace()scala.Array"() { unreachable }
+define void @"java.lang.Throwable/setStackTrace(scala.Array)scala.Unit"() { unreachable }

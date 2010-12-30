@@ -46,7 +46,10 @@ abstract class GenLLVM extends SubComponent {
       classes.get(s).map(_.fields)
     }
 
+    def localCell(l: Local) = LocalVariable("local."+llvmName(l.sym)+"."+l.sym.id, typeKindType(l.kind).pointer)
+
     object Runtime {
+      /* EH Stuff */
       val rtIfaceRef: LMStructure with AliasedType = new LMStructure(Seq(rtObject.pointer, rtVtable)).aliased(".ifaceref")
       val rtVtable = LMInt.i8.pointer.pointer.aliased(".vtable")
       val rtIfaceInfo = new LMStructure(Seq(rtClass.pointer, rtVtable)).aliased(".ifaceinfo")
@@ -79,7 +82,18 @@ abstract class GenLLVM extends SubComponent {
       val rtIsinstanceIface = new LMFunction(LMInt.i1, ".rt.isinstance.iface", Seq(ArgSpec(new LocalVariable("obj", rtObject.pointer)), ArgSpec(new LocalVariable("iface", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtIsinstanceClass = new LMFunction(LMInt.i1, ".rt.isinstance.class", Seq(ArgSpec(new LocalVariable("obj", rtObject.pointer)), ArgSpec(new LocalVariable("cls", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
       val rtBoxedUnit = new LMGlobalVariable(".rt.boxedUnit", symType(definitions.BoxedUnitClass), Externally_visible, Default, true)
-      val rtCurrentException = new LMGlobalVariable(".rt.currentException", rtObject.pointer, Externally_visible, Default, false)
+      val scalaPersonality = new LMFunction(LMInt.i32, "scalaPersonality", Seq(ArgSpec(new LocalVariable("a", LMInt.i32)), ArgSpec(new LocalVariable("b", LMInt.i32)), ArgSpec(new LocalVariable("c", LMInt.i64)), ArgSpec(new LocalVariable("d", LMInt.i8.pointer)), ArgSpec(new LocalVariable("e", LMInt.i8.pointer))), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+      val rtThrow = new LMFunction(
+        LMVoid, ".rt.throw",
+        Seq(ArgSpec(new LocalVariable("exc", rtObject.pointer))),
+        false, Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+      val llvmEhException = new LMFunction(LMInt.i8.pointer, "llvm.eh.exception", Seq.empty, false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+      val llvmEhSelector = new LMFunction(LMInt.i32, "llvm.eh.selector", Seq(ArgSpec(new LocalVariable("e", LMInt.i8.pointer)), ArgSpec(new LocalVariable("p", LMInt.i8.pointer))), true, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+      val rtGetExceptionObject = new LMFunction(rtObject.pointer, "getExceptionObject", Seq(ArgSpec(new LocalVariable("uwx", LMInt.i8.pointer))), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+      val unwindResume = new LMFunction(LMVoid, "_Unwind_Resume", Seq(ArgSpec(new LocalVariable("e", LMInt.i8.pointer))), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+      val unwindRaiseException = new LMFunction(LMInt.i32, "_Unwind_RaiseException", Seq(ArgSpec(new LocalVariable("e", LMInt.i8.pointer))), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+      val createOurException = new LMFunction(LMInt.i8.pointer, "createOurException", Seq(ArgSpec(new LocalVariable("e", rtObject.pointer))), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
       val rtOpaqueTypes = Seq(
         LMOpaque.aliased("java.lang.Boolean"),
         LMOpaque.aliased("java.lang.Byte"),
@@ -98,6 +112,7 @@ abstract class GenLLVM extends SubComponent {
         new TypeAlias(rtDispatch),
         new TypeAlias(rtIfaceInfo),
         new TypeAlias(rtIfaceRef),
+        scalaPersonality.declare,
         rtLookupMethod.declare,
         rtNew.declare,
         rtInitobj.declare,
@@ -125,7 +140,13 @@ abstract class GenLLVM extends SubComponent {
         rtIsinstanceClass.declare,
         rtIfaceCast.declare,
         rtBoxedUnit.declare,
-        rtCurrentException.declare
+        rtThrow.declare,
+        llvmEhException.declare,
+        llvmEhSelector.declare,
+        rtGetExceptionObject.declare,
+        unwindResume.declare,
+        unwindRaiseException.declare,
+        createOurException.declare
       )
     }
 
@@ -209,7 +230,7 @@ abstract class GenLLVM extends SubComponent {
           funtype.argTypes.foreach(recordType)
           recordType(funtype.returnType)
           val args = funtype.argTypes.zipWithIndex.map{case (t,i) => ArgSpec(new LocalVariable("arg"+i, t), Seq.empty)}
-          new LMFunction(funtype.returnType, llvmName(s), args, false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
+          new LMFunction(funtype.returnType, llvmName(s), args, false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
         })
       }
 
@@ -290,7 +311,7 @@ abstract class GenLLVM extends SubComponent {
       def genNativeFun(m: IMethod) = {
         val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
         val args = thisarg +: m.params.map(p => ArgSpec(new LocalVariable(llvmName(p.sym), localType(p))))
-        val fun = new LMFunction(typeType(m.returnType.toType), llvmName(m.symbol), args, false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
+        val fun = new LMFunction(typeType(m.returnType.toType), llvmName(m.symbol), args, false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
         recordType(fun.tpe)
         fun.args.map(_.lmvar.tpe).foreach(recordType)
         if (isMain(c) && m.params.isEmpty && m.symbol.simpleName.toString().trim() == "main" && fun.resultType == LMVoid) {
@@ -308,13 +329,15 @@ abstract class GenLLVM extends SubComponent {
         val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
         val recvarg = if (m.symbol.isStaticMember) { Seq.empty } else { Seq((thisarg, c.symbol)) }
         val args = recvarg ++ m.params.map(p => (ArgSpec(new LocalVariable(llvmName(p.sym), localType(p))), p.sym))
-        val fun = new LMFunction(typeType(m.returnType.toType), llvmName(m.symbol), args.map(_._1), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
+        val fun = new LMFunction(typeType(m.returnType.toType), llvmName(m.symbol), args.map(_._1), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
         recordType(fun.tpe)
         fun.args.map(_.lmvar.tpe).foreach(recordType)
         if (isMain(c) && m.params.isEmpty && m.symbol.simpleName.toString().trim() == "main" && fun.resultType == LMVoid) {
           extraDefs += generateMain(fun)
         }
         val blocks: mutable.ListBuffer[LMBlock] = new mutable.ListBuffer
+        val unreachableBlock = Label("_unreachable_")
+        blocks.append(new LMBlock(Some(unreachableBlock), Seq(unreachable)))
         var varidx = 0
         def nextvar[T <: ConcreteType](t: T) = {
           val v = new LocalVariable(varidx.toString, t)
@@ -322,17 +345,34 @@ abstract class GenLLVM extends SubComponent {
           v
         }
 
+        val currentException = new LocalVariable("_currentException", rtObject.pointer.pointer)
+
         def exSels(bb: BasicBlock): Seq[LMBlock] = {
+          val uwx = nextvar(LMInt.i8.pointer)
+          val selres = nextvar(LMInt.i32)
+          val exval = nextvar(rtObject.pointer)
           val handlers = bb.method.exh.filter(_.covers(bb))
-          handlers.zipWithIndex.map { case (h,n) =>
+          val header =
+            LMBlock(Some(blockExSelLabel(bb, -2)), Seq(
+              new call(uwx, llvmEhException, Seq.empty),
+              new call(selres, llvmEhSelector, Seq(
+                uwx, new Cbitcast(new CFunctionAddress(scalaPersonality), LMInt.i8.pointer), externClassP(definitions.ThrowableClass), LMConstant.intconst(0))),
+              new call(exval, rtGetExceptionObject, Seq(uwx)),
+              new store(exval, currentException),
+              new br(blockExSelLabel(bb, 0))))
+          val hblocks = handlers.zipWithIndex.map { case (h,n) =>
             val isinst = nextvar(LMInt.i1)
             val exi = nextvar(rtObject.pointer)
             LMBlock(Some(blockExSelLabel(bb,n)), Seq(
-              new load(exi, new CGlobalAddress(rtCurrentException)),
-              new call(isinst, rtIsinstance, Seq(exi, externClassP(h.loadExceptionClass))),
+              new call(isinst, rtIsinstance, Seq(exval, externClassP(h.loadExceptionClass))),
               new br_cond(isinst, blockLabel(h.startBlock), blockExSelLabel(bb, n+1))
             ))
-          } ++ Seq(LMBlock(Some(blockExSelLabel(bb, handlers.length)), Seq(unwind)))
+          }
+          val junk = nextvar(LMInt.i32)
+          val footer = LMBlock(Some(blockExSelLabel(bb, handlers.length)), Seq(
+            new call(junk, unwindRaiseException, Seq(uwx)),
+            unreachable))
+          Seq(header) ++ hblocks ++ Seq(footer)
         }
 
         m.code.blocks.filter(reachable).foreach { bb =>
@@ -341,6 +381,7 @@ abstract class GenLLVM extends SubComponent {
             for (_ <- 0 until n) stack.pop
           }
           val insns: mutable.ListBuffer[LMInstruction] = new mutable.ListBuffer
+          val pass = Label("__PASS__")
           val excpreds = bb.code.blocks.filter(pb => pb.exceptionSuccessors.contains(bb))
           val dirpreds = bb.code.blocks.filter(_.directSuccessors contains bb)
           val preds = (excpreds ++ dirpreds).filter(reachable)
@@ -410,7 +451,7 @@ abstract class GenLLVM extends SubComponent {
             recordType(tpe)
             if (definitions.isValueClass(sym) || sym.isTrait) {
               val reg = new LocalVariable(blockName(bb)+".in."+n.toString,tpe)
-              val dirsources = dirpreds.map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".out."+n.toString,tpe)))
+              val dirsources = dirpreds.map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,tpe)))
               val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).findIndexOf(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,tpe)))
               val sources = dirsources ++ excsources
               insns.append(new phi(reg, sources))
@@ -418,7 +459,7 @@ abstract class GenLLVM extends SubComponent {
             } else {
               val reg = new LocalVariable(blockName(bb)+".in."+n.toString,tpe)
               val asobj = nextvar(rtObject.pointer)
-              val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".out."+n.toString,rtObject.pointer)))
+              val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,rtObject.pointer)))
               val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).findIndexOf(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,rtObject.pointer)))
               val sources = dirsources ++ excsources
               insns.append(new phi(asobj, sources))
@@ -426,19 +467,10 @@ abstract class GenLLVM extends SubComponent {
               stack.push((reg, sym))
             }
           }
-          val locals: mutable.HashMap[Symbol,LocalVariable[_<:ConcreteType]] = new mutable.HashMap
-          m.locals.foreach { l =>
-            val tpe = typeKindType(l.kind)
-            val sym = l.sym
-            val reg = new LocalVariable(blockName(bb)+".local.in."+llvmName(sym)+"."+sym.id, tpe)
-            locals(sym) = reg
-            val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred), new LocalVariable(blockName(pred)+".local.out."+llvmName(sym)+"."+sym.id,tpe)))
-            val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).findIndexOf(_.startBlock == bb)), new LocalVariable(blockName(pred)+".local.out."+llvmName(sym)+"."+sym.id,tpe)))
-            val sources = dirsources ++ excsources
-            val insn = if (sources.isEmpty) new select(reg, CTrue, args.find(_._2==sym).map(_._1.lmvar).getOrElse(new CUndef(reg.tpe)), new CUndef(reg.tpe)) else new phi(reg, sources)
-            insns.append(insn)
-          }
+
           insns.appendAll(predcasts)
+          val headinsns = insns.toList
+          insns.clear()
           bb.foreach { i =>
             insns.append(new icomment(i.toString))
             insns.append(new icomment("stack before: "+stack.map{case (v,s) => v.rep + " " + s}.mkString(", ")))
@@ -464,7 +496,9 @@ abstract class GenLLVM extends SubComponent {
                 stack.push((new CUndef(typeKindType(kind)), kind.toType.typeSymbol))
               }
               case LOAD_LOCAL(local) => {
-                stack.push((locals(local.sym), local.sym.tpe.typeSymbol))
+                val v = nextvar(typeKindType(local.kind))
+                insns.append(new load(v, localCell(local)))
+                stack.push((v, local.sym.tpe.typeSymbol))
               }
               case LOAD_FIELD(field, isStatic) if (field == definitions.BoxedUnit_UNIT) => {
                 stack.push((new CGlobalAddress(rtBoxedUnit), definitions.BoxedUnitClass))
@@ -494,10 +528,8 @@ abstract class GenLLVM extends SubComponent {
                 popn(i.consumed)
               }
               case STORE_LOCAL(local) => {
-                val l = nextvar(symType(local.sym))
                 val (v,s) = stack.pop
-                insns.append(new select(l, CTrue, cast(v,s,local.sym.tpe.typeSymbol), cast(v,s,local.sym.tpe.typeSymbol)))
-                locals(local.sym) = l
+                insns.append(new store(v, localCell(local)))
               }
               case STORE_FIELD(field, isStatic) => {
                 val v = nextvar(symType(field))
@@ -730,10 +762,10 @@ abstract class GenLLVM extends SubComponent {
                 insns.append(new bitcast(castedfun, fun))
                 val castedargs = args.zip(argsyms).map { case ((v,s),d) => cast(v,s,d) }
                 if (funtype.returnType == LMVoid) {
-                  insns.append(new call_void(Fastcc, Seq.empty, castedfun, castedargs, Seq.empty))
+                  insns.append(new invoke_void(castedfun, castedargs, pass, blockExSelLabel(bb,-2), Ccc, Seq.empty, Seq.empty))
                 } else {
                   val v = nextvar(funtype.returnType)
-                  insns.append(new call(v, Fastcc, Seq.empty, castedfun, castedargs, Seq.empty))
+                  insns.append(new invoke(v, castedfun, castedargs, pass, blockExSelLabel(bb,-2), Ccc, Seq.empty, Seq.empty))
                   stack.push((v,method.tpe.resultType.typeSymbol))
                 }
               }
@@ -827,8 +859,10 @@ abstract class GenLLVM extends SubComponent {
               }
               case THROW(_) => {
                 val (exception,esym) = stack.pop
-                insns.append(new store(cast(exception, esym, definitions.ObjectClass), new CGlobalAddress(rtCurrentException)))
-                insns.append(br(blockExSelLabel(bb,0)))
+                val uwx = nextvar(LMInt.i8.pointer)
+                val junk = nextvar(LMInt.i32)
+                insns.append(new call(uwx, createOurException, Seq(cast(exception, esym, definitions.ObjectClass))))
+                insns.append(new invoke(junk, unwindRaiseException, Seq(uwx), unreachableBlock, blockExSelLabel(bb,-2)))
               }
               case DROP(kind) => stack.pop
               case DUP(kind) => stack.push(stack.top)
@@ -844,7 +878,7 @@ abstract class GenLLVM extends SubComponent {
               case SCOPE_EXIT(lv) => ()
               case LOAD_EXCEPTION(klass) => {
                 val exception = nextvar(rtObject.pointer)
-                insns.append(new load(exception, new CGlobalAddress(rtCurrentException)))
+                insns.append(new load(exception, currentException))
                 stack.push((cast(exception,definitions.ObjectClass,klass), klass))
               }
               case BOX(k) => {
@@ -888,25 +922,57 @@ abstract class GenLLVM extends SubComponent {
           // minus 2 to account for comment after
           val terminator = insns.remove(insns.length-2)
 
-          locals.foreach { case (l,v) =>
-            val reg = new LocalVariable(blockName(bb)+".local.out."+llvmName(l)+"."+l.id, v.tpe)
-            insns.append(new select(reg, CTrue, v, v))
-          }
-
+          val tailinsns = new mutable.ListBuffer[LMInstruction]
           producedTypes.zip(stack.reverse).zipWithIndex.foreach { case ((sym,(src,ssym)),n) =>
             val tpe = symType(sym)
             if (definitions.isValueClass(sym) || sym.isTrait) {
-              insns.append(new select(new LocalVariable(blockName(bb)+".out."+n.toString, tpe), CTrue, src, new CUndef(tpe)))
+              tailinsns.append(new select(new LocalVariable(blockName(bb)+".out."+n.toString, tpe), CTrue, src, new CUndef(tpe)))
             } else {
               val asobj = new LocalVariable(blockName(bb)+".out."+n.toString, rtObject.pointer)
-              insns.append(new bitcast(asobj, src))
+              tailinsns.append(new bitcast(asobj, src))
             }
           }
           insns.append(terminator)
-          blocks.append(LMBlock(Some(blockLabel(bb)), insns))
+          blocks.append(LMBlock(Some(blockLabel(bb)), headinsns ++ Seq(new br(blockLabel(bb,0)))))
+          var blocknum = 0
+          val curblockinsns = new mutable.ListBuffer[LMInstruction]
+          insns.foreach {
+            case inv: invoke[_] =>
+              if (inv.normal eq pass) {
+                curblockinsns.append(new invoke(
+                  inv.v, inv.funptr, inv.args, blockLabel(bb,blocknum+1),
+                  inv.exception, inv.cconv, inv.ret_attrs, inv.fn_attrs))
+              } else {
+                curblockinsns.append(inv)
+              }
+              blocks.append(LMBlock(Some(blockLabel(bb,blocknum)), curblockinsns.toList))
+              curblockinsns.clear()
+              blocknum += 1
+            case inv: invoke_void =>
+              if (inv.normal eq pass) {
+                curblockinsns.append(new invoke_void(
+                  inv.funptr, inv.args, blockLabel(bb,blocknum+1),
+                  inv.exception, inv.cconv, inv.ret_attrs, inv.fn_attrs))
+              } else {
+                curblockinsns.append(inv)
+              }
+              blocks.append(LMBlock(Some(blockLabel(bb,blocknum)), curblockinsns.toList))
+              curblockinsns.clear()
+              blocknum += 1
+            case i if i eq terminator =>
+              curblockinsns.append(new br(blockLabel(bb,-1)))
+              blocks.append(LMBlock(Some(blockLabel(bb,blocknum)), curblockinsns.toList))
+              curblockinsns.clear()
+              blocks.append(LMBlock(Some(blockLabel(bb,-1)), tailinsns ++ Seq(i)))
+            case i =>
+              curblockinsns.append(i)
+          }
           blocks ++= exSels(bb)
         }
-        blocks.insert(0,LMBlock(Some(Label("entry")), Seq(new br(blockLabel(m.code.startBlock)))))
+
+        val allocaLocals = m.locals.map(l => new alloca(localCell(l), typeKindType(l.kind)))
+        val storeArgs = m.locals.flatMap(l => args.find(_._2==l.sym).map(a => new store(a._1.lmvar, localCell(l))))
+        blocks.insert(0,LMBlock(Some(Label("entry")), allocaLocals ++ storeArgs ++ Seq(new alloca(currentException, rtObject.pointer), new br(blockLabel(m.code.startBlock)))))
         fun.define(blocks)
       }
 
@@ -1039,6 +1105,8 @@ abstract class GenLLVM extends SubComponent {
 
     def blockLabel(bb: BasicBlock) = Label(blockName(bb))
     def blockName(bb: BasicBlock) = "bb."+bb.label
+    def blockLabel(bb: BasicBlock, x: Int) = Label(blockName(bb,x))
+    def blockName(bb: BasicBlock, x: Int) = "bb."+bb.label+"."+x.toString
     def blockExSelName(bb: BasicBlock, x: Int) = "bb."+bb.label+".exh."+x.toString
     def blockExSelLabel(bb: BasicBlock, x: Int) = Label(blockExSelName(bb, x))
 

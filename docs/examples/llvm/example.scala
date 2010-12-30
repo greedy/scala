@@ -1,6 +1,7 @@
 trait Magic {
   def xyzzy: Double
   def shazam = 2 * xyzzy
+  def whee(z: Int) = if (z == 0) 5 else throw new Exception
 }
 class examplec {
   val s: Short = 1
@@ -29,7 +30,7 @@ object example extends examplec with Magic {
     printdouble(x)
     printdouble(z)
     var q = 0
-    while (q < 1000) {
+    while (q < 10) {
       printdouble(q)
       q = q + 1
     }
@@ -41,7 +42,17 @@ object example extends examplec with Magic {
     printdouble(toMagic(this).shazam)
     printdouble(toMagic(this).xyzzy)
     printdouble(cast(toMagic(this)))
-    //printdouble(cast(this))
+    try {
+      printdouble(whee(0))
+    } catch {
+      case e: Exception => printdouble(-10)
+    }
+    try {
+      printdouble(whee(4))
+    } catch {
+      case e: Exception => printdouble(-12)
+    }
+    printdouble(cast(this))
     try {
       try {
         throw new Exception
