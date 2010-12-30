@@ -224,19 +224,19 @@ class select_v(v: LocalVariable[LMVector], cond: LMValue[LMVector], v1: LMValue[
 }
 class call(v: LocalVariable[_<:ConcreteType], cconv: CallingConvention, ret_attrs: Seq[ReturnAttribute], fnptr: LMValue[LMPointer], args: Seq[LMValue[_<:ConcreteType]], fn_attrs: Seq[FunctionAttribute]) extends Instruction {
   def this(v: LocalVariable[_<:ConcreteType], fun: LMFunction, args: Seq[LMValue[_<:ConcreteType]]) = this(v, fun.cconv, fun.ret_attrs, new CFunctionAddress(fun), args, fun.fn_attrs)
-  def syntax = v.rep+" = call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tpe.target.asInstanceOf[LMFunctionType].returnType.rep+" "+fnptr.rep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
+  def syntax = v.rep+" = call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tperep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
 }
 class tail_call(v: LocalVariable[_<:ConcreteType], cconv: CallingConvention, ret_attrs: Seq[ReturnAttribute], fnptr: LMValue[LMPointer], args: Seq[LMValue[_<:ConcreteType]], fn_attrs: Seq[FunctionAttribute]) extends Instruction {
   def this(v: LocalVariable[_<:ConcreteType], fun: LMFunction, args: Seq[LMValue[_<:ConcreteType]]) = this(v, fun.cconv, fun.ret_attrs, new CFunctionAddress(fun), args, fun.fn_attrs)
-  def syntax = v.rep+" = tail call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tpe.target.asInstanceOf[LMFunctionType].returnType.rep+" "+fnptr.rep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
+  def syntax = v.rep+" = tail call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tperep+" "+fnptr.rep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
 }
 class call_void(cconv: CallingConvention, ret_attrs: Seq[ReturnAttribute], fnptr: LMValue[LMPointer], args: Seq[LMValue[_<:ConcreteType]], fn_attrs: Seq[FunctionAttribute]) extends Instruction {
   def this(fun: LMFunction, args: Seq[LMValue[_<:ConcreteType]]) = this(fun.cconv, fun.ret_attrs, new CFunctionAddress(fun), args, fun.fn_attrs)
-  def syntax = "call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tpe.target.asInstanceOf[LMFunctionType].returnType.rep+" "+fnptr.rep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
+  def syntax = "call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tperep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
 }
 class tail_call_void(cconv: CallingConvention, ret_attrs: Seq[ReturnAttribute], fnptr: LMValue[LMPointer], args: Seq[LMValue[_<:ConcreteType]], fn_attrs: Seq[FunctionAttribute]) extends Instruction {
   def this(fun: LMFunction, args: Seq[LMValue[_<:ConcreteType]]) = this(fun.cconv, fun.ret_attrs, new CFunctionAddress(fun), args, fun.fn_attrs)
-  def syntax = "tail call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tpe.target.asInstanceOf[LMFunctionType].returnType.rep+" "+fnptr.rep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
+  def syntax = "tail call "+cconv.syntax+ret_attrs.map(_.syntax).mkString(" "," "," ")+fnptr.tperep+args.map(_.tperep).mkString("(",", ",")")+fn_attrs.map(_.syntax).mkString(" "," ","")
 }
 class va_arg(v: LocalVariable[_<:ConcreteType], list: LMValue[LMPointer]) extends Instruction {
   def syntax = v.rep+" = va_arg "+list.tperep+", "+v.tpe
