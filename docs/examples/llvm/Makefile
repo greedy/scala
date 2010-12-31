@@ -8,7 +8,7 @@ classes: example.scala
 %.bc: %.ll
 	llvm-as $(subst $$,\$$,$<)
 
-a.out a.out.bc: examplec.bc runtime.bc example\#module.bc Magic.bc Magic$$class\#module.bc E.bc
+a.out a.out.bc: examplec.bc defs.bc example\#module.bc Magic.bc Magic$$class\#module.bc E.bc
 	llvm-ld $(subst $$,\$$,$^)
 
 native: examplec.bc runtime.bc example\#module.bc Magic.bc Magic$$class\#module.bc E.bc
@@ -20,6 +20,3 @@ a.out.ll: a.out.bc
 force:
 	touch example.scala
 	$(MAKE) a.out
-
-runscala: scalaExceptions.cpp runscala.cpp
-	$(CXX) $(CXXFLAGS) `llvm-config --cxxflags --ldflags --libs core jit native interpreter bitreader` scalaExceptions.cpp runscala.cpp  -o runscala

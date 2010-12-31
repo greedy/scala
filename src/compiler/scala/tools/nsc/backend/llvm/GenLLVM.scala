@@ -49,75 +49,222 @@ abstract class GenLLVM extends SubComponent {
     def localCell(l: Local) = LocalVariable("local."+llvmName(l.sym)+"."+l.sym.id, typeKindType(l.kind).pointer)
 
     object Runtime {
-      /* EH Stuff */
-      val rtIfaceRef: LMStructure with AliasedType = new LMStructure(Seq(rtObject.pointer, rtVtable)).aliased(".ifaceref")
+      /* Types */
+
+      val rtIfaceRef: LMStructure with AliasedType =
+        new LMStructure(Seq(
+          rtObject.pointer,
+          rtVtable
+        )).aliased(".ifaceref")
+
       val rtVtable = LMInt.i8.pointer.pointer.aliased(".vtable")
-      val rtIfaceInfo = new LMStructure(Seq(rtClass.pointer, rtVtable)).aliased(".ifaceinfo")
-      val rtClass: LMStructure with AliasedType = new LMStructure(Seq(LMInt.i8.pointer, LMInt.i32, rtClass.pointer, rtVtable, LMInt.i32, new LMArray(0, rtIfaceInfo))).aliased(".class")
-      val rtObject = new LMStructure(Seq(rtClass.pointer)).aliased(".object")
-      val rtDispatch = new LMStructure(Seq(rtClass.pointer, LMInt.i8.pointer)).aliased(".dispatch")
-      val rtNew = new LMFunction(rtObject.pointer, ".rt.new", Seq(ArgSpec(new LocalVariable("cls", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtInitobj= new LMFunction(rtObject.pointer, ".rt.initobj", Seq(ArgSpec(new LocalVariable("object", rtObject.pointer)), ArgSpec(new LocalVariable("cls", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtGetClass = new LMFunction(rtClass.pointer, ".rt.get_class", Seq(ArgSpec(new LocalVariable("object", rtObject.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtLookupMethod = new LMFunction(LMInt.i8.pointer, ".rt.lookup_method", Seq(ArgSpec(new LocalVariable("dtable", rtDispatch.pointer)), ArgSpec(new LocalVariable("cls", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtBoxi1 = new LMFunction(symType(definitions.BoxedBooleanClass), ".rt.box.i1", Seq(ArgSpec(new LocalVariable("v", LMInt.i1))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtBoxi8 = new LMFunction(symType(definitions.BoxedByteClass), ".rt.box.i8", Seq(ArgSpec(new LocalVariable("v", LMInt.i8))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtBoxi16 = new LMFunction(symType(definitions.BoxedShortClass), ".rt.box.i16", Seq(ArgSpec(new LocalVariable("v", LMInt.i16))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtBoxi32 = new LMFunction(symType(definitions.BoxedIntClass), ".rt.box.i32", Seq(ArgSpec(new LocalVariable("v", LMInt.i32))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtBoxi64 = new LMFunction(symType(definitions.BoxedLongClass), ".rt.box.i64", Seq(ArgSpec(new LocalVariable("v", LMInt.i64))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtBoxFloat = new LMFunction(symType(definitions.BoxedFloatClass), ".rt.box.float", Seq(ArgSpec(new LocalVariable("v", LMFloat))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtBoxDouble = new LMFunction(symType(definitions.BoxedDoubleClass), ".rt.box.double", Seq(ArgSpec(new LocalVariable("v", LMDouble))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtBoxChar = new LMFunction(symType(definitions.BoxedCharacterClass), ".rt.box.char", Seq(ArgSpec(new LocalVariable("v", LMInt.i16))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtUnboxi1 = new LMFunction(LMInt.i1, ".rt.unbox.i1", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedBooleanClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtUnboxi8 = new LMFunction(LMInt.i8, ".rt.unbox.i8", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedByteClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtUnboxi16 = new LMFunction(LMInt.i16, ".rt.unbox.i16", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedShortClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtUnboxi32 = new LMFunction(LMInt.i32, ".rt.unbox.i32", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedIntClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtUnboxi64 = new LMFunction(LMInt.i64, ".rt.unbox.i64", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedLongClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtUnboxFloat = new LMFunction(LMFloat, ".rt.unbox.float", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedFloatClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtUnboxDouble = new LMFunction(LMDouble, ".rt.unbox.double", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedDoubleClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtUnboxChar = new LMFunction(LMInt.i16, ".rt.unbox.char", Seq(ArgSpec(new LocalVariable("v", symType(definitions.BoxedCharacterClass)))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtMakeString = new LMFunction(symType(definitions.StringClass), ".rt.makestring", Seq(ArgSpec(new LocalVariable("s", LMInt.i8.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtIfaceCast = new LMFunction(rtIfaceRef, ".rt.iface.cast", Seq(ArgSpec(new LocalVariable("obj", rtObject.pointer)), ArgSpec(new LocalVariable("iface", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtIsinstance = new LMFunction(LMInt.i1, ".rt.isinstance", Seq(ArgSpec(new LocalVariable("obj", rtObject.pointer)), ArgSpec(new LocalVariable("clsoriface", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtIsinstanceIface = new LMFunction(LMInt.i1, ".rt.isinstance.iface", Seq(ArgSpec(new LocalVariable("obj", rtObject.pointer)), ArgSpec(new LocalVariable("iface", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtIsinstanceClass = new LMFunction(LMInt.i1, ".rt.isinstance.class", Seq(ArgSpec(new LocalVariable("obj", rtObject.pointer)), ArgSpec(new LocalVariable("cls", rtClass.pointer))), false, Externally_visible, Default, Fastcc, Seq.empty, Seq.empty, None, None, None)
-      val rtBoxedUnit = new LMGlobalVariable(".rt.boxedUnit", symType(definitions.BoxedUnitClass), Externally_visible, Default, true)
-      val scalaPersonality = new LMFunction(LMInt.i32, "scalaPersonality", Seq(ArgSpec(new LocalVariable("a", LMInt.i32)), ArgSpec(new LocalVariable("b", LMInt.i32)), ArgSpec(new LocalVariable("c", LMInt.i64)), ArgSpec(new LocalVariable("d", LMInt.i8.pointer)), ArgSpec(new LocalVariable("e", LMInt.i8.pointer))), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
-      val rtThrow = new LMFunction(
-        LMVoid, ".rt.throw",
-        Seq(ArgSpec(new LocalVariable("exc", rtObject.pointer))),
-        false, Externally_visible, Default, Ccc,
+
+      val rtIfaceInfo =
+        new LMStructure(Seq(
+          rtClass.pointer,
+          rtVtable
+        )).aliased(".ifaceinfo")
+
+      val rtClass: LMStructure with AliasedType =
+        new LMStructure(Seq(
+          LMInt.i8.pointer,
+          LMInt.i32,
+          rtClass.pointer,
+          rtVtable,
+          LMInt.i32,
+          new LMArray(0, rtIfaceInfo)
+        )).aliased(".class")
+
+      val rtObject =
+        new LMStructure(Seq(
+          rtClass.pointer
+        )).aliased(".object")
+
+      /* Functions */
+
+      val rtNew =
+        new LMFunction(
+          rtObject.pointer, "rt_new",
+          Seq(
+            ArgSpec(new LocalVariable("cls", rtClass.pointer))
+          ), false,
+          Externally_visible, Default, Ccc,
+          Seq.empty, Seq.empty, None, None, None)
+
+      val rtInitobj =
+        new LMFunction(
+          LMVoid, "rt_initobj",
+          Seq(
+            ArgSpec(new LocalVariable("object", rtObject.pointer)),
+            ArgSpec(new LocalVariable("cls", rtClass.pointer))
+          ), false,
+          Externally_visible, Default, Ccc,
+          Seq.empty, Seq.empty, None, None, None)
+
+      def boxfn(c: Symbol, lt: ConcreteType) = new LMFunction(
+        symType(c), "rt_box_"+c.simpleName,
+        Seq(
+          ArgSpec(new LocalVariable("v", lt))
+        ), false,
+        Externally_visible, Default, Ccc,
         Seq.empty, Seq.empty, None, None, None)
-      val llvmEhException = new LMFunction(LMInt.i8.pointer, "llvm.eh.exception", Seq.empty, false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
-      val llvmEhSelector = new LMFunction(LMInt.i32, "llvm.eh.selector", Seq(ArgSpec(new LocalVariable("e", LMInt.i8.pointer)), ArgSpec(new LocalVariable("p", LMInt.i8.pointer))), true, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
-      val rtGetExceptionObject = new LMFunction(rtObject.pointer, "getExceptionObject", Seq(ArgSpec(new LocalVariable("uwx", LMInt.i8.pointer))), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
-      val unwindResume = new LMFunction(LMVoid, "_Unwind_Resume", Seq(ArgSpec(new LocalVariable("e", LMInt.i8.pointer))), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
-      val unwindRaiseException = new LMFunction(LMInt.i32, "_Unwind_RaiseException", Seq(ArgSpec(new LocalVariable("e", LMInt.i8.pointer))), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
-      val createOurException = new LMFunction(LMInt.i8.pointer, "createOurException", Seq(ArgSpec(new LocalVariable("e", rtObject.pointer))), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+      def unboxfn(c: Symbol, lt: ConcreteType) = new LMFunction(
+        lt, "rt_unbox_"+c.simpleName,
+        Seq(
+          ArgSpec(new LocalVariable("v", symType(c)))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
+      val rtBoxi1 = boxfn(definitions.BoxedBooleanClass, LMInt.i1)
+      val rtBoxi8 = boxfn(definitions.BoxedByteClass, LMInt.i8)
+      val rtBoxi16 = boxfn(definitions.BoxedShortClass, LMInt.i16)
+      val rtBoxi32 = boxfn(definitions.BoxedIntClass, LMInt.i32)
+      val rtBoxi64 = boxfn(definitions.BoxedLongClass, LMInt.i64)
+      val rtBoxFloat = boxfn(definitions.BoxedFloatClass, LMFloat)
+      val rtBoxDouble = boxfn(definitions.BoxedDoubleClass, LMDouble)
+      val rtBoxChar = boxfn(definitions.BoxedCharacterClass, LMInt.i16)
+      val rtUnboxi1 = unboxfn(definitions.BoxedBooleanClass, LMInt.i1)
+      val rtUnboxi8 = unboxfn(definitions.BoxedByteClass, LMInt.i8)
+      val rtUnboxi16 = unboxfn(definitions.BoxedShortClass, LMInt.i16)
+      val rtUnboxi32 = unboxfn(definitions.BoxedIntClass, LMInt.i32)
+      val rtUnboxi64 = unboxfn(definitions.BoxedLongClass, LMInt.i64)
+      val rtUnboxFloat = unboxfn(definitions.BoxedFloatClass, LMFloat)
+      val rtUnboxDouble = unboxfn(definitions.BoxedDoubleClass, LMDouble)
+      val rtUnboxChar = unboxfn(definitions.BoxedCharacterClass, LMInt.i16)
+
+      val rtMakeString =
+        new LMFunction(
+          symType(definitions.StringClass), "rt_makestring",
+          Seq(
+            ArgSpec(new LocalVariable("s", LMInt.i8.pointer))
+          ), false,
+          Externally_visible, Default, Ccc,
+          Seq.empty, Seq.empty, None, None, None)
+
+      val rtIfaceCast = new LMFunction(
+        rtIfaceRef, "rt_iface_cast",
+        Seq(
+          ArgSpec(new LocalVariable("obj", rtObject.pointer)),
+          ArgSpec(new LocalVariable("iface", rtClass.pointer))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
+      val rtIsinstance = new LMFunction(
+        LMInt.i1, "rt_isinstance",
+        Seq(
+          ArgSpec(new LocalVariable("obj", rtObject.pointer)),
+          ArgSpec(new LocalVariable("clsoriface", rtClass.pointer))
+        ), false,
+        Externally_visible, Default,
+        Ccc, Seq.empty, Seq.empty, None, None, None)
+
+      val rtIsinstanceIface = new LMFunction(
+        LMInt.i1, "rt_isinstance_iface",
+        Seq(
+          ArgSpec(new LocalVariable("obj", rtObject.pointer)),
+          ArgSpec(new LocalVariable("iface", rtClass.pointer))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
+      val rtIsinstanceClass = new LMFunction(
+        LMInt.i1, "rt_isinstance_class",
+        Seq(
+          ArgSpec(new LocalVariable("obj", rtObject.pointer)),
+          ArgSpec(new LocalVariable("cls", rtClass.pointer))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
+      /* Constants */
+
+      val rtBoxedUnit = new LMGlobalVariable(
+        ".rt.boxedUnit", symType(definitions.BoxedUnitClass),
+        Externally_visible, Default, true)
+
+      /* Exception Handling */
+
+      val scalaPersonality = new LMFunction(
+        LMInt.i32, "scalaPersonality",
+        Seq(
+          ArgSpec(new LocalVariable("a", LMInt.i32)),
+          ArgSpec(new LocalVariable("b", LMInt.i32)),
+          ArgSpec(new LocalVariable("c", LMInt.i64)),
+          ArgSpec(new LocalVariable("d", LMInt.i8.pointer)),
+          ArgSpec(new LocalVariable("e", LMInt.i8.pointer))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
+      val llvmEhException = new LMFunction(
+        LMInt.i8.pointer, "llvm.eh.exception",
+        Seq.empty, false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
+      val llvmEhSelector = new LMFunction(
+        LMInt.i32, "llvm.eh.selector",
+        Seq(
+          ArgSpec(new LocalVariable("e", LMInt.i8.pointer)),
+          ArgSpec(new LocalVariable("p", LMInt.i8.pointer))
+        ), true,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
+      val rtGetExceptionObject = new LMFunction(
+        rtObject.pointer, "getExceptionObject",
+        Seq(
+          ArgSpec(new LocalVariable("uwx", LMInt.i8.pointer))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
+      val unwindResume = new LMFunction(
+        LMVoid, "_Unwind_Resume",
+        Seq(
+          ArgSpec(new LocalVariable("e", LMInt.i8.pointer))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
+      val unwindRaiseException = new LMFunction(
+        LMInt.i32, "_Unwind_RaiseException",
+        Seq(
+          ArgSpec(new LocalVariable("e", LMInt.i8.pointer))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
+      val createOurException = new LMFunction(
+        LMInt.i8.pointer, "createOurException",
+        Seq(
+          ArgSpec(new LocalVariable("e", rtObject.pointer))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
       val rtOpaqueTypes = Seq(
-        LMOpaque.aliased("java.lang.Boolean"),
-        LMOpaque.aliased("java.lang.Byte"),
-        LMOpaque.aliased("java.lang.Short"),
-        LMOpaque.aliased("java.lang.Integer"),
-        LMOpaque.aliased("java.lang.Long"),
-        LMOpaque.aliased("java.lang.Float"),
-        LMOpaque.aliased("java.lang.Double"),
-        LMOpaque.aliased("java.lang.String"),
-        LMOpaque.aliased("java.lang.Character"),
-        LMOpaque.aliased("scala.runtime.BoxedUnit")
+        LMOpaque.aliased("java_Dlang_DBoolean"),
+        LMOpaque.aliased("java_Dlang_DByte"),
+        LMOpaque.aliased("java_Dlang_DShort"),
+        LMOpaque.aliased("java_Dlang_DInteger"),
+        LMOpaque.aliased("java_Dlang_DLong"),
+        LMOpaque.aliased("java_Dlang_DFloat"),
+        LMOpaque.aliased("java_Dlang_DDouble"),
+        LMOpaque.aliased("java_Dlang_DString"),
+        LMOpaque.aliased("java_Dlang_DCharacter"),
+        LMOpaque.aliased("scala_Druntime_DBoxedUnit")
       )
       val rtHeader: Seq[ModuleComp] = Seq(
         new TypeAlias(rtVtable),
         new TypeAlias(rtClass),
-        new TypeAlias(rtDispatch),
         new TypeAlias(rtIfaceInfo),
         new TypeAlias(rtIfaceRef),
         scalaPersonality.declare,
-        rtLookupMethod.declare,
         rtNew.declare,
         rtInitobj.declare,
-        rtGetClass.declare,
-        rtLookupMethod.declare,
         rtBoxi1.declare,
         rtBoxi8.declare,
         rtBoxi16.declare,
@@ -140,7 +287,6 @@ abstract class GenLLVM extends SubComponent {
         rtIsinstanceClass.declare,
         rtIfaceCast.declare,
         rtBoxedUnit.declare,
-        rtThrow.declare,
         llvmEhException.declare,
         llvmEhSelector.declare,
         rtGetExceptionObject.declare,
@@ -230,7 +376,7 @@ abstract class GenLLVM extends SubComponent {
           funtype.argTypes.foreach(recordType)
           recordType(funtype.returnType)
           val args = funtype.argTypes.zipWithIndex.map{case (t,i) => ArgSpec(new LocalVariable("arg"+i, t), Seq.empty)}
-          new LMFunction(funtype.returnType, llvmName(s), args, false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+          new LMFunction(funtype.returnType, "method_"+llvmName(s), args, false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
         })
       }
 
@@ -291,12 +437,11 @@ abstract class GenLLVM extends SubComponent {
           println(c.symbol)
           val ig = new LMGlobalVariable(moduleInstanceName(c.symbol), symType(c.symbol).asInstanceOf[LMPointer].target, Externally_visible, Default, false)
           val initFun = new LMFunction(LMVoid, ".init."+moduleInstanceName(c.symbol), Seq.empty, false, Internal, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
-          val asobject = new LocalVariable("object", rtObject.pointer)
           val asinstance = new LocalVariable("instance", symType(c.symbol).asInstanceOf[LMPointer])
           val asvalue = new LocalVariable("value", symType(c.symbol).asInstanceOf[LMPointer].target)
           val initFundef = initFun.define(Seq(
             LMBlock(None, Seq(
-              new call(asobject, rtInitobj, Seq(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), externClassP(c.symbol))),
+              new call_void(rtInitobj, Seq(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), externClassP(c.symbol))),
               new call_void(externFun(c.lookupMethod("<init>").get.symbol), Seq(new CGlobalAddress(ig))),
               retvoid
             ))))
@@ -311,7 +456,7 @@ abstract class GenLLVM extends SubComponent {
       def genNativeFun(m: IMethod) = {
         val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
         val args = thisarg +: m.params.map(p => ArgSpec(new LocalVariable(llvmName(p.sym), localType(p))))
-        val fun = new LMFunction(typeType(m.returnType.toType), llvmName(m.symbol), args, false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+        val fun = new LMFunction(typeType(m.returnType.toType), "method_"+llvmName(m.symbol), args, false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
         recordType(fun.tpe)
         fun.args.map(_.lmvar.tpe).foreach(recordType)
         if (isMain(c) && m.params.isEmpty && m.symbol.simpleName.toString().trim() == "main" && fun.resultType == LMVoid) {
@@ -329,7 +474,7 @@ abstract class GenLLVM extends SubComponent {
         val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
         val recvarg = if (m.symbol.isStaticMember) { Seq.empty } else { Seq((thisarg, c.symbol)) }
         val args = recvarg ++ m.params.map(p => (ArgSpec(new LocalVariable(llvmName(p.sym), localType(p))), p.sym))
-        val fun = new LMFunction(typeType(m.returnType.toType), llvmName(m.symbol), args.map(_._1), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+        val fun = new LMFunction(typeType(m.returnType.toType), "method_"+llvmName(m.symbol), args.map(_._1), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
         recordType(fun.tpe)
         fun.args.map(_.lmvar.tpe).foreach(recordType)
         if (isMain(c) && m.params.isEmpty && m.symbol.simpleName.toString().trim() == "main" && fun.resultType == LMVoid) {
@@ -1092,15 +1237,22 @@ abstract class GenLLVM extends SubComponent {
         dir.fileNamed(sym.fullName('_') + suffix)
     }
 
+    def encodeName(s: String) = {
+      s.replace("_","__")
+       .replace(".","_D")
+       .replace("<","_L")
+       .replace(">","_G")
+    }
+
     def llvmName(sym: Symbol): String = {
       if (sym.isClass && !sym.isModule && !sym.isModuleClass)
-        sym.fullName('.')
+        encodeName(sym.fullName('.'))
       else if (sym.isModuleClass || (sym.isModule && !sym.isMethod))
-	sym.fullName('.')+"!module"
+	encodeName(sym.fullName('.'))
       else if (sym.isMethod)
-        llvmName(sym.owner)+"/"+sym.simpleName.toString.trim()+sym.info.paramss.flatten.map(ps => llvmName(ps.info.typeSymbol)).mkString("(",",",")")+llvmName(sym.info.resultType.typeSymbol)
+        llvmName(sym.owner)+"_M"+encodeName(sym.simpleName.toString.trim)+sym.info.paramss.flatten.map(ps => "_A"+llvmName(ps.info.typeSymbol)).mkString("")+"_R"+llvmName(sym.info.resultType.typeSymbol)
       else
-	sym.simpleName.toString.trim()
+	encodeName(sym.simpleName.toString.trim)
     }
 
     def blockLabel(bb: BasicBlock) = Label(blockName(bb))
@@ -1111,15 +1263,15 @@ abstract class GenLLVM extends SubComponent {
     def blockExSelLabel(bb: BasicBlock, x: Int) = Label(blockExSelName(bb, x))
 
     def privateClassInfoName(s: Symbol) = {
-      ".priv.classinfo."+llvmName(s)
+      "priv_classinfo_"+llvmName(s)
     }
 
     def classInfoName(s: Symbol) = {
-      ".classinfo."+llvmName(s)
+      "class_"+llvmName(s)
     }
 
     def moduleInstanceName(s: Symbol) = {
-      ".instance."+llvmName(s)
+      "module_"+llvmName(s)
     }
 
     def reachable(b: BasicBlock): Boolean = reachable(b, immutable.BitSet.empty)

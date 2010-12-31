@@ -1,16 +1,18 @@
+%.object = type { %.class* }
+%java.lang.Object = type %.object
 %.ifaceref = type { %.object*, %.vtable }
 %.ifaceinfo = type { %.class*, %.vtable }
 %.vtable = type i8**
 %.class = type { i8*, i32, %.class*, %.vtable, i32, [0 x %.ifaceinfo] }
 ; array = { i32 size, [0 x elttype] data }
-%.array.i1 = type { i32, [0 x i8] }
-%.array.i8 = type { i32, [0 x i8] }
-%.array.i16 = type { i32, [0 x i16] }
-%.array.i32 = type { i32, [0 x i32] }
-%.array.i64 = type { i32, [0 x i64] }
-%.array.float = type { i32, [0 x float] }
-%.array.double = type { i32, [0 x double] }
-%.array.object = type { i32, [0 x %.object*] }
+%.array.i1 = type { %.object, i32, [0 x i8] }
+%.array.i8 = type { %.object, i32, [0 x i8] }
+%.array.i16 = type { %.object, i32, [0 x i16] }
+%.array.i32 = type { %.object, i32, [0 x i32] }
+%.array.i64 = type { %.object, i32, [0 x i64] }
+%.array.float = type { %.object, i32, [0 x float] }
+%.array.double = type { %.object, i32, [0 x double] }
+%.array.object = type { %.object, %.class*, i32, [0 x %.object*] }
 
 %java.lang.Boolean = type { %.object, i1 }
 %java.lang.Byte = type { %.object, i8 }
@@ -140,10 +142,6 @@
   i32 0,
   [ 0 x %.ifaceinfo ] [  ]
 }
-
-%.object = type { %.class* }
-%java.lang.Object = type %.object
-
 declare void @llvm.memset.i32(i8*, i8, i32, i32)
 
 define fastcc %.object* @.rt.new(%.class* %clsp) {
@@ -336,6 +334,94 @@ good:
   ret %.ifaceref %iref
 bad:
   unwind
+}
+
+define default fastcc %.array.i1* @.rt.newarray.i1(i32 %numelts)
+{
+  %arroff = getelementptr i1 *null, i32 %numelts
+  %arrsize = ptrtoint i1* %arroff to i32
+  %stsize = ptrtoint %.array.i1* getelementptr (%.array.i1* null, i32 1) to i32
+  %totsize = add i32 %arrsize, %stsize
+  %arrbp = malloc i8, i32 %totsize
+  %arrp = bitcast i8* %arrbp to %.array.i1*
+  ret %.array.i1* %arrp
+}
+
+define default fastcc %.array.i8* @.rt.newarray.i8(i32 %numelts)
+{
+  %arroff = getelementptr i8 *null, i32 %numelts
+  %arrsize = ptrtoint i8* %arroff to i32
+  %stsize = ptrtoint %.array.i8* getelementptr (%.array.i8* null, i32 1) to i32
+  %totsize = add i32 %arrsize, %stsize
+  %arrbp = malloc i8, i32 %totsize
+  %arrp = bitcast i8* %arrbp to %.array.i8*
+  ret %.array.i8* %arrp
+}
+
+define default fastcc %.array.i16* @.rt.newarray.i16(i32 %numelts)
+{
+  %arroff = getelementptr i16 *null, i32 %numelts
+  %arrsize = ptrtoint i16* %arroff to i32
+  %stsize = ptrtoint %.array.i16* getelementptr (%.array.i16* null, i32 1) to i32
+  %totsize = add i32 %arrsize, %stsize
+  %arrbp = malloc i8, i32 %totsize
+  %arrp = bitcast i8* %arrbp to %.array.i16*
+  ret %.array.i16* %arrp
+}
+
+define default fastcc %.array.i32* @.rt.newarray.i32(i32 %numelts)
+{
+  %arroff = getelementptr i32 *null, i32 %numelts
+  %arrsize = ptrtoint i32* %arroff to i32
+  %stsize = ptrtoint %.array.i32* getelementptr (%.array.i32* null, i32 1) to i32
+  %totsize = add i32 %arrsize, %stsize
+  %arrbp = malloc i8, i32 %totsize
+  %arrp = bitcast i8* %arrbp to %.array.i32*
+  ret %.array.i32* %arrp
+}
+
+define default fastcc %.array.i64* @.rt.newarray.i64(i32 %numelts)
+{
+  %arroff = getelementptr i64 *null, i32 %numelts
+  %arrsize = ptrtoint i64* %arroff to i32
+  %stsize = ptrtoint %.array.i64* getelementptr (%.array.i64* null, i32 1) to i32
+  %totsize = add i32 %arrsize, %stsize
+  %arrbp = malloc i8, i32 %totsize
+  %arrp = bitcast i8* %arrbp to %.array.i64*
+  ret %.array.i64* %arrp
+}
+
+define default fastcc %.array.float* @.rt.newarray.float(i32 %numelts)
+{
+  %arroff = getelementptr float *null, i32 %numelts
+  %arrsize = ptrtoint float* %arroff to i32
+  %stsize = ptrtoint %.array.float* getelementptr (%.array.float* null, i32 1) to i32
+  %totsize = add i32 %arrsize, %stsize
+  %arrbp = malloc i8, i32 %totsize
+  %arrp = bitcast i8* %arrbp to %.array.float*
+  ret %.array.float* %arrp
+}
+
+define default fastcc %.array.double* @.rt.newarray.double(i32 %numelts)
+{
+  %arroff = getelementptr double *null, i32 %numelts
+  %arrsize = ptrtoint double* %arroff to i32
+  %stsize = ptrtoint %.array.double* getelementptr (%.array.double* null, i32 1) to i32
+  %totsize = add i32 %arrsize, %stsize
+  %arrbp = malloc i8, i32 %totsize
+  %arrp = bitcast i8* %arrbp to %.array.double*
+  ret %.array.double* %arrp
+}
+
+define default fastcc %.array.object* @.rt.newarray.object(i32 %numelts)
+{
+  %arroff = getelementptr %.object* null, i32 %numelts
+  %arrsize = ptrtoint %.object* %arroff to i32
+  %stsize = ptrtoint %.array.object* getelementptr (%.array.object* null, i32 1) to i32
+  %totsize = add i32 %arrsize, %stsize
+  %arrbp = malloc i8, i32 %totsize
+  %arrp = bitcast i8* %arrbp to %.array.object*
+  ret %.array.object* %arrp
 }
 
 define default i32 @"java.lang.Object/hashCode()scala.Int"(%".object"*) { unreachable }
