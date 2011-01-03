@@ -16,5 +16,6 @@ extern struct ifaceref *rt_iface_cast(struct java_lang_Object *object, struct kl
 extern bool rt_isinstance(struct java_lang_Object *object, struct klass *classoriface);
 extern bool rt_isinstance_class(struct java_lang_Object *object, struct klass *klass);
 extern bool rt_isinstance_iface(struct java_lang_Object *object, struct klass *iface);
+extern void rt_init_loop();
 
 #endif

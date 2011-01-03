@@ -4,11 +4,7 @@
 #include "object.h"
 
 #define DECLARE_BOX(p,c)                              \
-  struct java_lang_ ## c {                            \
-    struct java_lang_Object super;                    \
-    p value;                                          \
-  };                                                  \
-  extern struct klass class_java_Dlang_D ## c;        \
+  struct java_lang_ ## c;                             \
   extern struct java_lang_ ## c *                     \
     rt_box_ ## c (p v);                               \
   extern p                                            \

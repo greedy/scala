@@ -2,6 +2,7 @@
 #include "object.h"
 #include "runtime.h"
 #include <stdlib.h>
+#include <stdio.h>
 
 struct java_lang_Object *rt_new(struct klass *klass)
 {
@@ -69,4 +70,10 @@ bool rt_isinstance_iface(struct java_lang_Object *object, struct klass *iface)
     }
   }
   return false;
+}
+
+void rt_init_loop()
+{
+  fprintf(stderr, "PANIC: Initialization loop\n");
+  abort();
 }

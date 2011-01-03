@@ -15,6 +15,8 @@ struct klass {
   uint32_t instsize;
   struct klass *super;
   void **vtable;
+  struct klass *arrayklass;
+  struct klass *elementklass;
   uint32_t numiface;
   struct ifaceinfo ifaces[];
 };

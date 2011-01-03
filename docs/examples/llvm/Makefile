@@ -1,18 +1,21 @@
-examplec.ll example\#module.ll Magic.ll Magic$$class\#module.ll: example.scala
-	../../../build/quick/bin/scalac -target:llvm -Xmainclass example example.scala
+
+code.bc: irfiles.stamp $(patsubst %.ll,%.bc,$(wildcard irfiles/*.ll))
+	llvm-ld -o $@ -r -disable-internalize irfiles/*.bc ../../../src/llvmrt/llvmrt.a
+
+irfiles.stamp irfiles/*.ll: example.scala runtime.scala
+	mkdir -p irfiles
+	JAVA_OPTS=-Xmx1500M ../../../build/quick/bin/scalac -d irfiles -deprecation -target:llvm example.scala runtime.scala # @lib.sources
+	touch irfiles.stamp
 
 classes: example.scala
 	mkdir -p classes
 	../../../build/quick/bin/scalac -d classes example.scala
 
 %.bc: %.ll
-	llvm-as $(subst $$,\$$,$<)
+	llvm-as $<
 
-a.out a.out.bc: examplec.bc defs.bc example\#module.bc Magic.bc Magic$$class\#module.bc E.bc
-	llvm-ld $(subst $$,\$$,$^)
-
-native: examplec.bc runtime.bc example\#module.bc Magic.bc Magic$$class\#module.bc E.bc
-	llvm-ld -v -native -o native $(subst $$,\$$,$^)
+%.ll: %.bc
+	llvm-dis $<
 
 a.out.ll: a.out.bc
 	llvm-dis $<
@@ -20,3 +23,6 @@ a.out.ll: a.out.bc
 force:
 	touch example.scala
 	$(MAKE) a.out
+
+clean:
+	rm -rf irfiles code.bc irfiles.stamp

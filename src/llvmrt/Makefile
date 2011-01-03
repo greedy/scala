@@ -1,15 +1,19 @@
+COMPONENTS = core jit bitreader native interpreter archive
 WARNINGS = -Wall
-CFLAGS = $(WARNINGS) `llvm-config --cflags`
-CXXFLAGS = $(WARNINGS) `llvm-config --cxxflags`
-LDFLAGS = `llvm-config --ldflags --libs core jit bitreader native interpreter` -all_load
+CFLAGS = $(WARNINGS) `llvm-config --cflags $(COMPONENTS)`
+CXXFLAGS = $(WARNINGS) `llvm-config --cxxflags $(COMPONENTS)`
+LDFLAGS = `llvm-config --ldflags --libs $(COMPONENTS)` -all_load
 
-RTOBJECTS = runtime.o object.o boxes.o unwind.o exceptions.o serializable.o
+RTOBJECTS = runtime.bc object.bc boxes.bc arrays.bc strings.bc
+
+%.bc: %.c
+	clang -std=c99 -O4 -emit-llvm -c -o $@ $^
 
 llvmrt.a: $(RTOBJECTS)
-	ar cr $@ $^
+	llvm-ar cr $@ $^
 
-runscala: runscala.o llvmrt.a
+runscala: runscala.o unwind.o
 	$(CXX) $(LDFLAGS) -o $@ $^
 
 clean:
-	rm -f *.o llvmrt.a runscala
+	rm -f *.o *.bc llvmrt.a runscala

@@ -3,11 +3,11 @@
 struct java_lang_String;
 
 static void *vtable_java_lang_Object[] = {
-  method_java_Dlang_DObject_MhashCode_Rscala_DInt,
-  method_java_Dlang_DObject_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean,
   method_java_Dlang_DObject_Mclone_Rjava_Dlang_DObject,
+  method_java_Dlang_DObject_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean,
+  method_java_Dlang_DObject_Mfinalize_Rscala_DUnit,
+  method_java_Dlang_DObject_MhashCode_Rscala_DInt,
   method_java_Dlang_DObject_MtoString_Rjava_Dlang_DString,
-  method_java_Dlang_DObject_Mfinalize_Rscala_DUnit
 };
 
 struct klass class_java_Dlang_DObject = {
