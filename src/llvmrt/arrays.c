@@ -9,9 +9,9 @@ struct klass *arrayof(struct klass *klass)
 {
   if (klass->arrayklass == NULL) {
     struct klass *ac = malloc(sizeof(struct klass));
-    ac->name = malloc(strlen(klass->name)+1);
-    strcpy(ac->name, "[");
-    strcat(ac->name, klass->name);
+    ac->name.bytes = malloc(klass->name.len+1);
+    ac->name.bytes[0] = '[';
+    memcpy(&ac->name.bytes[1], klass->name.bytes, klass->name.len);
     ac->instsize = 0;
     ac->super = NULL;
     ac->vtable = NULL;
@@ -23,7 +23,7 @@ struct klass *arrayof(struct klass *klass)
   return klass->arrayklass;
 }
 
-#define PRIM_ARRAY(t) struct klass t ## _array = { "]" # t, 0, NULL, NULL, NULL, NULL, 0 }
+#define PRIM_ARRAY(t) struct klass t ## _array = { { sizeof("]" # t)-1, "]" # t }, 0, NULL, NULL, NULL, NULL, 0 }
 
 PRIM_ARRAY(bool);
 PRIM_ARRAY(byte);

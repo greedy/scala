@@ -5,13 +5,18 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+struct utf8str {
+  int32_t len;
+  char *bytes;
+};
+
 struct ifaceinfo {
   struct klass *klass;
   void **vtable;
 };
 
 struct klass {
-  char *name;
+  struct utf8str name;
   uint32_t instsize;
   struct klass *super;
   void **vtable;

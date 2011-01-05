@@ -2,12 +2,26 @@
 #include "object.h"
 #include "runtime.h"
 #include "arrays.h"
+#include "modules.h"
 
-#include <string.h>
-#include <stdlib.h>
-#include <inttypes.h>
+#include "unicode/ustdio.h"
+#include "unicode/unum.h"
+
 #include <stdio.h>
-#include <wchar.h>
+#include <stdlib.h>
+
+/* String Constants */
+
+U_STRING_DECL(u_TRUE_s, "true", 4);
+static bool u_TRUE_initted = false;
+U_STRING_DECL(u_FALSE_s, "false", 5);
+static bool u_FALSE_initted = false;
+
+struct stringlist {
+  struct stringlist *prev;
+  int32_t len;
+  UChar *s;
+};
 
 static void *vtable_java_lang_String[] = {
   method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject,
@@ -18,7 +32,7 @@ static void *vtable_java_lang_String[] = {
 };
 
 struct klass class_java_Dlang_DString = {
-  "java.lang.String",
+  { sizeof("java.lang.String") - 1, "java.lang.String" },
   sizeof(struct java_lang_String),
   &class_java_Dlang_DObject,
   vtable_java_lang_String,
@@ -27,182 +41,257 @@ struct klass class_java_Dlang_DString = {
   0,
 };
 
-void
-method_java_Dlang_DString_M_Linit_G_Ascala_DArray_Rjava_Dlang_DString(
-    struct java_lang_String* s,
-    struct array* bytes)
-{
-  method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject((struct java_lang_Object*)s);
-  s->bytes = bytes;
+UFILE* ustdout() {
+  static UFILE *uout = NULL;
+  if (uout == NULL) {
+    uout = u_finit(stdout, NULL, NULL);
+  }
+  return uout;
 }
 
-struct array*
-method_java_Dlang_DString_Mbytes_Rscala_DArray(
+void
+method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(
     struct java_lang_String* s)
 {
-  return s->bytes;
-}
-
-char*
-string_cstring(struct java_lang_String *s)
-{
-  return (char*)s->bytes->data;
+  method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject((struct java_lang_Object*)s);
 }
 
 void
-method__Ojava_Dlang_DString_Mprint_Ajava_Dlang_DString_Rscala_DUnit(
+method__Oscala_DConsole_Mprint_Ajava_Dlang_DString_Rscala_DUnit(
     struct java_lang_Object *module,
     struct java_lang_String *s)
 {
-  puts(string_cstring(s));
+  u_file_write(s->s, s->len, ustdout());
 }
 
 struct java_lang_String*
-rt_makestring(char *s)
+rt_makestring(struct utf8str *s)
 {
+  enum UErrorCode uerr = U_ZERO_ERROR;
   struct java_lang_String *ret = (struct java_lang_String*)rt_new(&class_java_Dlang_DString);
-  size_t slen = strlen(s);
-  struct array *chars = new_array(BYTE, NULL, 1, slen);
-  memcpy(chars->data, s, slen);
-  method_java_Dlang_DString_M_Linit_G_Ascala_DArray_Rjava_Dlang_DString(ret, chars);
-  return ret;
+  UChar *buffer;
+  int32_t bufsize = s->len;
+  int32_t reqsize;
+  method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(ret);
+  buffer = malloc(bufsize * sizeof(UChar));
+  u_strFromUTF8(buffer, bufsize, &reqsize, s->bytes, s->len, &uerr);
+  if (uerr == U_BUFFER_OVERFLOW_ERROR) {
+    /* reallocate buffer and retry */
+    free(buffer);
+    buffer = malloc(reqsize * sizeof(UChar));
+    bufsize = reqsize;
+    uerr = U_ZERO_ERROR;
+    u_strFromUTF8(buffer, bufsize, &reqsize, s->bytes, s->len, &uerr);
+  }
+  if (U_SUCCESS(uerr)) {
+    ret->len = reqsize;
+    ret->s = buffer;
+    return ret;
+  } else {
+    return NULL;
+  }
 }
 
 void rt_string_append_Boolean(
-    char **s,
+    struct stringlist **s,
     uint8_t v)
 {
-  char *o = *s;
-  char *bs;
-  if (v) bs = "true"; else bs = "false";
-  if (o) {
-    asprintf(s, "%s%s", o, bs);
-    free(o);
+  struct stringlist *n = malloc(sizeof(struct stringlist));
+  n->prev = *s;
+  *s = n;
+  if (v) {
+    if (!u_TRUE_initted) {
+      U_STRING_INIT(u_TRUE_s, "true", 4);
+      u_TRUE_initted = true;
+    }
+    n->len = 4;
+    n->s = u_TRUE_s;
   } else {
-    asprintf(s, "%s", bs);
+    if (!u_FALSE_initted) {
+      U_STRING_INIT(u_FALSE_s, "false", 5);
+      u_FALSE_initted = true;
+    }
+    n->len = 4;
+    n->s = u_FALSE_s;
+  }
+}
+
+UNumberFormat *ufmt() {
+  static UNumberFormat res = NULL;
+  if (res == NULL) {
+    UErrorCode status = U_ZERO_ERROR;
+    res = unum_open(UNUM_DEFAULT, NULL, -1, NULL, NULL, &status);
+  }
+  return res;
+}
+
+void rt_string_append_number(
+    struct stringlist **s,
+    int32_t v,
+    int32_t initsize)
+{
+  struct stringlist *n = malloc(sizeof(struct stringlist));
+  n->prev = *s;
+  *s = n;
+  {
+    UErrorCode err = U_ZERO_ERROR;
+    int32_t bufsize = initsize;
+    int32_t reqsize;
+    UChar *buffer = malloc(bufsize * sizeof(UChar));
+    reqsize = unum_format(ufmt(), v, buffer, bufsize, NULL, &err);
+    if (err == U_BUFFER_OVERFLOW_ERROR) {
+      err = U_ZERO_ERROR;
+      free(buffer);
+      buffer = malloc(reqsize * sizeof(UChar));
+      bufsize = reqsize;
+      reqsize = unum_format(ufmt(), v, buffer, bufsize, NULL, &err);
+    }
+    if (U_SUCCESS(err)) {
+      n->len = reqsize;
+      n->s = buffer;
+    } else {
+      *s = n->prev;
+    }
   }
 }
 
 void rt_string_append_Byte(
-    char **s,
+    struct stringlist **s,
     int8_t v)
 {
-  char *o = *s;
-  if (o) {
-    asprintf(s, "%s" PRIi8, o, v);
-    free(o);
-  } else {
-    asprintf(s, PRIi8, v);
-  }
+  rt_string_append_number(s, v, 4);
 }
 
 void rt_string_append_Short(
-    char **s,
+    struct stringlist **s,
     int16_t v)
 {
-  char *o = *s;
-  if (o) {
-    asprintf(s, "%s" PRIi16, o, v);
-    free(o);
-  } else {
-    asprintf(s, PRIi16, v);
-  }
+  rt_string_append_number(s, v, 6);
 }
 
 void rt_string_append_Char(
-    char **s,
-    uint32_t v)
+    struct stringlist **s,
+    UChar32 v)
 {
-  char *o = *s;
-  if (o) {
-    asprintf(s, "%s" "%lc", o, (wint_t)v);
-    free(o);
+  int32_t i = 0;
+  struct stringlist *n = malloc(sizeof(struct stringlist));
+  n->prev = *s;
+  *s = n;
+  if (U_IS_BMP(v)) {
+    n->s = malloc(sizeof(UChar));
+    n->len = 1;
   } else {
-    asprintf(s, "%lc", (wint_t)v);
+    n->s = malloc(sizeof(UChar)*2);
+    n->len = 2;
   }
+  U16_APPEND_UNSAFE(n->s, i, v);
 }
 
 void rt_string_append_Int(
-    char **s,
+    struct stringlist **s,
     int32_t v)
 {
-  char *o = *s;
-  if (o) {
-    asprintf(s, "%s" PRIi32, o, v);
-    free(o);
-  } else {
-    asprintf(s, PRIi32, v);
-  }
+  rt_string_append_number(s, v, 11);
 }
 
 void rt_string_append_Long(
-    char **s,
+    struct stringlist **s,
     int64_t v)
 {
-  char *o = *s;
-  if (o) {
-    asprintf(s, "%s" PRIi64, o, v);
-    free(o);
-  } else {
-    asprintf(s, PRIi64, v);
-  }
-}
-
-void rt_string_append_Float(
-    char **s,
-    float v)
-{
-  char *o = *s;
-  if (o) {
-    asprintf(s, "%s" "%g", o, (double)v);
-    free(o);
-  } else {
-    asprintf(s, "%g", (double)v);
+  struct stringlist *n = malloc(sizeof(struct stringlist));
+  n->prev = *s;
+  *s = n;
+  {
+    UErrorCode err = U_ZERO_ERROR;
+    int32_t bufsize = 20;
+    int32_t reqsize;
+    UChar *buffer = malloc(bufsize * sizeof(UChar));
+    reqsize = unum_formatInt64(ufmt(), v, buffer, bufsize, NULL, &err);
+    if (err == U_BUFFER_OVERFLOW_ERROR) {
+      err = U_ZERO_ERROR;
+      free(buffer);
+      buffer = malloc(reqsize * sizeof(UChar));
+      bufsize = reqsize;
+      reqsize = unum_formatInt64(ufmt(), v, buffer, bufsize, NULL, &err);
+    }
+    if (U_SUCCESS(err)) {
+      n->len = reqsize;
+      n->s = buffer;
+    } else {
+      *s = n->prev;
+    }
   }
 }
 
 void rt_string_append_Double(
-    char **s,
+    struct stringlist **s,
     double v)
 {
-  char *o = *s;
-  if (o) {
-    asprintf(s, "%s" "%g", o, (double)v);
-    free(o);
-  } else {
-    asprintf(s, "%g", (double)v);
+  struct stringlist *n = malloc(sizeof(struct stringlist));
+  n->prev = *s;
+  *s = n;
+  {
+    UErrorCode err = U_ZERO_ERROR;
+    int32_t bufsize = 4;
+    int32_t reqsize;
+    UChar *buffer = malloc(bufsize * sizeof(UChar));
+    reqsize = unum_formatInt64(ufmt(), v, buffer, bufsize, NULL, &err);
+    if (err == U_BUFFER_OVERFLOW_ERROR) {
+      err = U_ZERO_ERROR;
+      free(buffer);
+      buffer = malloc(reqsize * sizeof(UChar));
+      bufsize = reqsize;
+      reqsize = unum_format(ufmt(), v, buffer, bufsize, NULL, &err);
+    }
+    if (U_SUCCESS(err)) {
+      n->len = reqsize;
+      n->s = buffer;
+    } else {
+      *s = n->prev;
+    }
   }
+}
+
+void rt_string_append_Float(
+    struct stringlist **s,
+    float v)
+{
+  rt_string_append_Double(s, v);
 }
 
 typedef struct java_lang_String* (*toStringFn)(struct java_lang_Object*);
 
 void rt_string_append_string(
-    char **s,
-    struct java_lang_Object *sobj,
-    uint32_t toStringMethodNumber)
+    struct stringlist **s,
+    struct java_lang_Object *sobj)
 {
-  char *o = *s;
+  struct java_lang_String *ss;
   toStringFn toString;
-  char *sobjs;
-  toString = sobj->klass->vtable[toStringMethodNumber];
-  sobjs = string_cstring(toString(sobj));
-  if (o) {
-    asprintf(s, "%s" "%s", o, sobjs);
-    free(o);
-  } else {
-    asprintf(s, "%s", sobjs);
-  }
+  struct stringlist *n = malloc(sizeof(struct stringlist));
+  n->prev = *s;
+  *s = n;
+
+  toString = sobj->klass->vtable[4];
+  ss = toString(sobj);
+
+  n->len = ss->len;
+  n->s = ss->s;
 }
 
 int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_String* self)
 {
-  return string_cstring(self)[0] + self->bytes->length;
+  int32_t hashcode = 0;
+  for (int32_t i = 0; i < self->len; i++) {
+    hashcode += self->s[i] * 13;
+  }
+  return hashcode;
 }
 
 bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct java_lang_String* self, struct java_lang_Object* other)
 {
   if (other->klass == &class_java_Dlang_DString) {
-    return strcmp(string_cstring(self), string_cstring((struct java_lang_String*)other)) == 0;
+    struct java_lang_String *os = (struct java_lang_String*)other;
+    return 0 == u_strCompare(self->s, self->len, os->s, os->len, TRUE);
   } else {
     return false;
   }
@@ -216,4 +305,31 @@ struct java_lang_Object *method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(st
 struct java_lang_String *method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct java_lang_String* self)
 {
   return self;
+}
+
+struct java_lang_String *
+rt_stringconcat(struct stringlist **s)
+{
+  struct java_lang_String *ret = (struct java_lang_String*)rt_new(&class_java_Dlang_DString);
+  method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(ret);
+  UChar *buffer;
+  UChar *wp;
+  int32_t totlen = 0;
+  struct stringlist *head = *s;
+  while (head != NULL) {
+    totlen += head->len;
+    head = head->prev;
+  }
+  buffer = malloc(totlen * sizeof(UChar));
+  wp = &buffer[totlen];
+  head = *s;
+  while (head != NULL) {
+    //puts("x");
+    u_memcpy(wp - head->len, head->s, head->len);
+    wp -= head->len;
+    head = head->prev;
+  }
+  ret->len = totlen;
+  ret->s = buffer;
+  return ret;
 }

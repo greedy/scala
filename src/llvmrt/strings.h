@@ -3,15 +3,22 @@
 
 #include "object.h"
 
+#include "unicode/ustring.h"
+
 extern struct klass class_java_Dlang_DString;
+extern struct klass class_Ojava_Dlang_DString;
 
 struct java_lang_String {
   struct java_lang_Object super;
-  struct array *bytes;
+  int32_t len;
+  UChar *s;
 };
 
-extern struct java_lang_String*
-rt_makestring(char *s);
+struct _Ojava_lang_String {
+  struct java_lang_Object super;
+};
+
+extern struct java_lang_String* rt_makestring(struct utf8str *s);
 
 extern int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_String*);
 extern bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct java_lang_String*, struct java_lang_Object*);

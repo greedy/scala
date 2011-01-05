@@ -140,14 +140,6 @@ package java {
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
     }
-    object String {
-      @native def print(s: String): Unit
-    }
-    /*
-    class String(private val bytes: scala.Array[Byte]) {
-      @native def print(): Unit
-    }
-    */
   }
   package io {
     trait Serializable
@@ -156,4 +148,15 @@ package java {
 
 package scala {
   trait Serializable
+  object Console {
+    @native def print(s: String): Unit
+    def println(s: String): Unit = {
+      print(s)
+      print("\n")
+    }
+    def println(d: Double): Unit = {
+      println("" + d)
+    }
+    def printf(fmt: String, args: Any*): Unit = { }
+  }
 }

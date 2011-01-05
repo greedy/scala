@@ -13,8 +13,8 @@ abstract class examplec {
 
   def cast(x: Magic) = x.xyzzy + x.shazam
 
-  def sayhello() = String.print("hello"+who)
-  def check(s: String) = String.print("is who "+s+" "+(who == s))
+  def sayhello() = Console.println("hello"+who)
+  def check(s: String) = Console.println("is who "+s+" "+(who == s))
 }
 
 class E extends java.lang.Exception

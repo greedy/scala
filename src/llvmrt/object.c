@@ -11,10 +11,12 @@ static void *vtable_java_lang_Object[] = {
 };
 
 struct klass class_java_Dlang_DObject = {
-  "java.lang.Object",
+  { sizeof("java.lang.Object")-1, "java.lang.Object" },
   sizeof(struct java_lang_Object),
   NULL,
   vtable_java_lang_Object,
+  NULL,
+  NULL,
   0,
 };
 
@@ -62,10 +64,12 @@ method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject(
 }
 
 struct klass class_scala_DScalaObject = {
-  "scala.ScalaObject",
+  { sizeof("scala.ScalaObject")-1, "scala.ScalaObject" },
   0,
   NULL,
   vtable_java_lang_Object,
+  NULL,
+  NULL,
   0,
 };
 
