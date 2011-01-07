@@ -17,5 +17,8 @@ extern bool rt_isinstance(struct java_lang_Object *object, struct klass *classor
 extern bool rt_isinstance_class(struct java_lang_Object *object, struct klass *klass);
 extern bool rt_isinstance_iface(struct java_lang_Object *object, struct klass *iface);
 extern void rt_init_loop();
+extern void rt_assertNotNull(struct java_lang_Object *object);
+
+extern void* createOurException(struct java_lang_Object *obj);
 
 #endif

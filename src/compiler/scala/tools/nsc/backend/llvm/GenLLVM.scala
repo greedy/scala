@@ -315,6 +315,14 @@ abstract class GenLLVM extends SubComponent {
         Externally_visible, Default, Ccc,
         Seq.empty, Seq.empty, None, None, None)
 
+      lazy val rtAssertNotNull = new LMFunction(
+        LMVoid, "rt_assertNotNull",
+        Seq(
+          ArgSpec(new LocalVariable("o", rtObject.pointer))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
       lazy val rtTypes = Seq(
         definitions.BoxedBooleanClass,
         definitions.BoxedByteClass,
@@ -375,7 +383,8 @@ abstract class GenLLVM extends SubComponent {
         rtGetExceptionObject.declare,
         unwindResume.declare,
         unwindRaiseException.declare,
-        createOurException.declare
+        createOurException.declare,
+        rtAssertNotNull.declare
       )
     }
 
@@ -793,8 +802,11 @@ abstract class GenLLVM extends SubComponent {
                 val index = stack.pop._1
                 val array = stack.pop._1
                 val asarray = nextvar(arraylmtype)
+                val asobj = nextvar(rtObject.pointer)
                 val itemptr = nextvar(typeKindType(kind).pointer)
                 val item = nextvar(typeKindType(kind))
+                insns.append(new bitcast(asobj, array))
+                insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
                 insns.append(new bitcast(asarray, array))
                 insns.append(new getelementptr(itemptr, asarray.asInstanceOf[LMValue[LMPointer]],
                   Seq(LMConstant.intconst(0), LMConstant.intconst(2), index.asInstanceOf[LMValue[LMInt]])))
@@ -817,6 +829,9 @@ abstract class GenLLVM extends SubComponent {
                     val fieldidx = fi.indexWhere(f => f.symbol == field)
                     val (ivar,isym) = stack.pop
                     val instance = cast(ivar,isym,toTypeKind(field.owner.tpe))
+                    val asobj = nextvar(rtObject.pointer)
+                    insns.append(new bitcast(asobj, instance))
+                    insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
                     insns.append(new getelementptr(fieldptr, instance.asInstanceOf[LMValue[LMPointer]], Seq(new CInt(LMInt.i8,0),new CInt(LMInt.i32,fieldidx+1))))
                     insns.append(new load(v, fieldptr))
                     stack.push((v,toTypeKind(field.tpe)))
@@ -838,6 +853,9 @@ abstract class GenLLVM extends SubComponent {
                 val asarray = nextvar(arraylmtype)
                 val itemptr = nextvar(typeKindType(kind).pointer)
                 insns.append(new bitcast(asarray, array))
+                val asobj = nextvar(rtObject.pointer)
+                insns.append(new bitcast(asobj, array))
+                insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
                 insns.append(new getelementptr(itemptr, asarray.asInstanceOf[LMValue[LMPointer]],
                   Seq(LMConstant.intconst(0), LMConstant.intconst(2), index.asInstanceOf[LMValue[LMInt]])))
                 insns.append(new store(item, itemptr))
@@ -854,6 +872,9 @@ abstract class GenLLVM extends SubComponent {
                     val fieldidx = fi.indexWhere(f => f.symbol == field)
                     val (value,valuesym) = stack.pop
                     val instance = stack.pop._1
+                    val asobj = nextvar(rtObject.pointer)
+                    insns.append(new bitcast(asobj, instance))
+                    insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
                     insns.append(new getelementptr(fieldptr, instance.asInstanceOf[LMValue[LMPointer]], Seq(new CInt(LMInt.i8,0),new CInt(LMInt.i32,fieldidx+1))))
                     insns.append(new store(cast(value, valuesym, toTypeKind(field.tpe)), fieldptr))
                   case None =>
@@ -1040,6 +1061,9 @@ abstract class GenLLVM extends SubComponent {
                     val asarray = nextvar(arraylmtype)
                     val lenptr = nextvar(LMInt.i32.pointer)
                     val len = nextvar(LMInt.i32)
+                    val asobj = nextvar(rtObject.pointer)
+                    insns.append(new bitcast(asobj, array))
+                    insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
                     insns.append(new bitcast(asarray, array))
                     insns.append(new getelementptr(lenptr, asarray.asInstanceOf[LMValue[LMPointer]],
                       Seq(LMConstant.intconst(0), LMConstant.intconst(1))))
@@ -1117,6 +1141,7 @@ abstract class GenLLVM extends SubComponent {
                 }
                 val argsyms = contextargs ++ method.tpe.paramTypes.map(toTypeKind)
                 val args = stack.take(funtype.argTypes.size).reverse.toBuffer
+                insns.append(new invoke_void(rtAssertNotNull, Seq(cast(args(0)._1, args(0)._2, REFERENCE(definitions.ObjectClass))), pass, blockExSelLabel(bb,-2)))
                 val fun = style match {
                   case Dynamic if method.isEffectivelyFinal => new CFunctionAddress(externFun(method))
                   case Dynamic => {

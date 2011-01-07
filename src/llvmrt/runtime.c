@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+extern int32_t _Unwind_RaiseException(void*);
 struct java_lang_Object *rt_new(struct klass *klass)
 {
   struct java_lang_Object* obj = (struct java_lang_Object*)calloc(1, klass->instsize);
@@ -76,4 +77,21 @@ void rt_init_loop()
 {
   fprintf(stderr, "PANIC: Initialization loop\n");
   abort();
+}
+
+extern struct klass class_java_Dlang_DNullPointerException;
+
+extern void
+method_java_Dlang_DNullPointerException_M_Linit_G_Rjava_Dlang_DNullPointerException(
+    struct java_lang_Object *);
+
+void rt_assertNotNull(struct java_lang_Object *object)
+{
+  if (object == NULL) {
+    struct java_lang_Object *exception = rt_new(&class_java_Dlang_DNullPointerException);
+    void *uwx;
+    method_java_Dlang_DNullPointerException_M_Linit_G_Rjava_Dlang_DNullPointerException(exception);
+    uwx = createOurException(exception);
+    _Unwind_RaiseException(uwx);
+  }
 }
