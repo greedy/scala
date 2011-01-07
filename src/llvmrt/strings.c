@@ -65,14 +65,22 @@ method__Oscala_DConsole_Mprint_Ajava_Dlang_DString_Rscala_DUnit(
 }
 
 struct java_lang_String*
+rt_stringcreate(UChar *buffer, int32_t len)
+{
+  struct java_lang_String *ret = (struct java_lang_String*)rt_new(&class_java_Dlang_DString);
+  method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(ret);
+  ret->len = len;
+  ret->s = buffer;
+  return ret;
+}
+
+struct java_lang_String*
 rt_makestring(struct utf8str *s)
 {
   enum UErrorCode uerr = U_ZERO_ERROR;
-  struct java_lang_String *ret = (struct java_lang_String*)rt_new(&class_java_Dlang_DString);
   UChar *buffer;
   int32_t bufsize = s->len;
   int32_t reqsize;
-  method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(ret);
   buffer = malloc(bufsize * sizeof(UChar));
   u_strFromUTF8(buffer, bufsize, &reqsize, s->bytes, s->len, &uerr);
   if (uerr == U_BUFFER_OVERFLOW_ERROR) {
@@ -84,9 +92,7 @@ rt_makestring(struct utf8str *s)
     u_strFromUTF8(buffer, bufsize, &reqsize, s->bytes, s->len, &uerr);
   }
   if (U_SUCCESS(uerr)) {
-    ret->len = reqsize;
-    ret->s = buffer;
-    return ret;
+    return rt_stringcreate(buffer, reqsize);
   } else {
     return NULL;
   }
@@ -125,33 +131,62 @@ UNumberFormat *ufmt() {
   return res;
 }
 
+UChar *ustring_for_int(int32_t v, int32_t initsize, int32_t *len)
+{
+  UErrorCode err = U_ZERO_ERROR;
+  int32_t bufsize = initsize;
+  int32_t reqsize;
+  UChar *buffer = malloc(bufsize * sizeof(UChar));
+  reqsize = unum_format(ufmt(), v, buffer, bufsize, NULL, &err);
+  if (err == U_BUFFER_OVERFLOW_ERROR) {
+    err = U_ZERO_ERROR;
+    free(buffer);
+    buffer = malloc(reqsize * sizeof(UChar));
+    bufsize = reqsize;
+    reqsize = unum_format(ufmt(), v, buffer, bufsize, NULL, &err);
+  }
+  if (U_SUCCESS(err)) {
+    *len = reqsize;
+    return buffer;
+  } else {
+    *len = 0;
+    return NULL;
+  }
+}
+
+struct java_Dlang_DInteger;
+
+extern int32_t
+method_java_Dlang_DInteger_MintValue_Rscala_DInt(
+    struct java_Dlang_DInteger *self);
+
+struct java_lang_String*
+method_java_Dlang_DInteger_MtoString_Rjava_Dlang_DString(
+    struct java_Dlang_DInteger *self)
+{
+  UChar *s;
+  int32_t len;
+  s = ustring_for_int(method_java_Dlang_DInteger_MintValue_Rscala_DInt(self), 8, &len);
+  return rt_stringcreate(s, len);
+}
+
 void rt_string_append_number(
     struct stringlist **s,
     int32_t v,
     int32_t initsize)
 {
   struct stringlist *n = malloc(sizeof(struct stringlist));
+  int32_t len;
+  UChar *buffer;
   n->prev = *s;
   *s = n;
-  {
-    UErrorCode err = U_ZERO_ERROR;
-    int32_t bufsize = initsize;
-    int32_t reqsize;
-    UChar *buffer = malloc(bufsize * sizeof(UChar));
-    reqsize = unum_format(ufmt(), v, buffer, bufsize, NULL, &err);
-    if (err == U_BUFFER_OVERFLOW_ERROR) {
-      err = U_ZERO_ERROR;
-      free(buffer);
-      buffer = malloc(reqsize * sizeof(UChar));
-      bufsize = reqsize;
-      reqsize = unum_format(ufmt(), v, buffer, bufsize, NULL, &err);
-    }
-    if (U_SUCCESS(err)) {
-      n->len = reqsize;
-      n->s = buffer;
-    } else {
-      *s = n->prev;
-    }
+  buffer = ustring_for_int(v, initsize, &len);
+  if (buffer) {
+    n->len = len;
+    n->s = buffer;
+  } else {
+    *s = n->prev;
+    free(n);
   }
 }
 
@@ -276,6 +311,18 @@ void rt_string_append_string(
 
   n->len = ss->len;
   n->s = ss->s;
+}
+
+void rt_string_append_ustring(
+    struct stringlist **s,
+    int32_t len,
+    UChar *buffer)
+{
+  struct stringlist *n = malloc(sizeof(struct stringlist));
+  n->prev = *s;
+  n->len = len;
+  n->s = buffer;
+  *s = n;
 }
 
 int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_String* self)

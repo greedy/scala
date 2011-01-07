@@ -42,6 +42,7 @@ package java {
       def longValue(): scala.Long = value.toLong
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
+      @native override def toString(): java.lang.String
     }
     object Short {
       val TYPE = null
@@ -55,6 +56,7 @@ package java {
       def longValue(): scala.Long = value.toLong
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
+      @native override def toString(): java.lang.String
     }
     object Integer {
       val TYPE = null
@@ -84,6 +86,7 @@ package java {
       def longValue(): scala.Long = value.toLong
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
+      @native override def toString(): java.lang.String
     }
     object Character {
       val TYPE = null
@@ -99,6 +102,7 @@ package java {
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
       def charValue(): scala.Char = value
+      @native override def toString(): java.lang.String
     }
     object Long {
       val TYPE = null
@@ -112,6 +116,7 @@ package java {
       def longValue(): scala.Long = value.toLong
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
+      @native override def toString(): java.lang.String
     }
     object Float {
       val TYPE = null
@@ -130,6 +135,7 @@ package java {
       def longValue(): scala.Long = value.toLong
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
+      @native override def toString(): java.lang.String
     }
     object Double {
       val TYPE = null
@@ -149,6 +155,7 @@ package java {
       def longValue(): scala.Long = value.toLong
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
+      @native override def toString(): java.lang.String
     }
   }
   package io {

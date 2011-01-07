@@ -1,4 +1,5 @@
 #include "object.h"
+#include "strings.h"
 
 struct java_lang_String;
 
@@ -42,11 +43,22 @@ method_java_Dlang_DObject_Mclone_Rjava_Dlang_DObject(
   return NULL;
 }
 
+U_STRING_DECL(s_at, "@", 1);
+static bool s_at_initted = false;
+
 struct java_lang_String*
 method_java_Dlang_DObject_MtoString_Rjava_Dlang_DString(
     struct java_lang_Object *this)
 {
-  return NULL;
+  struct stringlist *sl = NULL;
+  rt_string_append_string(&sl, (struct java_lang_Object*)rt_makestring(&this->klass->name));
+  if (!s_at_initted) {
+    U_STRING_INIT(s_at, "@", 1);
+    s_at_initted = true;
+  }
+  rt_string_append_ustring(&sl, 1, s_at);
+  rt_string_append_Long(&sl, (uint64_t)this);
+  return rt_stringconcat(&sl);
 }
 
 void
