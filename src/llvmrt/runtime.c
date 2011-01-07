@@ -44,15 +44,19 @@ struct ifaceref *rt_iface_cast(struct java_lang_Object *object, struct klass *if
 
 bool rt_isinstance(struct java_lang_Object *object, struct klass *classoriface)
 {
-  return rt_isinstance_class(object, classoriface) ||
-    rt_isinstance_iface(object, classoriface);
+  bool res;
+  if (classoriface->instsize == 0)
+    res = rt_isinstance_iface(object, classoriface);
+  else
+    res = rt_isinstance_class(object, classoriface);
+  return res;
 }
 
 bool rt_isinstance_class(struct java_lang_Object *object, struct klass *klass)
 {
-  struct klass *checkclass = klass;
+  struct klass *checkclass = object->klass;
   while (checkclass != NULL) {
-    if (object->klass == checkclass) {
+    if (klass == checkclass) {
       return true;
     } else {
       checkclass = checkclass->super;
