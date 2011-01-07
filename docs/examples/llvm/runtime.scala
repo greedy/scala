@@ -1,11 +1,21 @@
 package java {
   package lang {
-    class Throwable(message: String = null, cause: Throwable = null) {
+    class Throwable(message: String, cause: Throwable) {
+      def this() = this(null, null)
+      def this(message: String) = this(message, null)
+      def this(cause: Throwable) = this(null, cause)
       def getStackTrace(): scala.Array[StackTraceElement] = null
       def getMessage(): String = null
       def printStackTrace(): Unit = ()
     }
-    class Exception(message: String = null, cause: Throwable = null) extends Throwable(message, cause)
+    class Exception(message: String, cause: Throwable) extends Throwable(message, cause) {
+      def this() = this(null, null)
+      def this(message: String) = this(message, null)
+      def this(cause: Throwable) = this(null, cause)
+    }
+    class NullPointerException(message: String) extends Exception(message) {
+      def this() = this(null)
+    }
     object Boolean {
       val TYPE = null
       def valueOf(b: scala.Boolean) = {
