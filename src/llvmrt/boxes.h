@@ -2,6 +2,7 @@
 #define BOXES_H
 
 #include "object.h"
+#include "strings.h"
 
 #define DECLARE_BOX(p,c)                              \
   struct java_lang_ ## c;                             \
@@ -17,7 +18,7 @@ DECLARE_BOX(int32_t, Integer);
 DECLARE_BOX(int64_t, Long);
 DECLARE_BOX(float, Float);
 DECLARE_BOX(double, Double);
-DECLARE_BOX(uint16_t, Char);
+DECLARE_BOX(UChar32, Char);
 
 #undef DECLARE_BOX
 
