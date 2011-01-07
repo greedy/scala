@@ -1,4 +1,14 @@
 
+run-sample:
+	make -C ../../../src/llvmrt llvmrt.a runscala
+	make clean
+	make code.bc; make code.bc
+	../../../src/llvmrt/runscala code.bc example
+
+run-sample-jvm:
+	make classes
+	../../../build/quick/bin/scala -cp classes example
+
 code.bc: irfiles.stamp $(patsubst %.ll,%.bc,$(wildcard irfiles/*.ll))
 	llvm-ld -o $@ -r -disable-internalize irfiles/*.bc ../../../src/llvmrt/llvmrt.a
 

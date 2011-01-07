@@ -1,23 +1,9 @@
 Instructions
 ------------
 
-Build scala as normal. When running scalac use -target:llvm to generate LLVM
-IR. For each class/object you compile a .ll file will be generated with the
-code for that class/object. The -Xmainclass argument to scalac will generate an
-entrypoint to call the noargs, unit return method named main in the given
-object.
-
-You can then use llvmc to compile each produced .ll file along with runtime.ll
-from docs/examples/llvm.  Methods marked as @native will not have code
-generated but an external function reference will be made. You can provide the
-implementation of that method manually in another .ll file.
-
-There's an example in docs/examples/llvm/ that can be compiled and run as:
-
-../../../build/quick/bin/scalac -target:llvm -Xmainclass example example.scala
-llvmc runtime.ll example.ll example_native.ll
-./a.out
-
+There's an example in docs/examples/llvm/ that can be compiled and run by
+running 'make run-sample' in that directory. For comparison, you can run
+'make run-sample-jvm' to compile and run for the JVM.
 
 What's done
 -----------
@@ -41,14 +27,18 @@ What's not
 
  * Separate compilation
  * Garbage collection
- * Arrays
- * Strings
  * Structural types
+ * Safety
+   * Array bounds checking
+   * ... ?
 
 Points of Interest
 ------------------
 
 Model for generating LLVM assembly is in src/llvm
+
+The runtime library is partly written in scala
+(docs/examples/llvm/runtime.scala) and partly in C (src/llvmrt)
 
 Only new files in compiler are
 src/compiler/scala/tools/nsc/backend/{LLVMPlatform.scala,llvm/GenLLVM.scala}

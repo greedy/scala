@@ -192,14 +192,14 @@ int main(int argc, char *argv[], char * const *envp)
 
   Function *wrapper = createMainWrapperFunction(*Mod, EntryFn, ModuleInstance);
 
-  Mod->MaterializeAllPermanently();
+  //Mod->MaterializeAllPermanently();
 
   args.clear();
   EE->runFunction(wrapper, args);
 
   EE->runStaticConstructorsDestructors(true);
 
-  Mod->dump();
+  //Mod->dump();
 
   exit(0);
 }
