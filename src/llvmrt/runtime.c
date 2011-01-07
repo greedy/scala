@@ -99,3 +99,8 @@ void rt_assertNotNull(struct java_lang_Object *object)
     _Unwind_RaiseException(uwx);
   }
 }
+
+void rt_printexception(struct java_lang_Object *object)
+{
+  fprintf(stderr, "Uncaught exception: %*s\n", object->klass->name.len, object->klass->name.bytes);
+}

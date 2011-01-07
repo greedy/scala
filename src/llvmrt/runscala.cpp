@@ -17,10 +17,12 @@
 #include "llvm/Support/PluginLoader.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/IRBuilder.h"
 #include "llvm/System/Process.h"
 #include "llvm/System/Signals.h"
 #include "llvm/Target/TargetSelect.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/Intrinsics.h"
 #include <cerrno>
 
 extern "C" {
@@ -61,6 +63,54 @@ std::string encodeName(const std::string &s)
     }
   }
   return res;
+}
+
+static Function*
+createMainWrapperFunction(
+    Module &module,
+    Function *realMain,
+    GlobalVariable *moduleGlobal)
+{
+  LLVMContext &ctx = module.getContext();
+
+  IRBuilder<> builder(ctx);
+  FunctionType *funtype = FunctionType::get(Type::getVoidTy(ctx), false);
+  Function *ret = Function::Create(funtype, Function::InternalLinkage, "main_wrapper", &module);
+
+  BasicBlock *entryBlock = BasicBlock::Create(ctx, "entry", ret);
+  BasicBlock *normalBlock = BasicBlock::Create(ctx, "normal", ret);
+  BasicBlock *exceptionBlock = BasicBlock::Create(ctx, "exception", ret);
+
+  builder.SetInsertPoint(entryBlock);
+  builder.CreateInvoke(realMain, normalBlock, exceptionBlock, moduleGlobal);
+  builder.SetInsertPoint(normalBlock);
+  builder.CreateRetVoid();
+  builder.SetInsertPoint(exceptionBlock);
+  Value *uwx = builder.CreateCall(Intrinsic::getDeclaration(&module, Intrinsic::eh_exception));
+  Value *personality = builder.CreateBitCast(
+      module.getFunction("scalaPersonality"), builder.getInt8Ty()->getPointerTo());
+  Value *throwableClass = builder.CreateBitCast(
+      module.getNamedGlobal("class_java_Dlang_DThrowable"), builder.getInt8Ty()->getPointerTo());
+
+  std::vector<Value*> args;
+  args.push_back(uwx);
+  args.push_back(personality);
+  args.push_back(throwableClass);
+  args.push_back(ConstantInt::get(builder.getInt32Ty(), 1));
+  args.push_back(ConstantInt::get(builder.getInt32Ty(), 0));
+
+  builder.CreateCall(
+      Intrinsic::getDeclaration(&module, Intrinsic::eh_selector), 
+      args.begin(), args.end());
+
+  builder.CreateCall(
+      module.getFunction("rt_printexception"),
+      builder.CreateCall(
+        module.getFunction("getExceptionObject"),
+        uwx));
+  builder.CreateRetVoid();
+
+  return ret;
 }
 
 int main(int argc, char *argv[], char * const *envp)
@@ -140,18 +190,16 @@ int main(int argc, char *argv[], char * const *envp)
 
   EE->runFunction(InitFn, args);
 
+  Function *wrapper = createMainWrapperFunction(*Mod, EntryFn, ModuleInstance);
+
+  Mod->MaterializeAllPermanently();
+
   args.clear();
-  args.push_back(PTOGV(EE->getPointerToGlobal(ModuleInstance)));
-  EE->runFunction(EntryFn, args);
+  EE->runFunction(wrapper, args);
 
   EE->runStaticConstructorsDestructors(true);
 
-  exit(0);
-}
+  Mod->dump();
 
-extern "C" {
-  void printi32(int32_t n) {
-    fprintf(stderr,"%d\n", n);
-    fflush(stderr);
-  }
+  exit(0);
 }
