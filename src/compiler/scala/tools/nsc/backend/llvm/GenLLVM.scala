@@ -1002,9 +1002,9 @@ abstract class GenLLVM extends SubComponent {
                     stack.push((result, ressym))
                   }
                   case Shift(op, _) => {
+                    val shiftamt = stack.pop._1.asInstanceOf[LMValue[LMInt]]
                     val (argt,ressym) = stack.pop
                     val arg = argt.asInstanceOf[LMValue[LMInt]]
-                    val shiftamt = stack.pop._1.asInstanceOf[LMValue[LMInt]]
                     val temp = {
                       if (arg.tpe.bits > shiftamt.tpe.bits) {
                         val t = nextvar(arg.tpe)
