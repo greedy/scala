@@ -50,7 +50,10 @@ trait Constants {
 
     def isByteRange: Boolean  = isIntRange && Byte.MinValue <= intValue && intValue <= Byte.MaxValue
     def isShortRange: Boolean = isIntRange && Short.MinValue <= intValue && intValue <= Short.MaxValue
-    def isCharRange: Boolean  = isIntRange && Char.MinValue <= intValue && intValue <= Char.MaxValue
+    def isCharRange: Boolean  = CharBits match {
+      case 16 => isIntRange && Char.MinValue <= intValue && intValue <= Char.MaxValue
+      case 32 => isLongRange && 0 <= longValue && longValue <= 0xffffffffL
+    }
     def isIntRange: Boolean   = ByteTag <= tag && tag <= IntTag
     def isLongRange: Boolean  = ByteTag <= tag && tag <= LongTag
     def isFloatRange: Boolean = ByteTag <= tag && tag <= FloatTag

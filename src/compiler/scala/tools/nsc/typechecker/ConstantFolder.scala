@@ -158,7 +158,9 @@ abstract class ConstantFolder {
 
     try optag match {
       case BooleanTag                               => foldBooleanOp(op, x, y)
-      case ByteTag | ShortTag | CharTag | IntTag    => foldSubrangeOp(op, x, y)
+      case ByteTag | ShortTag | IntTag              => foldSubrangeOp(op, x, y)
+      case CharTag if CharBits == 16                => foldSubrangeOp(op, x, y)
+      case CharTag if CharBits == 32                => foldLongOp(op, x, y)
       case LongTag                                  => foldLongOp(op, x, y)
       case FloatTag                                 => foldFloatOp(op, x, y)
       case DoubleTag                                => foldDoubleOp(op, x, y)

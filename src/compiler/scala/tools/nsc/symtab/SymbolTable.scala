@@ -41,6 +41,11 @@ abstract class SymbolTable extends reflect.generic.Universe
   /** Are we compiling for .NET ? */
   def forMSIL: Boolean
 
+  /** Are we compilring for LLVM ? */
+  def forLLVM: Boolean
+
+  def CharBits: Byte = if (forLLVM) 32 else 16
+
   /** A period is an ordinal number for a phase in a run.
    *  Phases in later runs have higher periods than phases in earlier runs.
    *  Later phases have higher periods than earlier phases in the same run.
