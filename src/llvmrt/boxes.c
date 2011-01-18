@@ -9,7 +9,7 @@
   method__Ojava_Dlang_D ## c ## _MvalueOf_Ascala_D ## k ## _Rjava_Dlang_D ## c    \
     (struct object_java_lang_ ## c *, p);                                         \
   extern p                                                                        \
-  method__Ojava_Dlang_D ## c ## _M ## g ## _Rscala_D ## k (                       \
+  method_java_Dlang_D ## c ## _M ## g ## _Rscala_D ## k (                       \
       struct java_lang_ ## c *);                                                  \
   struct java_lang_ ## c *rt_box_ ## c (p v)                                      \
   {                                                                               \
@@ -21,7 +21,7 @@
   p rt_unbox_ ## c(struct java_lang_ ## c *v)                                     \
   {                                                                               \
     return                                                                        \
-    method__Ojava_Dlang_D ## c ## _M ## g ## _Rscala_D ## k (v);                  \
+    method_java_Dlang_D ## c ## _M ## g ## _Rscala_D ## k (v);                  \
   }
 
 #define DEFINE_BOX(p,c,g) DEFINE_BOX2(p,c,c,g)
