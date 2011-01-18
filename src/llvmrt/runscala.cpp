@@ -74,15 +74,31 @@ createMainWrapperFunction(
   LLVMContext &ctx = module.getContext();
 
   IRBuilder<> builder(ctx);
-  FunctionType *funtype = FunctionType::get(Type::getVoidTy(ctx), false);
+  std::vector<const Type*> argtypes;
+  argtypes.push_back(Type::getInt32Ty(ctx));
+  argtypes.push_back(Type::getInt8PtrTy(ctx)->getPointerTo());
+  FunctionType *funtype = FunctionType::get(Type::getVoidTy(ctx), argtypes, false);
   Function *ret = Function::Create(funtype, Function::InternalLinkage, "main_wrapper", &module);
+
+  Function::arg_iterator funargs = ret->arg_begin();
+  Value* argc = funargs++;
+  Value* argv = funargs++;
 
   BasicBlock *entryBlock = BasicBlock::Create(ctx, "entry", ret);
   BasicBlock *normalBlock = BasicBlock::Create(ctx, "normal", ret);
   BasicBlock *exceptionBlock = BasicBlock::Create(ctx, "exception", ret);
 
+  std::vector<Value*> args;
+
   builder.SetInsertPoint(entryBlock);
-  builder.CreateInvoke(realMain, normalBlock, exceptionBlock, moduleGlobal);
+
+  args.push_back(builder.CreateBitCast(moduleGlobal, realMain->getFunctionType()->getParamType(0)));
+  args.push_back(builder.CreateBitCast(builder.CreateCall2(module.getFunction("rt_argvtoarray"), argc, argv), realMain->getFunctionType()->getParamType(1)));
+
+  builder.CreateInvoke(realMain, normalBlock, exceptionBlock, args.begin(), args.end());
+
+  args.clear();
+
   builder.SetInsertPoint(normalBlock);
   builder.CreateRetVoid();
   builder.SetInsertPoint(exceptionBlock);
@@ -92,7 +108,6 @@ createMainWrapperFunction(
   Value *throwableClass = builder.CreateBitCast(
       module.getNamedGlobal("class_java_Dlang_DThrowable"), builder.getInt8Ty()->getPointerTo());
 
-  std::vector<Value*> args;
   args.push_back(uwx);
   args.push_back(personality);
   args.push_back(throwableClass);
@@ -102,6 +117,8 @@ createMainWrapperFunction(
   builder.CreateCall(
       Intrinsic::getDeclaration(&module, Intrinsic::eh_selector), 
       args.begin(), args.end());
+
+  args.clear();
 
   builder.CreateCall(
       module.getFunction("rt_printexception"),
@@ -161,7 +178,7 @@ int main(int argc, char *argv[], char * const *envp)
   std::string mainfnname;
   mainfnname += "method__O";
   mainfnname += encodeName(modid);
-  mainfnname += "_Mmain_Rscala_DUnit";
+  mainfnname += "_Mmain_A_Njava_Dlang_DString_Rscala_DUnit";
 
   Function *EntryFn = Mod->getFunction(mainfnname);
   if (!EntryFn) {
@@ -195,7 +212,12 @@ int main(int argc, char *argv[], char * const *envp)
   //Mod->MaterializeAllPermanently();
 
   args.clear();
-  EE->runFunction(wrapper, args);
+
+  std::vector<std::string> jitargv;
+  for (int i = 3; i < argc; i++) {
+    jitargv.push_back(std::string(argv[i]));
+  }
+  EE->runFunctionAsMain(wrapper, jitargv, envp);
 
   EE->runStaticConstructorsDestructors(true);
 

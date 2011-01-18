@@ -1,10 +1,19 @@
 #include "klass.h"
 #include "object.h"
 #include "runtime.h"
+#include "arrays.h"
+#include "strings.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 extern int32_t _Unwind_RaiseException(void*);
+
+static void printclassname(FILE* f, struct klass *klass)
+{
+  fprintf(f, "%*s", klass->name.len, klass->name.bytes);
+}
+
 struct java_lang_Object *rt_new(struct klass *klass)
 {
   struct java_lang_Object* obj = (struct java_lang_Object*)calloc(1, klass->instsize);
@@ -103,4 +112,17 @@ void rt_assertNotNull(struct java_lang_Object *object)
 void rt_printexception(struct java_lang_Object *object)
 {
   fprintf(stderr, "Uncaught exception: %*s\n", object->klass->name.len, object->klass->name.bytes);
+}
+
+void *rt_argvtoarray(int argc, char **argv)
+{
+  struct array *ret = new_array(OBJECT, &class_Ojava_Dlang_DString, 1, argc);
+  struct java_lang_String** elements = (struct java_lang_String**)(&(ret->data[0]));
+  struct utf8str temp;
+  for (int i = 0; i < argc; i++) {
+    temp.len = strlen(argv[i]);
+    temp.bytes = argv[i];
+    elements[i] = rt_makestring(&temp);
+  }
+  return (void*)ret;
 }
