@@ -3,7 +3,7 @@ package ch.epfl.lamp.llvm
 import scala.text.Document
 
 trait ConcreteType extends LMType {
-  def pointer = new LMPointer(this)
+  lazy val pointer = new LMPointer(this)
 }
 abstract class LMType {
   def rep: String
