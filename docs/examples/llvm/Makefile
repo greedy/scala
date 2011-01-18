@@ -1,3 +1,4 @@
+SOURCES=@lib.sources
 
 run-sample:
 	make -C ../../../src/llvmrt llvmrt.a runscala
@@ -14,7 +15,7 @@ code.bc: irfiles.stamp $(patsubst %.ll,%.bc,$(wildcard irfiles/*.ll))
 
 irfiles.stamp irfiles/*.ll: example.scala runtime.scala
 	mkdir -p irfiles
-	JAVA_OPTS=-Xmx1500M ../../../build/quick/bin/scalac -d irfiles -deprecation -target:llvm example.scala runtime.scala # @lib.sources
+	JAVA_OPTS=-Xmx2500M ../../../build/quick/bin/scalac -d irfiles -target:llvm example.scala runtime.scala # $(SOURCES)
 	touch irfiles.stamp
 
 classes: example.scala

@@ -13,6 +13,8 @@ abstract class examplec {
 
   def cast(x: Magic) = x.xyzzy + x.shazam
 
+  def nullchk(x: Object) = Predef.assert(x != null)
+
   def sayhello() = Console.println("hello"+who)
   def check(s: String) = Console.println("is who "+s+" "+(who == s))
 }
