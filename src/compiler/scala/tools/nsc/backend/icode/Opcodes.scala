@@ -117,7 +117,7 @@ trait Opcodes { self: ICodes =>
       override def consumed = 0
       override def produced = 1
 
-      override def producedTypes = List(REFERENCE(clasz))
+      override def producedTypes = if (clasz == global.definitions.ArrayClass) List(ARRAY(NothingReference)) else List(REFERENCE(clasz))
     }
 
     /** Loads a constant on the stack.
@@ -349,6 +349,7 @@ trait Opcodes { self: ICodes =>
       override def consumed = 1
       override def consumedTypes = boxType :: Nil
       override def produced = 1
+      override def producedTypes = ObjectReference :: Nil
     }
 
     case class UNBOX(boxType: TypeKind) extends Instruction {
@@ -356,6 +357,7 @@ trait Opcodes { self: ICodes =>
       override def consumed = 1
       override def consumedTypes = ObjectReference :: Nil
       override def produced = 1
+      override def producedTypes = boxType :: Nil
     }
 
     /** Create a new instance of a class through the specified constructor
@@ -368,6 +370,7 @@ trait Opcodes { self: ICodes =>
 
       override def consumed = 0;
       override def produced = 1;
+      override def producedTypes = kind :: Nil
 
       /** The corresponding constructor call. */
       var init: CALL_METHOD = _
@@ -385,6 +388,7 @@ trait Opcodes { self: ICodes =>
       override def consumed = dims;
       override def consumedTypes = List.fill(dims)(INT)
       override def produced = 1;
+      override def producedTypes = ARRAY(elem) :: Nil
     }
 
     /** This class represents a IS_INSTANCE instruction
@@ -398,6 +402,7 @@ trait Opcodes { self: ICodes =>
       override def consumed = 1
       override def consumedTypes = ObjectReference :: Nil
       override def produced = 1
+      override def producedTypes = BOOL :: Nil
     }
 
     /** This class represents a CHECK_CAST instruction
@@ -427,6 +432,7 @@ trait Opcodes { self: ICodes =>
       override def toString(): String ="SWITCH ..."
 
       override def consumed = 1
+      override def consumedTypes = INT :: Nil
       override def produced = 0
     }
 
@@ -460,6 +466,7 @@ trait Opcodes { self: ICodes =>
       );
 
       override def consumed = 2
+      override def consumedTypes = kind :: kind :: Nil
       override def produced = 0
     }
 
@@ -479,6 +486,7 @@ trait Opcodes { self: ICodes =>
       );
 
       override def consumed = 1
+      override def consumedTypes = kind :: Nil
       override def produced = 0
     }
 
@@ -489,6 +497,7 @@ trait Opcodes { self: ICodes =>
      */
     case class RETURN(kind: TypeKind) extends Instruction {
       override def consumed = if (kind == UNIT) 0 else 1
+      override def consumedTypes = if (consumed == 0) Nil else kind :: Nil
       override def produced = 0
     }
 
@@ -504,6 +513,7 @@ trait Opcodes { self: ICodes =>
       override def toString = "THROW(" + clasz.name + ")"
 
       override def consumed = 1
+      override def consumedTypes = REFERENCE(clasz) :: Nil
       override def produced = 0
     }
 
@@ -516,6 +526,7 @@ trait Opcodes { self: ICodes =>
       override def toString(): String ="DROP "+typ
 
       override def consumed = 1
+      override def consumedTypes = typ :: Nil
       override def produced = 0
     }
 
@@ -525,7 +536,9 @@ trait Opcodes { self: ICodes =>
      */
     case class DUP (typ: TypeKind) extends Instruction {
       override def consumed = 1
+      override def consumedTypes = typ :: Nil
       override def produced = 2
+      override def producedTypes = typ :: typ :: Nil
     }
 
     /** This class represents a MONITOR_ENTER instruction
@@ -537,6 +550,7 @@ trait Opcodes { self: ICodes =>
       override def toString(): String ="MONITOR_ENTER"
 
       override def consumed = 1
+      override def consumedTypes = ObjectReference :: Nil
       override def produced = 0
     }
 
@@ -549,6 +563,7 @@ trait Opcodes { self: ICodes =>
       override def toString(): String ="MONITOR_EXIT";
 
       override def consumed = 1;
+      override def consumedTypes = ObjectReference :: Nil
       override def produced = 0;
     }
 
