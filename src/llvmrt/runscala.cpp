@@ -165,6 +165,7 @@ int main(int argc, char *argv[], char * const *envp)
     exit(1);
   }
 
+  EE->DisableLazyCompilation(false);
   std::string modid(argv[2]);
 
   std::string modulename;
