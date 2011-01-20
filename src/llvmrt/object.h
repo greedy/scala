@@ -12,6 +12,13 @@ struct java_lang_Object {
   struct klass *klass;
 };
 
+struct java_lang_Class;
+
+extern struct klass class_java_Dlang_DClass;
+
+extern struct java_lang_Class *
+rt_classobject(struct klass*);
+
 extern int32_t
 method_java_Dlang_DObject_MhashCode_Rscala_DInt(
     struct java_lang_Object *self);
