@@ -308,9 +308,17 @@ package java {
       /* Tests */
       def isNaN: scala.Boolean = Double.isNaN(value)
     }
+    object StandardError extends io.OutputStream {
+      @native def write(b: Int): Unit
+      @native override def flush(): Unit
+    }
+    object StandardOut extends io.OutputStream {
+      @native def write(b: Int): Unit
+      @native override def flush(): Unit
+    }
     object System {
-      var err: java.io.PrintStream = null
-      var out: java.io.PrintStream = null
+      var err: java.io.PrintStream = new io.PrintStream(StandardError, true)
+      var out: java.io.PrintStream = new io.PrintStream(StandardOut, true)
       var in: java.io.InputStream = null
       def getProperty(key: String): String = system.error("unimplemented")
       def getProperty(key: String, default: String): String = system.error("unimplemented")
@@ -353,7 +361,6 @@ package java {
     trait Flushable {
       def flush(): Unit
     }
-    /*
     abstract class OutputStream extends Object with Closeable with Flushable {
       def close() {}
       def flush() {}
@@ -369,11 +376,58 @@ package java {
       }
       def write(b: Int): Unit
     }
-    */
-    class Reader
-    class BufferedReader(r: Reader)
-    class InputStreamReader(is: InputStream)
-    class InputStream
+    class FilterOutputStream(out: OutputStream) extends OutputStream {
+      override def close() = out.close()
+      override def flush() = out.flush()
+      override def write(b: Int) = out.write(b)
+    }
+    trait Appendable {
+      def append(c: Char): Appendable
+      def append(csq: CharSequence): Appendable
+      def append(csq: CharSequence, start: Int, end: Int): Appendable
+    }
+    class PrintStream(_out: OutputStream, autoFlush: Boolean, ecoding: String) extends FilterOutputStream(_out) with Appendable {
+      //System.debugString("In PrintStream init _out is")
+      //System.debugPointer(_out)
+      import java.util.Locale
+      def this(out: OutputStream) = this(out, false, "")
+      def this(out: OutputStream, autoFlush: Boolean) = this(out, autoFlush, "")
+      override def write(b: Int) = {
+        //System.debugString("In PrintStream.write, _out is")
+        //System.debugPointer(_out)
+        _out.write(b)
+        if (autoFlush && b == 10) flush()
+      }
+      def append(c: Char) = this
+      def append(csq: CharSequence) = this
+      def append(csq: CharSequence, start: Int, end: Int) = this
+      var hasError = false
+      def checkError() = hasError
+      def setError() { hasError = true }
+      def clearError() { hasError = false }
+      def print(b: Boolean): Unit = print(b.toString)
+      def print(c: Char): Unit = print(c.toString)
+      def print(i: Int): Unit = print(i.toString)
+      def print(l: Long): Unit = print(l.toString)
+      def print(f: Float): Unit = print(f.toString)
+      def print(d: Double): Unit = print(d.toString)
+      def print(s: Array[Char]): Unit = print("character array")
+      def print(s: String): Unit = if (s eq null) print("null") else { write(115);write(116);write(114);write(105);write(110);write(103) }
+      def print(o: Object): Unit = if (o eq null) print("null") else print(o.toString)
+      def println(): Unit = write(10)
+      def println(x: Boolean): Unit = { print(x); println() }
+      def println(x: Char): Unit = { print(x); println() }
+      def println(x: Int): Unit = { print(x); println() }
+      def println(x: Long): Unit = { print(x); println() }
+      def println(x: Float): Unit = { print(x); println() }
+      def println(x: Double): Unit = { print(x); println() }
+      def println(x: String): Unit = { print(x); println() }
+      def println(x: Object): Unit = { print(x); println() }
+      def printf(format: String, args: Array[Object]): Unit = print("printf")
+      def printf(l: Locale, format: String, args: Array[Object]): Unit = print("printf")
+      def format(format: String, args: Array[Object]): Unit = print("printf")
+      def format(l: Locale, format: String, args: Array[Object]): Unit = print("printf")
+    }
   }
 }
 

@@ -41,27 +41,11 @@ struct klass class_java_Dlang_DString = {
   0,
 };
 
-UFILE* ustdout() {
-  static UFILE *uout = NULL;
-  if (uout == NULL) {
-    uout = u_finit(stdout, NULL, NULL);
-  }
-  return uout;
-}
-
 void
 method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(
     struct java_lang_String* s)
 {
   method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject((struct java_lang_Object*)s);
-}
-
-void
-method__Oscala_DConsole_Mprint_Ajava_Dlang_DString_Rscala_DUnit(
-    struct java_lang_Object *module,
-    struct java_lang_String *s)
-{
-  u_file_write(s->s, s->len, ustdout());
 }
 
 struct java_lang_String*
