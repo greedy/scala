@@ -6,7 +6,7 @@
 #include "unicode/ustring.h"
 
 extern struct klass class_java_Dlang_DString;
-extern struct klass class_Ojava_Dlang_DString;
+extern struct klass class__Ojava_Dlang_DString;
 
 struct stringlist;
 
