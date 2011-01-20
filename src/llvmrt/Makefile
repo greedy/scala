@@ -5,7 +5,7 @@ CFLAGS = -g $(WARNINGS) -std=c99 `llvm-config --cflags $(COMPONENTS)`
 CXXFLAGS = -g $(WARNINGS) `llvm-config --cxxflags $(COMPONENTS)`
 LDFLAGS = `icu-config --ldflags --ldflags-icuio` `llvm-config --ldflags --libs $(COMPONENTS)` -all_load
 
-RTOBJECTS = runtime.bc object.bc boxes.bc arrays.bc strings.bc fp.bc
+RTOBJECTS = runtime.bc object.bc boxes.bc arrays.bc strings.bc fp.bc io.bc
 
 %.bc: %.c
 	clang -std=c99 `icu-config --cppflags` -O4 -emit-llvm -c -o $@ $^
