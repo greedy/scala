@@ -33,4 +33,4 @@ DEFINE_BOX2(int32_t, Int, Integer, intValue);
 DEFINE_BOX(int64_t, Long, longValue);
 DEFINE_BOX(float, Float, floatValue);
 DEFINE_BOX(double, Double, doubleValue);
-DEFINE_BOX(UChar32, Char, charValue);
+DEFINE_BOX2(UChar32, Char, Character, charValue);
