@@ -1275,7 +1275,8 @@ abstract class GenLLVM extends SubComponent {
                     if (method.owner.isTrait) {
                       args(0) = (cast(args(0)._1, args(0)._2, toTypeKind(method.owner.tpe)), toTypeKind(method.owner.tpe))
                     }
-                    val mnum = virtualMethods(method.owner).indexOf(method)
+                    val mnum = virtualMethods(method.owner).indexWhere(vm => vm.name == method.name && vm.info <:< method.info)
+                    assert(mnum >= 0)
                     if (args.head._2.toType.typeSymbol.isTrait) {
                       val ifaceinfo = args.head._1.asInstanceOf[LMValue[rtIfaceRef.type]]
                       val receiverobj = nextvar(rtObject.pointer)
