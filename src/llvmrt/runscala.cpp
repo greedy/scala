@@ -24,6 +24,8 @@
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Intrinsics.h"
 #include <cerrno>
+#include <cstdlib>
+#include <iostream>
 
 extern "C" {
 #include "object.h"
@@ -130,10 +132,29 @@ createMainWrapperFunction(
   return ret;
 }
 
+static void *makeFuns(const std::string &name)
+{
+  errs() << "Missing function " << name << "\n";
+  return (void*)abort;
+}
+
+class LogFuns : public JITEventListener {
+  public:
+  void NotifyFunctionEmitted(const Function &F, void *Code, size_t Size, const EmittedFunctionDetails &details)
+  {
+    std::cerr << "Emitted function " << F.getNameStr() << " to address range " << Code << " - " << (void*)(((char*)Code) + Size) << std::endl;
+  }
+  void NotifyFreeingMachineCode(void *OldPtr)
+  {
+  }
+};
+
 int main(int argc, char *argv[], char * const *envp)
 {
   sys::PrintStackTraceOnErrorSignal();
   llvm::JITExceptionHandling = true;
+  llvm::JITEmitDebugInfo = true;
+  llvm::JITEmitDebugInfoToDisk = true;
   InitializeNativeTarget();
   LLVMContext &Context = getGlobalContext();
   atexit(do_shutdown);
@@ -165,7 +186,10 @@ int main(int argc, char *argv[], char * const *envp)
     exit(1);
   }
 
+  //EE->InstallLazyFunctionCreator(makeFuns);
   EE->DisableLazyCompilation(false);
+  EE->RegisterJITEventListener(new LogFuns());
+
   std::string modid(argv[2]);
 
   std::string modulename;
