@@ -332,6 +332,8 @@ package java {
       def arraycopy(src: Object, srcPos: scala.Int, dest: Object, destPos: scala.Int, length: scala.Int): Unit = system.error("unimplemented")
       def identityHashCode(x: Object): scala.Int = system.error("unimplemented")
       def gc(): Unit = {}
+      @native def debugPointer(o: Object): Unit
+      @native def debugString(o: String): Unit
     }
     object ThreadLocal {
       class ThreadLocalMap
