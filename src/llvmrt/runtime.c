@@ -116,7 +116,7 @@ void rt_printexception(struct java_lang_Object *object)
 
 void *rt_argvtoarray(int argc, char **argv)
 {
-  struct array *ret = new_array(OBJECT, &class_Ojava_Dlang_DString, 1, argc);
+  struct array *ret = new_array(OBJECT, &class_java_Dlang_DString, 1, argc);
   struct java_lang_String** elements = (struct java_lang_String**)(&(ret->data[0]));
   struct utf8str temp;
   for (int i = 0; i < argc; i++) {
