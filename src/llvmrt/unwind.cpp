@@ -111,6 +111,9 @@ License End
 #include <vector>
 #include <stdexcept>
 #include <cassert>
+#include <stdint.h>
+#include <cstdlib>
+#include <cstring>
 
 
 #ifndef USE_GLOBAL_STR_CONSTS

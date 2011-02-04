@@ -3,7 +3,8 @@ WARNINGS = -Wall
 CPPFLAGS = `icu-config --cppflags`
 CFLAGS = -g $(WARNINGS) -std=c99 `llvm-config --cflags $(COMPONENTS)`
 CXXFLAGS = -g $(WARNINGS) `llvm-config --cxxflags $(COMPONENTS)`
-LDFLAGS = `icu-config --ldflags --ldflags-icuio` `llvm-config --ldflags --libs $(COMPONENTS)` -all_load
+LDFLAGS = `icu-config --ldflags-searchpath --ldflags-icuio` `llvm-config --ldflags $(COMPONENTS)` -all_load
+LDLIBS = `icu-config --ldflags-libsonly --ldflags-icuio` `llvm-config --libs $(COMPONENTS)`
 
 RTOBJECTS = runtime.bc object.bc boxes.bc arrays.bc strings.bc fp.bc io.bc
 
@@ -17,7 +18,7 @@ llvmrt_native.a: $(patsubst %.bc,%.o,$(RTOBJECTS))
 	ar cr $@ $^
 
 runscala: runscala.o unwind.o
-	$(CXX) $(LDFLAGS) -o $@ $^
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 clean:
 	rm -f *.o *.bc llvmrt.a runscala

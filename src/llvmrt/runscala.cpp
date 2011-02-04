@@ -132,17 +132,29 @@ createMainWrapperFunction(
   return ret;
 }
 
+extern void* createOurException;
+extern void* getExceptionObject;
+extern void* scalaPersonality;
+
 static void *makeFuns(const std::string &name)
 {
-  errs() << "Missing function " << name << "\n";
-  return (void*)abort;
+  if (name == "createOurException") {
+    return createOurException;
+  } else if (name == "getExceptionObject") {
+    return getExceptionObject;
+  } else if (name == "scalaPersonality") {
+    return scalaPersonality;
+  } else {
+    errs() << "Missing function " << name << "\n";
+    return (void*)abort;
+  }
 }
 
 class LogFuns : public JITEventListener {
   public:
   void NotifyFunctionEmitted(const Function &F, void *Code, size_t Size, const EmittedFunctionDetails &details)
   {
-    std::cerr << "Emitted function " << F.getNameStr() << " to address range " << Code << " - " << (void*)(((char*)Code) + Size) << std::endl;
+    //std::cerr << "Emitted function " << F.getNameStr() << " to address range " << Code << " - " << (void*)(((char*)Code) + Size) << std::endl;
   }
   void NotifyFreeingMachineCode(void *OldPtr)
   {
@@ -186,7 +198,7 @@ int main(int argc, char *argv[], char * const *envp)
     exit(1);
   }
 
-  //EE->InstallLazyFunctionCreator(makeFuns);
+  EE->InstallLazyFunctionCreator(makeFuns);
   EE->DisableLazyCompilation(false);
   EE->RegisterJITEventListener(new LogFuns());
 
