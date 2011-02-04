@@ -2,13 +2,13 @@
 #include "object.h"
 #include "runtime.h"
 #include "arrays.h"
-#include "modules.h"
 
 #include "unicode/ustdio.h"
 #include "unicode/unum.h"
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* String Constants */
 
@@ -115,6 +115,29 @@ UNumberFormat *ufmt() {
   return res;
 }
 
+UChar *ustring_for_double(double v, int32_t initsize, int32_t *len)
+{
+  UErrorCode err = U_ZERO_ERROR;
+  int32_t bufsize = initsize;
+  int32_t reqsize;
+  UChar *buffer = malloc(bufsize * sizeof(UChar));
+  reqsize = unum_formatDouble(ufmt(), v, buffer, bufsize, NULL, &err);
+  if (err == U_BUFFER_OVERFLOW_ERROR) {
+    err = U_ZERO_ERROR;
+    free(buffer);
+    buffer = malloc(reqsize * sizeof(UChar));
+    bufsize = reqsize;
+    reqsize = unum_format(ufmt(), v, buffer, bufsize, NULL, &err);
+  }
+  if (U_SUCCESS(err)) {
+    *len = reqsize;
+    return buffer;
+  } else {
+    *len = 0;
+    return NULL;
+  }
+}
+
 UChar *ustring_for_int(int32_t v, int32_t initsize, int32_t *len)
 {
   UErrorCode err = U_ZERO_ERROR;
@@ -139,6 +162,11 @@ UChar *ustring_for_int(int32_t v, int32_t initsize, int32_t *len)
 }
 
 struct java_Dlang_DInteger;
+struct java_Dlang_DShort;
+struct java_Dlang_DByte;
+struct java_Dlang_DLong;
+struct java_Dlang_DFloat;
+struct java_Dlang_DDouble;
 
 extern int32_t
 method_java_Dlang_DInteger_MintValue_Rscala_DInt(
@@ -151,6 +179,62 @@ method_java_Dlang_DInteger_MtoString_Rjava_Dlang_DString(
   UChar *s;
   int32_t len;
   s = ustring_for_int(method_java_Dlang_DInteger_MintValue_Rscala_DInt(self), 8, &len);
+  return rt_stringcreate(s, len);
+}
+
+extern int32_t
+method_java_Dlang_DByte_MintValue_Rscala_DInt(
+    struct java_Dlang_DByte *self);
+
+struct java_lang_String*
+method_java_Dlang_DByte_MtoString_Rjava_Dlang_DString(
+    struct java_Dlang_DByte *self)
+{
+  UChar *s;
+  int32_t len;
+  s = ustring_for_int(method_java_Dlang_DByte_MintValue_Rscala_DInt(self), 3, &len);
+  return rt_stringcreate(s, len);
+}
+
+extern int32_t
+method_java_Dlang_DShort_MintValue_Rscala_DInt(
+    struct java_Dlang_DShort *self);
+
+struct java_lang_String*
+method_java_Dlang_DShort_MtoString_Rjava_Dlang_DString(
+    struct java_Dlang_DShort *self)
+{
+  UChar *s;
+  int32_t len;
+  s = ustring_for_int(method_java_Dlang_DShort_MintValue_Rscala_DInt(self), 6, &len);
+  return rt_stringcreate(s, len);
+}
+
+extern double
+method_java_Dlang_DFloat_MdoubleValue_Rscala_DDouble(
+    struct java_Dlang_DFloat *self);
+
+struct java_lang_String*
+method_java_Dlang_DFloat_MtoString_Rjava_Dlang_DString(
+    struct java_Dlang_DFloat *self)
+{
+  UChar *s;
+  int32_t len;
+  s = ustring_for_double(method_java_Dlang_DFloat_MdoubleValue_Rscala_DDouble(self), 3, &len);
+  return rt_stringcreate(s, len);
+}
+
+extern double
+method_java_Dlang_DDouble_MdoubleValue_Rscala_DDouble(
+    struct java_Dlang_DDouble *self);
+
+struct java_lang_String*
+method_java_Dlang_DDouble_MtoString_Rjava_Dlang_DString(
+    struct java_Dlang_DDouble *self)
+{
+  UChar *s;
+  int32_t len;
+  s = ustring_for_double(method_java_Dlang_DDouble_MdoubleValue_Rscala_DDouble(self), 3, &len);
   return rt_stringcreate(s, len);
 }
 
@@ -363,4 +447,33 @@ rt_stringconcat(struct stringlist **s)
   ret->len = totlen;
   ret->s = buffer;
   return ret;
+}
+
+struct array *
+method__Ojava_Dlang_DString_Mutf8bytes_Ajava_Dlang_DString_R_Nscala_DByte(
+    void *self,
+    const struct java_lang_String *s)
+{
+  enum UErrorCode uerr = U_ZERO_ERROR;
+  char *buffer;
+  int32_t bufsize = s->len;
+  int32_t reqsize;
+  buffer = malloc(bufsize * sizeof(char));
+  u_strToUTF8(buffer, bufsize, &reqsize, s->s, s->len, &uerr);
+  if (uerr == U_BUFFER_OVERFLOW_ERROR) {
+    /* reallocate buffer and retry */
+    free(buffer);
+    buffer = malloc(reqsize * sizeof(UChar));
+    bufsize = reqsize;
+    uerr = U_ZERO_ERROR;
+    u_strToUTF8(buffer, bufsize, &reqsize, s->s, s->len, &uerr);
+  }
+  if (U_SUCCESS(uerr)) {
+    struct array *ret = new_array(BYTE, NULL, 1, reqsize);
+    memcpy(ret->data, buffer, reqsize);
+    free(buffer);
+    return ret;
+  } else {
+    return NULL;
+  }
 }

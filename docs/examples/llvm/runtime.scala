@@ -92,7 +92,7 @@ package java {
       def longValue(): scala.Long = value.toLong
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
-      override def toString(): java.lang.String = "byte"
+      @native override def toString(): java.lang.String = "byte"
     }
     object Short {
       val TYPE = null
@@ -109,7 +109,7 @@ package java {
       def longValue(): scala.Long = value.toLong
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
-      override def toString(): java.lang.String = "short"
+      @native override def toString(): java.lang.String = "short"
     }
     object Integer {
       val TYPE = null
@@ -229,7 +229,7 @@ package java {
       def longValue(): scala.Long = value.toLong
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
-      override def toString(): java.lang.String = "long"
+      @native override def toString(): java.lang.String = "long"
     }
     object Float {
       val TYPE = null
@@ -265,7 +265,7 @@ package java {
       def longValue(): scala.Long = value.toLong
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
-      override def toString(): java.lang.String = "float"
+      @native override def toString(): java.lang.String = "float"
 
       /* Tests */
       def isNaN: scala.Boolean = Float.isNaN(value)
@@ -303,7 +303,7 @@ package java {
       def longValue(): scala.Long = value.toLong
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
-      override def toString(): java.lang.String = "double"
+      @native override def toString(): java.lang.String = "double"
 
       /* Tests */
       def isNaN: scala.Boolean = Double.isNaN(value)
@@ -357,6 +357,7 @@ package java {
     class InheritableThreadLocal[T <: AnyRef] extends ThreadLocal[T] {
     }
     object String {
+      @native def utf8bytes(s: String): Array[scala.Byte]
     }
   }
   package util {
@@ -383,6 +384,7 @@ package java {
         val stop = off+len
         while (n < stop) {
           write(b(n))
+          n = n+1
         }
       }
       def write(b: Int): Unit
@@ -423,7 +425,7 @@ package java {
       def print(f: Float): Unit = print(f.toString)
       def print(d: Double): Unit = print(d.toString)
       def print(s: Array[Char]): Unit = print("character array")
-      def print(s: String): Unit = if (s eq null) print("null") else { write(115);write(116);write(114);write(105);write(110);write(103) }
+      def print(s: String): Unit = if (s eq null) print("null") else { write(String.utf8bytes(s)) }
       def print(o: Object): Unit = if (o eq null) print("null") else print(o.toString)
       def println(): Unit = write(10)
       def println(x: Boolean): Unit = { print(x); println() }
@@ -609,8 +611,8 @@ package scala {
       }
     }
   }
-  /*
   trait Serializable
+  /*
   object Console {
     @native def print(s: String): Unit
     def println(s: String): Unit = {
