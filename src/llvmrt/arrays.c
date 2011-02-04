@@ -86,6 +86,7 @@ new_array(uint8_t k, struct klass *et, int32_t ndims, int32_t dim0, ...)
   datasize = sizeof(struct array) + dim0 * eltsize;
   data = a = calloc(1, datasize);
   a->super.klass = aclass;
+  a->length = dim0;
   va_start(dims, dim0);
   for (int32_t n = 0; n < ndims - 1; n++) {
     int32_t dimN = va_arg(dims, int32_t);
@@ -93,6 +94,7 @@ new_array(uint8_t k, struct klass *et, int32_t ndims, int32_t dim0, ...)
     aclass = arrayof(aclass);
     a = calloc(1, sizeof(struct array) + dimN * sizeof(void*));
     a->super.klass = aclass;
+    a->length = dimN;
     for (size_t i = 0; i < dimN; i++) {
       void *de;
       de = malloc(datasize);
