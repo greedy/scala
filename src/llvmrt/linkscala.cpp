@@ -1,0 +1,84 @@
+#include <string>
+
+#include "llvm/Support/ManagedStatic.h"
+#include "llvm/Bitcode/Archive.h"
+#include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/LLVMContext.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/System/Process.h"
+#include "llvm/System/Signals.h"
+#include "llvm/Module.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "wrapper.h"
+
+using namespace llvm;
+
+int main(int argc, char *argv[], char * const *envp)
+{
+  sys::PrintStackTraceOnErrorSignal();
+  LLVMContext &Context = getGlobalContext();
+  atexit(llvm_shutdown);
+  //cl::ParseCommandLineOptions(argc, argv, "scala runner");
+  std::string ErrorMsg;
+
+  Module *Mod = NULL;
+  if (MemoryBuffer *Buffer = MemoryBuffer::getFileOrSTDIN(argv[1],&ErrorMsg)) {
+    Mod = getLazyBitcodeModule(Buffer, Context, &ErrorMsg);
+    if (!Mod) delete Buffer;
+  }
+  if (!Mod) {
+    errs() << argv[0] << ": error loading program '" << argv[1] << "': "
+           << ErrorMsg << "\n";
+    exit(1);
+  }
+
+  std::string modid(argv[2]);
+
+  std::string modulename;
+  modulename += "module__O";
+  modulename += encodeName(modid);
+
+  std::string moduleinitfnname;
+  moduleinitfnname += "initmodule_module__O";
+  moduleinitfnname += encodeName(modid);
+
+  std::string mainfnname;
+  mainfnname += "method__O";
+  mainfnname += encodeName(modid);
+  mainfnname += "_Mmain_A_Njava_Dlang_DString_Rscala_DUnit";
+
+  Function *EntryFn = Mod->getFunction(mainfnname);
+  if (!EntryFn) {
+    errs() << '\'' << mainfnname << "\' function not found in module.\n";
+    return -1;
+  }
+
+  Function *InitFn = Mod->getFunction(moduleinitfnname);
+
+  if (!InitFn) {
+    errs() << modid << " module initializer not found.\n";
+    return -1;
+  }
+
+  GlobalVariable *ModuleInstance = Mod->getNamedGlobal(modulename);
+
+  if (!ModuleInstance) {
+    errs() << modid << " module instance not found.\n";
+    return -1;
+  }
+
+
+  Function *wrapper = createMainWrapperFunction(*Mod, EntryFn, ModuleInstance, InitFn, "main");
+
+  Mod->MaterializeAllPermanently();
+
+  raw_fd_ostream out("b.out.bc", ErrorMsg);
+  if (!ErrorMsg.empty()) {
+    errs() << "Error opening output file:" << ErrorMsg << "\n";
+    return -1;
+  }
+  WriteBitcodeToFile(Mod, out);
+
+  return 0;
+}

@@ -1,4 +1,4 @@
-COMPONENTS = core jit bitreader native interpreter archive
+COMPONENTS = core jit bitreader native interpreter archive bitwriter
 WARNINGS = -Wall
 CPPFLAGS = `icu-config --cppflags`
 CFLAGS = -g $(WARNINGS) -std=c99 `llvm-config --cflags $(COMPONENTS)`
@@ -17,7 +17,10 @@ llvmrt.a: $(RTOBJECTS)
 llvmrt_native.a: $(patsubst %.bc,%.o,$(RTOBJECTS))
 	ar cr $@ $^
 
-runscala: runscala.o unwind.o
+runscala: runscala.o wrapper.o unwind.o
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+linkscala: linkscala.o wrapper.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 clean:
