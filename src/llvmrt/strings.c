@@ -161,12 +161,49 @@ UChar *ustring_for_int(int32_t v, int32_t initsize, int32_t *len)
   }
 }
 
+UChar *ustring_for_long(int64_t v, int32_t initsize, int32_t *len)
+{
+  UErrorCode err = U_ZERO_ERROR;
+  int32_t bufsize = initsize;
+  int32_t reqsize;
+  UChar *buffer = malloc(bufsize * sizeof(UChar));
+  reqsize = unum_formatInt64(ufmt(), v, buffer, bufsize, NULL, &err);
+  if (err == U_BUFFER_OVERFLOW_ERROR) {
+    err = U_ZERO_ERROR;
+    free(buffer);
+    buffer = malloc(reqsize * sizeof(UChar));
+    bufsize = reqsize;
+    reqsize = unum_formatInt64(ufmt(), v, buffer, bufsize, NULL, &err);
+  }
+  if (U_SUCCESS(err)) {
+    *len = reqsize;
+    return buffer;
+  } else {
+    *len = 0;
+    return NULL;
+  }
+}
+
 struct java_Dlang_DInteger;
 struct java_Dlang_DShort;
 struct java_Dlang_DByte;
 struct java_Dlang_DLong;
 struct java_Dlang_DFloat;
 struct java_Dlang_DDouble;
+
+extern int64_t
+method_java_Dlang_DLong_MlongValue_Rscala_DLong(
+    struct java_Dlang_DLong *self);
+
+struct java_lang_String*
+method_java_Dlang_DLong_MtoString_Rjava_Dlang_DString(
+    struct java_Dlang_DLong *self)
+{
+  UChar *s;
+  int32_t len;
+  s = ustring_for_long(method_java_Dlang_DLong_MlongValue_Rscala_DLong(self), 8, &len);
+  return rt_stringcreate(s, len);
+}
 
 extern int32_t
 method_java_Dlang_DInteger_MintValue_Rscala_DInt(
