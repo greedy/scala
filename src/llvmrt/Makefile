@@ -3,7 +3,7 @@ WARNINGS = -Wall
 CPPFLAGS = `icu-config --cppflags`
 CFLAGS = -g $(WARNINGS) -std=c99 `llvm-config --cflags $(COMPONENTS)`
 CXXFLAGS = -g $(WARNINGS) `llvm-config --cxxflags $(COMPONENTS)`
-LDFLAGS = `icu-config --ldflags-searchpath --ldflags-icuio` `llvm-config --ldflags $(COMPONENTS)` -all_load
+LDFLAGS = `icu-config --ldflags-searchpath --ldflags-icuio` `llvm-config --ldflags $(COMPONENTS)` `apr-1-config --link-ld --libs` -all_load
 LDLIBS = `icu-config --ldflags-libsonly --ldflags-icuio` `llvm-config --libs $(COMPONENTS)`
 
 RTOBJECTS = runtime.bc object.bc boxes.bc arrays.bc strings.bc fp.bc io.bc

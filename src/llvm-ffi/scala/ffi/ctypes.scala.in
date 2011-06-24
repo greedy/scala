@@ -1,0 +1,133 @@
+package scala.ffi
+
+object ctypes {
+  type CChar = @CHAR_SCALA_TYPE@
+  type CShort = @SHORT_SCALA_TYPE@
+  type CInt = @INT_SCALA_TYPE@
+  type CLong = @LONG_SCALA_TYPE@
+  type CLongLong = @LONG_LONG_SCALA_TYPE@
+  type CIntPtr = @INTPTR_T_SCALA_TYPE@
+  type CIntMax = @INTMAX_T_SCALA_TYPE@
+  type CSizeT = @SIZE_T_SCALA_TYPE@
+
+  trait StorableCtypes {
+    implicit object StorableByte extends Storable[Byte] {
+      def size = 1
+      def alignment = @INT8_T_ALIGNMENT@
+      def peek(ptr: Ptr[Byte]) = _peek(ptr.address)
+      def poke(ptr: Ptr[Byte], x: Byte) = _poke(ptr.address, x)
+      @llvmimpl("""
+        %ptr = inttoptr @INTPTR_T_LLVM_TYPE@ %addr to i8*
+        %val = load i8* %ptr
+        ret i8 %val
+      """)
+      def _peek(addr: CIntPtr): Byte = error("llvmimpl")
+      @llvmimpl("""
+        %ptr = inttoptr @INTPTR_T_LLVM_TYPE@ %addr to i8*
+        store i8 %c, i8* %ptr
+        ret void
+      """)
+      def _poke(addr: CIntPtr, c: Byte): Unit = error("llvmimpl")
+    }
+    implicit object StorableShort extends Storable[Short] {
+      def size = 2
+      def alignment = @INT16_T_ALIGNMENT@
+      def peek(ptr: Ptr[Short]) = _peek(ptr.address)
+      def poke(ptr: Ptr[Short], x: Short) = _poke(ptr.address, x)
+
+      @llvmimpl("""
+        %ptr = inttoptr @INTPTR_T_LLVM_TYPE@ %addr to i16*
+        %val = load i16* %ptr
+        ret i16 %val
+      """)
+      def _peek(addr: CIntPtr): Short = error("llvmimpl")
+
+      @llvmimpl("""
+        %ptr = inttoptr @INTPTR_T_LLVM_TYPE@ %addr to i16*
+        store i16 %c, i16* %ptr
+        ret void
+      """)
+      def _poke(addr: CIntPtr, c: Short): Unit = error("llvmimpl")
+    }
+    implicit object StorableInt extends Storable[Int] {
+      def size = 4
+      def alignment = @INT32_T_ALIGNMENT@
+      def peek(ptr: Ptr[Int]) = _peek(ptr.address)
+      def poke(ptr: Ptr[Int], x: Int) = _poke(ptr.address, x)
+
+      @llvmimpl("""
+        %ptr = inttoptr @INTPTR_T_LLVM_TYPE@ %addr to i32*
+        %val = load i32* %ptr
+        ret i32 %val
+      """)
+      def _peek(addr: CIntPtr): Int = error("llvmimpl")
+
+      @llvmimpl("""
+        %ptr = inttoptr @INTPTR_T_LLVM_TYPE@ %addr to i32*
+        store i32 %c, i32* %ptr
+        ret void
+      """)
+      def _poke(addr: CIntPtr, c: Int): Unit = error("llvmimpl")
+    }
+    implicit object StorableLong extends Storable[Long] {
+      def size = 8
+      def alignment = @INT64_T_ALIGNMENT@
+      def peek(ptr: Ptr[Long]) = _peek(ptr.address)
+      def poke(ptr: Ptr[Long], x: Long) = _poke(ptr.address, x)
+
+      @llvmimpl("""
+        %ptr = inttoptr @INTPTR_T_LLVM_TYPE@ %addr to i64*
+        %val = load i64* %ptr
+        ret i64 %val
+      """)
+      def _peek(addr: CIntPtr): Long = error("llvmimpl")
+
+      @llvmimpl("""
+        %ptr = inttoptr @INTPTR_T_LLVM_TYPE@ %addr to i64*
+        store i64 %c, i64* %ptr
+        ret void
+      """)
+      def _poke(addr: CIntPtr, c: Long): Unit = error("llvmimpl")
+    }
+    implicit object StorableFloat extends Storable[Float] {
+      def size = 4
+      def alignment = @FLOAT_ALIGNMENT@
+      def peek(ptr: Ptr[Float]) = _peek(ptr.address)
+      def poke(ptr: Ptr[Float], x: Float) = _poke(ptr.address, x)
+
+      @llvmimpl("""
+        %ptr = inttoptr @INTPTR_T_LLVM_TYPE@ %addr to float*
+        %val = load float* %ptr
+        ret float %val
+      """)
+      def _peek(addr: CIntPtr): Float = error("llvmimpl")
+
+      @llvmimpl("""
+        %ptr = inttoptr @INTPTR_T_LLVM_TYPE@ %addr to float*
+        store float %c, float* %ptr
+        ret void
+      """)
+      def _poke(addr: CIntPtr, c: Float): Unit = error("llvmimpl")
+    }
+    implicit object StorableDouble extends Storable[Double] {
+      def size = 4
+      def alignment = @DOUBLE_ALIGNMENT@
+      def peek(ptr: Ptr[Double]) = _peek(ptr.address)
+      def poke(ptr: Ptr[Double], x: Double) = _poke(ptr.address, x)
+
+      @llvmimpl("""
+        %ptr = inttoptr @INTPTR_T_LLVM_TYPE@ %addr to double*
+        %val = load double* %ptr
+        ret double %val
+      """)
+      def _peek(addr: CIntPtr): Double = error("llvmimpl")
+
+      @llvmimpl("""
+        %ptr = inttoptr @INTPTR_T_LLVM_TYPE@ %addr to double*
+        store double %c, double* %ptr
+        ret void
+      """)
+      def _poke(addr: CIntPtr, c: Double): Unit = error("llvmimpl")
+    }
+  }
+}

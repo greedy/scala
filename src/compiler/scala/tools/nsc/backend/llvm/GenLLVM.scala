@@ -42,6 +42,38 @@ abstract class GenLLVM extends SubComponent {
 
     val LlvmimplAnnotSym = definitions.getClass("scala.llvmimpl")
     val LlvmdefsAnnotSym = definitions.getClass("scala.llvmdefs")
+    val ForeignAnnotSym = definitions.getClass("scala.ffi.foreign")
+    val ForeignValueAnnotSym = definitions.getClass("scala.ffi.foreignValue")
+    val CodegenAnnotations = Set(LlvmimplAnnotSym, ForeignAnnotSym, ForeignValueAnnotSym)
+    val PtrSym = definitions.getClass("scala.ffi.Ptr")
+    val PtrObjSym = PtrSym.companionModule
+    val Ptr_wrap = PtrObjSym.info.member("wrap")
+    val Ptr_unwrap = PtrObjSym.info.member("unwrap")
+    val MarshalledTypes = Set(BOOL,BYTE,SHORT,CHAR,INT,LONG,FLOAT,DOUBLE,REFERENCE(PtrSym))
+    val MarshalledResultTypes = MarshalledTypes ++ Set(UNIT)
+
+    def isMarshallable(t: Type) = {
+      toTypeKind(t) match {
+        case BOOL|BYTE|SHORT|CHAR|INT|LONG|FLOAT|DOUBLE => true
+        /*
+        case Reference(_) => t match {
+          case TypeRef(_, PtrSym, List(pt)) => isMarshallable(pt)
+          case _ => false
+        }
+        */
+        case _ => false
+      }
+    }
+
+    def isMarshallableResult(t: Type) = isMarshallable(t) || toTypeKind(t) == UNIT
+
+    def marshalledType(t: Type): LMType with ConcreteType = {
+      t match {
+        case TypeRef(_, PtrSym, List(pt)) => marshalledType(pt).pointer
+        case _ if isMarshallable(t) => typeType(t)
+        case _ => error("Type "+ t +" is not marshallable"); LMOpaque
+      }
+    }
 
     def instFields(c: IClass): List[IField] = {
       c.fields.filterNot(_.symbol.isStaticMember)
@@ -558,7 +590,7 @@ abstract class GenLLVM extends SubComponent {
       def virtualMethods(s: Symbol): List[Symbol] = {
         if (s == NoSymbol) Nil
         else {
-          val myvirts = s.info.decls.toList.filter(d => d.isMethod && !d.isConstructor && !d.isOverride && !d.isEffectivelyFinal)
+          val myvirts = s.info.decls.toList.filter(d => d.isMethod && !d.isConstructor && !(d.isOverride && s.superClass.info.members.exists(mem => mem.info <:< d.info && mem.name == d.name)) && !d.isEffectivelyFinal)
           (virtualMethods(s.superClass) ++ myvirts.sortBy(methodSig _)).toList
         }
       }
@@ -651,6 +683,110 @@ abstract class GenLLVM extends SubComponent {
           Seq.empty
         }
       }
+
+      type SomeConcreteType = LMType with ConcreteType
+
+      def marshallToNative(local: LocalVariable[_ <: SomeConcreteType], tpe: Type): (LocalVariable[_ <: SomeConcreteType],Seq[LMInstruction]) = {
+        toTypeKind(tpe) match {
+          case BOOL|BYTE|SHORT|CHAR|INT|LONG|FLOAT|DOUBLE => (local, Seq.empty)
+          /*
+          case Reference(_) => tpe match {
+            case TypeRef(_, PtrSym, List(pt)) => {
+              val resultVar = new LocalVariable(".asptr."+local.name, marshalledType(tpe))
+              val addressVal = new LocalVariable(".addr."+local.name, typeType(PtrSym.info.member("address").resultType))
+              (resultVar, Seq(
+                new call(addressVal, externFun(PtrSym.companionModule.info.member("unwrap")), Seq(new CGlobalAddress(externModule(PtrSym.companionModule)), local))
+                new inttoptr(resultVar, addressVal)
+              ))
+            }
+          }
+          */
+        }
+      }
+
+      def marshallFromNative(local:LocalVariable[_ <: LMType with ConcreteType], tpe:Type): (LocalVariable[_ <: LMType with ConcreteType],Seq[LMInstruction]) = {
+        toTypeKind(tpe) match {
+          case BOOL|BYTE|SHORT|CHAR|INT|LONG|FLOAT|DOUBLE => (local, Seq.empty)
+          /*
+          case Reference(_) => tpe match {
+            case TypeRef(_, PtrSym, List(pt)) => {
+              val ptrasint = new LocalVariable(".ptrasint."+local.name, typeType(PtrSym.info.member("address").resultType))
+              val
+            }
+            */
+        }
+      }
+
+      def genForeignFun(m: IMethod): Seq[ModuleComp] = {
+        m.symbol.getAnnotation(ForeignAnnotSym) match {
+          case Some(AnnotationInfo(_,List(Literal(Constant(foreignSymbol: String))),_)) => {
+            val methType = m.symbol.info
+            if (methType.paramSectionCount != 1) {
+              error("Foreign functions must take exactly one parameter list"); Seq.empty
+            } else if (!isMarshallableResult(methType.resultType)) {
+              error("Foreign function must return marshallable type"); Seq.empty
+            } else if (methType.paramTypes.exists(pt => !isMarshallable(pt))) {
+              error("Foreign function must take marshallable parameters"); Seq.empty
+            } else {
+              val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
+              val recvarg = if (m.symbol.isStaticMember) { Seq.empty } else { Seq(thisarg) }
+              val args = m.params.map(p => new LocalVariable(llvmName(p.sym), marshalledType(p.sym.info)))
+              val argSpec = args.map(lv => ArgSpec(lv))
+              val marshalled = args.zip(methType.paramTypes).map((marshallToNative _).tupled)
+              val targetFunction = new LMFunction(
+                typeKindType(m.returnType), foreignSymbol, argSpec, false,
+                Externally_visible, Default, Ccc,
+                Seq.empty, Seq.empty, None, None, None)
+              val method = new LMFunction(
+                typeKindType(m.returnType), "method_"+llvmName(m.symbol), recvarg ++ argSpec, false,
+                Externally_visible, Default, Ccc,
+                Seq.empty, Seq.empty, None, None, None)
+              // Must marshall return value to scala
+              val body = if (m.returnType == UNIT) {
+                marshalled.map(_._2).flatten ++ Seq(new call_void(targetFunction, marshalled.map(_._1)), retvoid)
+              } else {
+                val res = new LocalVariable("res", typeKindType(m.returnType))
+                marshalled.map(_._2).flatten ++ Seq(new call(res, targetFunction, args), new ret(res))
+              }
+              Seq(
+                targetFunction.declare,
+                method.define(Seq(LMBlock(None, body)))
+              )
+            }
+          }
+          case Some(_) => error("Invalid foreign annotation"); Seq.empty
+          case None => error("Actually no foreign annotation; impossible"); Seq.empty
+        }
+      }
+
+      def genForeignVal(m: IMethod): Seq[ModuleComp] = {
+        m.symbol.getAnnotation(ForeignValueAnnotSym) match {
+          case Some(AnnotationInfo(_,List(Literal(Constant(foreignSymbol: String))),_)) => {
+            if (!m.returnType.isValueType || m.returnType == UNIT) {
+              error("Foreign value must be non-unit primitive"); Seq.empty
+            } else if (!m.params.isEmpty) {
+              error("Foreign value must not take parameters"); Seq.empty
+            } else {
+              val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
+              val args = if (m.symbol.isStaticMember) { Seq.empty } else { Seq(thisarg) }
+              val targetGlobal = new LMGlobalVariable(foreignSymbol, typeKindType(m.returnType), Externally_visible, Default, false)
+              val method = new LMFunction(
+                typeKindType(m.returnType), "method_"+llvmName(m.symbol), args, false,
+                Externally_visible, Default, Ccc,
+                Seq.empty, Seq.empty, None, None, None)
+              val res = new LocalVariable("res", typeKindType(m.returnType))
+              val body = Seq(new load(res, new CGlobalAddress(targetGlobal)), new ret(res))
+              Seq(
+                targetGlobal.declare,
+                method.define(Seq(LMBlock(None, body)))
+              )
+            }
+          }
+          case Some(_) => error("Invalid foreign annotation"); Seq.empty
+          case None => error("Actually no foreign annotation; impossible"); Seq.empty
+        }
+      }
+
 
       def genNativeFun(m: IMethod) = {
         val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
@@ -1561,9 +1697,12 @@ abstract class GenLLVM extends SubComponent {
       val outstream = new OutputStreamWriter(outfile.bufferedOutput,"US-ASCII")
       val header_comment = new Comment("Module for " + c.symbol.fullName('.'))
       val concreteMethods = c.methods.filter(!_.symbol.isDeferred)
-      val (llvmmethods, methods) = concreteMethods.partition(_.symbol.hasAnnotation(LlvmimplAnnotSym))
+      val methods = concreteMethods.filter(m => !CodegenAnnotations.exists(a => m.symbol.hasAnnotation(a)))
+      val llvmmethods = concreteMethods.filter(_.symbol.hasAnnotation(LlvmimplAnnotSym))
       val methodFuns = methods.filter(_.code != null).map(m => try { genFun(m) } catch { case e => println(e); m.dump; throw e } )
       val llvmmethodFuns = llvmmethods.map(genNativeFun)
+      val foreignFuns = c.methods.filter(_.symbol.hasAnnotation(ForeignAnnotSym)).flatMap(genForeignFun)
+      val foreignVals = c.methods.filter(_.symbol.hasAnnotation(ForeignValueAnnotSym)).flatMap(genForeignVal)
       c.methods.filter(_.native).map(_.symbol).foreach(externFun)
       val externDecls = externFuns.filterKeys(!internalFuns.contains(_)).values.map(_.declare)++externClasses.values.map(_.declare)++externStatics.values.map(_.declare)
       val otherModules = externModules.filterKeys(_.moduleClass!=c.symbol)
@@ -1580,6 +1719,8 @@ abstract class GenLLVM extends SubComponent {
         classInfo,
         methodFuns,
         llvmmethodFuns,
+        foreignFuns,
+        foreignVals,
         extraDefs,
         moduleInfo
       ))

@@ -1,4 +1,5 @@
 SOURCES=@lib.sources
+FFISOURCES=@ffi.sources
 
 run-sample:
 	make -C ../../../src/llvmrt llvmrt.a runscala
@@ -15,7 +16,7 @@ code.bc: irfiles.stamp $(patsubst %.ll,%.bc,$(wildcard irfiles/*.ll))
 
 irfiles.stamp irfiles/*.ll: example.scala runtime.scala
 	mkdir -p irfiles
-	JAVA_OPTS=-Xmx2500M ../../../build/quick/bin/scalac -d irfiles -target:llvm example.scala runtime.scala # $(SOURCES)
+	JAVA_OPTS=-Xmx2500M ../../../build/quick/bin/scalac -no-specialization -d irfiles -target:llvm example.scala runtime.scala apr.scala $(FFISOURCES) @base.sources # $(SOURCES)
 	touch irfiles.stamp
 
 classes: example.scala
