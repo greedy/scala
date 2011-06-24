@@ -3,3 +3,4 @@
 ../../../src/llvm-ffi/scala/ffi/Ptr.scala
 ../../../src/llvm-ffi/scala/ffi/Storable.scala
 ../../../src/llvm-ffi/scala/ffi/alloc.scala
+../../../src/llvm-ffi/scala/ffi/foreign.scala
