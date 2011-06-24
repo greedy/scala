@@ -31,7 +31,7 @@ void rt_delete(struct java_lang_Object *object)
   if (object != NULL) free(object);
 }
 
-struct ifaceref *rt_iface_cast(struct java_lang_Object *object, struct klass *iface)
+struct ifaceref rt_iface_cast(struct java_lang_Object *object, struct klass *iface)
 {
   struct klass *klass = object->klass;
   void **vtable = NULL;
@@ -42,9 +42,9 @@ struct ifaceref *rt_iface_cast(struct java_lang_Object *object, struct klass *if
     }
   }
   if (vtable != NULL) {
-    struct ifaceref *ret = calloc(1, sizeof(struct ifaceref));
-    ret->object = object;
-    ret->vtable = vtable;
+    struct ifaceref ret;
+    ret.object = object;
+    ret.vtable = vtable;
     return ret;
   } else {
     abort();
