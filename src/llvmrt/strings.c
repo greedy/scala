@@ -127,7 +127,7 @@ UChar *ustring_for_double(double v, int32_t initsize, int32_t *len)
     free(buffer);
     buffer = malloc(reqsize * sizeof(UChar));
     bufsize = reqsize;
-    reqsize = unum_format(ufmt(), v, buffer, bufsize, NULL, &err);
+    reqsize = unum_formatDouble(ufmt(), v, buffer, bufsize, NULL, &err);
   }
   if (U_SUCCESS(err)) {
     *len = reqsize;
