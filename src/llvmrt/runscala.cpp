@@ -1,3 +1,5 @@
+#include "config.h"
+
 #include "llvm/Bitcode/Archive.h"
 #include "llvm/LLVMContext.h"
 #include "llvm/Target/TargetData.h"
@@ -17,8 +19,15 @@
 #include "llvm/Support/PluginLoader.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/System/Process.h"
-#include "llvm/System/Signals.h"
+#if LLVM_MAJOR_VERSION >=2 && LLVM_MINOR_VERSION >= 9
+# include "llvm/ADT/OwningPtr.h"
+# include "llvm/Support/Process.h"
+# include "llvm/Support/Signals.h"
+# include "llvm/Support/system_error.h"
+#else
+# include "llvm/System/Process.h"
+# include "llvm/System/Signals.h"
+#endif
 #include "llvm/Target/TargetSelect.h"
 #include "llvm/Target/TargetOptions.h"
 #include <cerrno>
@@ -81,8 +90,23 @@ int main(int argc, char *argv[], char * const *envp)
   atexit(do_shutdown);
   //cl::ParseCommandLineOptions(argc, argv, "scala runner");
   std::string ErrorMsg;
-
   Module *Mod = NULL;
+
+#if LLVM_MAJOR_VERSION >= 2 && LLVM_MINOR_VERSION >= 9
+  OwningPtr<MemoryBuffer> Buffer;
+  error_code errc = MemoryBuffer::getFileOrSTDIN(argv[1], Buffer);
+  if (errc) {
+    errs() << argv[0] << ": error load program '" << argv[1] << "': " << errc.message() << "\n";
+    exit(1);
+  } else {
+    Mod = getLazyBitcodeModule(Buffer.get(), Context, &ErrorMsg);
+  }
+  if (!Mod) {
+    errs() << argv[0] << ": error loading program '" << argv[1] << "': "
+           << ErrorMsg << "\n";
+    exit(1);
+  }
+#else
   if (MemoryBuffer *Buffer = MemoryBuffer::getFileOrSTDIN(argv[1],&ErrorMsg)) {
     Mod = getLazyBitcodeModule(Buffer, Context, &ErrorMsg);
     if (!Mod) delete Buffer;
@@ -92,6 +116,8 @@ int main(int argc, char *argv[], char * const *envp)
            << ErrorMsg << "\n";
     exit(1);
   }
+#endif
+
 
   EngineBuilder builder(Mod);
   builder.setErrorStr(&ErrorMsg);
