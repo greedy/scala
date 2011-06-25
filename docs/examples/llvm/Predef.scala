@@ -1,6 +1,6 @@
 package scala
 
-object Predef {
+object Predef extends LowPriorityImplicits {
   def classOf[T]: Class[T] = null
   type String        = java.lang.String
   type Class[T]      = java.lang.Class[T]
@@ -13,7 +13,7 @@ object Predef {
   def locally[T](x: T): T  = x    // to communicate intent and avoid unmoored statements
   // Deprecated
 
-  def error(message: String): Nothing = system.error(message)
+  def error(message: String): Nothing = sys.error(message)
   sealed abstract class <:<[-From, +To] extends (From => To)
   implicit def conforms[A]: A <:< A = new (A <:< A) { def apply(x: A) = x }
   /** A type for which there is always an implicit value.
@@ -29,4 +29,5 @@ object Predef {
     implicit def dummyImplicit: DummyImplicit = new DummyImplicit
   }
   type ClassManifest[T] = scala.reflect.ClassManifest[T]
+  val AnyRef      = new SpecializableCompanion {}   // a dummy used by the specialization annotation
 }

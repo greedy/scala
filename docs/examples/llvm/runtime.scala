@@ -155,7 +155,7 @@ package java {
       def getType(c: scala.Char): scala.Int = sys.error("unimplemented")
       def getType(c: scala.Int): scala.Int = sys.error("unimplemented")
       val MIN_VALUE: scala.Char = 0
-      val MAX_VALUE: scala.Char = 0xffffffffL
+      val MAX_VALUE: scala.Char = 0xffff.toChar
       val MAX_RADIX: scala.Int = 36
 
       def reverseBytes(c: scala.Char): scala.Char = sys.error("unimplemented")
@@ -229,7 +229,7 @@ package java {
       def longValue(): scala.Long = value.toLong
       def floatValue(): scala.Float = value.toFloat
       def doubleValue(): scala.Double = value.toDouble
-      override def toString(): java.lang.String = "long"
+      @native override def toString(): java.lang.String = "long"
     }
     object Float {
       val TYPE = null

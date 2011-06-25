@@ -590,7 +590,7 @@ abstract class GenLLVM extends SubComponent {
       def virtualMethods(s: Symbol): List[Symbol] = {
         if (s == NoSymbol) Nil
         else {
-          val myvirts = s.info.decls.toList.filter(d => d.isMethod && !d.isConstructor && !(d.isOverride && s.superClass.info.members.exists(mem => mem.info <:< d.info && mem.name == d.name)) && !d.isEffectivelyFinal)
+          val myvirts = s.info.decls.toList.filter(d => d.isMethod && !d.isConstructor && !(d.isOverride && s.superClass.info.members.exists(mem => mem.info <:< d.info && mem.name == d.name)) && (d.isDeferred || !d.isEffectivelyFinal))
           (virtualMethods(s.superClass) ++ myvirts.sortBy(methodSig _)).toList
         }
       }
@@ -1404,7 +1404,8 @@ abstract class GenLLVM extends SubComponent {
                   case _ => ()
                 }
                 val fun = style match {
-                  case Dynamic if method.isEffectivelyFinal => new CFunctionAddress(externFun(method))
+                  case Dynamic if method.isEffectivelyFinal && !method.isDeferred =>
+                    new CFunctionAddress(externFun(method))
                   case Dynamic => {
                     val vtbl = nextvar(rtVtable)
                     /* TODO - don't cast to trait if method present in receiver vtable */

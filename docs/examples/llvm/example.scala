@@ -25,7 +25,7 @@ object example extends examplec with Magic {
   val f: Float = 4
   val d: Double = 5
   val b: Byte = 6
-  val c: Char = 7
+  val c: Char = 7.toChar
   val who = "world"
   override def x: Double = f+d+b
   def main() {
