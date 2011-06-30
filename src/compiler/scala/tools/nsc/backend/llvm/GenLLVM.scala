@@ -44,6 +44,7 @@ abstract class GenLLVM extends SubComponent {
     val LlvmdefsAnnotSym = definitions.getClass("scala.llvmdefs")
     val ForeignAnnotSym = definitions.getClass("scala.ffi.foreign")
     val ForeignValueAnnotSym = definitions.getClass("scala.ffi.foreignValue")
+    val ForeignExportAnnotSym = definitions.getClass("scala.ffi.foreignExport")
     val CodegenAnnotations = Set(LlvmimplAnnotSym, ForeignAnnotSym, ForeignValueAnnotSym)
     val PtrSym = definitions.getClass("scala.ffi.Ptr")
     val PtrObjSym = PtrSym.companionModule
@@ -729,6 +730,47 @@ abstract class GenLLVM extends SubComponent {
               val
             }
             */
+        }
+      }
+
+      def exportFunction(m: IMethod): Seq[ModuleComp] = {
+        m.symbol.getAnnotation(ForeignExportAnnotSym) match {
+          case Some(AnnotationInfo(_,List(Literal(Constant(foreignSymbol: String))),_)) => {
+            val methType = m.symbol.info
+            if (!m.symbol.isStatic) {
+              error("Only object methods can be exported"); Seq.empty
+            } else if (methType.paramSectionCount != 1) {
+              error("Exported functions must take exactly one parameter list"); Seq.empty
+            } else if (!isMarshallableResult(methType.resultType)) {
+              error("Exported functions must have marshallable return type"); Seq.empty
+            } else if (methType.paramTypes.exists(pt => !isMarshallable(pt))) {
+              error("All parameters to exported functions must be marshallable"); Seq.empty
+            } else {
+              val args = m.params.map(p => new LocalVariable(llvmName(p.sym), marshalledType(p.sym.info)))
+              val argSpec = args.map(lv => ArgSpec(lv))
+              val exportedFun = new LMFunction(
+                typeKindType(m.returnType), foreignSymbol, argSpec, false,
+                Externally_visible, Default, Ccc,
+                Seq.empty, Seq.empty, None, None, None)
+              val methodFun = functionForMethod(m)._1
+              val modGlobal = new CGlobalAddress(externModule(m.symbol.enclClass))
+              val body = if (m.returnType == UNIT) {
+                Seq(
+                  new call_void(moduleInitFun(m.symbol.owner), Seq.empty),
+                  new call_void(methodFun, Seq(modGlobal) ++ args),
+                  retvoid
+                )
+              } else {
+                val result = new LocalVariable(".result", typeKindType(m.returnType))
+                Seq(
+                  new call_void(moduleInitFun(m.symbol.owner), Seq.empty),
+                  new call(result, methodFun, Seq(modGlobal) ++ args),
+                  new ret(result)
+                )
+              }
+              Seq(exportedFun.define(Seq(LMBlock(None, body))))
+            }
+          }
         }
       }
 
@@ -1716,6 +1758,7 @@ abstract class GenLLVM extends SubComponent {
       c.methods.filter(_.native).map(_.symbol).foreach(externFun)
       val externDecls = externFuns.filterKeys(!internalFuns.contains(_)).values.map(_.declare)++externClasses.values.map(_.declare)++externStatics.values.map(_.declare)
       val otherModules = externModules.filterKeys(_.moduleClass!=c.symbol)
+      val exportedFunctions = c.methods.filter(_.symbol.hasAnnotation(ForeignExportAnnotSym)).flatMap(exportFunction)
       val module = new Module(Seq.concat(
         Seq(header_comment),
         externTypes.values.map {
@@ -1729,6 +1772,7 @@ abstract class GenLLVM extends SubComponent {
         classInfo,
         methodFuns,
         llvmmethodFuns,
+        exportedFunctions,
         foreignFuns,
         foreignVals,
         extraDefs,
