@@ -456,6 +456,22 @@ abstract class GenLLVM extends SubComponent {
         case None => ()
       }
 
+      def functionForMethod(m: IMethod): (LMFunction, Seq[(ArgSpec,Symbol)]) = {
+        val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
+        val recvarg = if (m.symbol.isStaticMember) { Seq.empty } else { Seq((thisarg, c.symbol)) }
+        val args = recvarg ++ m.params.map(p => (ArgSpec(new LocalVariable(llvmName(p.sym), localType(p))), p.sym))
+        val fun = new LMFunction(typeType(m.returnType.toType), "method_"+llvmName(m.symbol), args.map(_._1), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+        (fun, args)
+      }
+
+      def functionForMethodSymbol(s: Symbol): LMFunction = {
+        require(s.isMethod)
+        val funtype = symType(s).asInstanceOf[LMFunctionType]
+        val args = funtype.argTypes.zipWithIndex.map{case (t,i) => ArgSpec(new LocalVariable("arg"+i, t), Seq.empty)}
+        new LMFunction(funtype.returnType, "method_"+llvmName(s), args, false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+      }
+
+
       def nextconst(v: LMConstant[_<:ConcreteType], linkage: Linkage = Private) = {
         val gv = new LMGlobalVariable(".global."+globidx.toString, v.tpe, linkage, Default, false)
         extraDefs += gv.define(v)
@@ -554,11 +570,10 @@ abstract class GenLLVM extends SubComponent {
 
       def externFun(s: Symbol) = {
         externFuns.getOrElseUpdate(s, {
-          val funtype = symType(s).asInstanceOf[LMFunctionType]
-          funtype.argTypes.foreach(recordType)
-          recordType(funtype.returnType)
-          val args = funtype.argTypes.zipWithIndex.map{case (t,i) => ArgSpec(new LocalVariable("arg"+i, t), Seq.empty)}
-          new LMFunction(funtype.returnType, "method_"+llvmName(s), args, false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+          val fun = functionForMethodSymbol(s)
+          fun.tpe.argTypes.foreach(recordType)
+          recordType(fun.tpe.returnType)
+          fun
         })
       }
 
@@ -737,10 +752,7 @@ abstract class GenLLVM extends SubComponent {
                 typeKindType(m.returnType), foreignSymbol, argSpec, false,
                 Externally_visible, Default, Ccc,
                 Seq.empty, Seq.empty, None, None, None)
-              val method = new LMFunction(
-                typeKindType(m.returnType), "method_"+llvmName(m.symbol), recvarg ++ argSpec, false,
-                Externally_visible, Default, Ccc,
-                Seq.empty, Seq.empty, None, None, None)
+              val method = functionForMethod(m)._1
               // Must marshall return value to scala
               val body = if (m.returnType == UNIT) {
                 marshalled.map(_._2).flatten ++ Seq(new call_void(targetFunction, marshalled.map(_._1)), retvoid)
@@ -770,10 +782,7 @@ abstract class GenLLVM extends SubComponent {
               val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
               val args = if (m.symbol.isStaticMember) { Seq.empty } else { Seq(thisarg) }
               val targetGlobal = new LMGlobalVariable(foreignSymbol, typeKindType(m.returnType), Externally_visible, Default, false)
-              val method = new LMFunction(
-                typeKindType(m.returnType), "method_"+llvmName(m.symbol), args, false,
-                Externally_visible, Default, Ccc,
-                Seq.empty, Seq.empty, None, None, None)
+              val method = functionForMethod(m)._1
               val res = new LocalVariable("res", typeKindType(m.returnType))
               val body = Seq(new load(res, new CGlobalAddress(targetGlobal)), new ret(res))
               Seq(
@@ -791,7 +800,7 @@ abstract class GenLLVM extends SubComponent {
       def genNativeFun(m: IMethod) = {
         val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
         val args = thisarg +: m.params.map(p => ArgSpec(new LocalVariable(llvmName(p.sym), localType(p))))
-        val fun = new LMFunction(typeType(m.returnType.toType), "method_"+llvmName(m.symbol), args, false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+        val fun = functionForMethod(m)._1
         recordType(fun.tpe)
         fun.args.map(_.lmvar.tpe).foreach(recordType)
         if (isMain(c) && m.params.isEmpty && m.symbol.simpleName.toString().trim() == "main" && fun.resultType == LMVoid) {
@@ -806,11 +815,8 @@ abstract class GenLLVM extends SubComponent {
       }
       def genFun(m: IMethod) = {
         internalFuns += m.symbol
-        val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
-        val recvarg = if (m.symbol.isStaticMember) { Seq.empty } else { Seq((thisarg, c.symbol)) }
         val thisCell = new LocalVariable("__this", rtObject.pointer.pointer)
-        val args = recvarg ++ m.params.map(p => (ArgSpec(new LocalVariable(llvmName(p.sym), localType(p))), p.sym))
-        val fun = new LMFunction(typeType(m.returnType.toType), "method_"+llvmName(m.symbol), args.map(_._1), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+        val (fun,args) = functionForMethod(m)
         recordType(fun.tpe)
         fun.args.map(_.lmvar.tpe).foreach(recordType)
         if (isMain(c) && m.params.isEmpty && m.symbol.simpleName.toString().trim() == "main" && fun.resultType == LMVoid) {
@@ -1030,7 +1036,7 @@ abstract class GenLLVM extends SubComponent {
               }
               case STORE_THIS(_) => {
                 val (t,tk) = stack.pop
-                if (recvarg.isEmpty) {
+                if (m.symbol.isStaticMember) {
                   insns.append(new store(cast(t,tk,m.params.head.kind), localCell(m.params.head)))
                 } else {
                   insns.append(new store(cast(t,tk,ObjectReference), thisCell))
@@ -1681,7 +1687,10 @@ abstract class GenLLVM extends SubComponent {
 
         val allocaLocals = m.locals.map(l => new alloca(localCell(l), typeKindType(l.kind)))
         val storeArgs = m.locals.flatMap(l => args.find(_._2==l.sym).map(a => new store(a._1.lmvar, localCell(l))))
-        val handleThis = recvarg.headOption.toList.flatMap { a =>
+        val handleThis = if (m.symbol.isStaticMember) {
+          Seq.empty
+        } else {
+          val a = args.head
           val thisObj = new LocalVariable(".this.object", rtObject.pointer)
           Seq(
             new alloca(thisCell, rtObject.pointer),
