@@ -50,18 +50,17 @@ abstract class GenLLVM extends SubComponent {
     val PtrObjSym = PtrSym.companionModule
     val Ptr_wrap = PtrObjSym.info.member("wrap")
     val Ptr_unwrap = PtrObjSym.info.member("unwrap")
+    val Ptr_address = PtrSym.info.member("address")
     val MarshalledTypes = Set(BOOL,BYTE,SHORT,CHAR,INT,LONG,FLOAT,DOUBLE,REFERENCE(PtrSym))
     val MarshalledResultTypes = MarshalledTypes ++ Set(UNIT)
 
     def isMarshallable(t: Type) = {
       toTypeKind(t) match {
         case BOOL|BYTE|SHORT|CHAR|INT|LONG|FLOAT|DOUBLE => true
-        /*
-        case Reference(_) => t match {
-          case TypeRef(_, PtrSym, List(pt)) => isMarshallable(pt)
+        case REFERENCE(_) => t match {
+          case TypeRef(_, PtrSym, _) => true
           case _ => false
         }
-        */
         case _ => false
       }
     }
@@ -70,7 +69,7 @@ abstract class GenLLVM extends SubComponent {
 
     def marshalledType(t: Type): LMType with ConcreteType = {
       t match {
-        case TypeRef(_, PtrSym, List(pt)) => marshalledType(pt).pointer
+        case TypeRef(_, PtrSym, _) => LMInt.i8.pointer
         case _ if isMarshallable(t) => typeType(t)
         case _ => error("Type "+ t +" is not marshallable"); LMOpaque
       }
@@ -705,31 +704,35 @@ abstract class GenLLVM extends SubComponent {
       def marshallToNative(local: LocalVariable[_ <: SomeConcreteType], tpe: Type): (LocalVariable[_ <: SomeConcreteType],Seq[LMInstruction]) = {
         toTypeKind(tpe) match {
           case BOOL|BYTE|SHORT|CHAR|INT|LONG|FLOAT|DOUBLE => (local, Seq.empty)
-          /*
-          case Reference(_) => tpe match {
-            case TypeRef(_, PtrSym, List(pt)) => {
-              val resultVar = new LocalVariable(".asptr."+local.name, marshalledType(tpe))
-              val addressVal = new LocalVariable(".addr."+local.name, typeType(PtrSym.info.member("address").resultType))
+          case REFERENCE(_) => tpe match {
+            case TypeRef(_, PtrSym, _) => {
+              val resultVar = new LocalVariable(".asptr."+local.name, marshalledType(tpe).asInstanceOf[LMPointer])
+              val addressVal = new LocalVariable(".addr."+local.name, typeType(Ptr_address.info.resultType).asInstanceOf[LMInt])
               (resultVar, Seq(
-                new call(addressVal, externFun(PtrSym.companionModule.info.member("unwrap")), Seq(new CGlobalAddress(externModule(PtrSym.companionModule)), local))
+                new call(addressVal, externFun(Ptr_unwrap),
+                  Seq(new CGlobalAddress(externModule(PtrObjSym)), local)),
                 new inttoptr(resultVar, addressVal)
               ))
             }
           }
-          */
         }
       }
 
       def marshallFromNative(local:LocalVariable[_ <: LMType with ConcreteType], tpe:Type): (LocalVariable[_ <: LMType with ConcreteType],Seq[LMInstruction]) = {
         toTypeKind(tpe) match {
           case BOOL|BYTE|SHORT|CHAR|INT|LONG|FLOAT|DOUBLE => (local, Seq.empty)
-          /*
-          case Reference(_) => tpe match {
-            case TypeRef(_, PtrSym, List(pt)) => {
-              val ptrasint = new LocalVariable(".ptrasint."+local.name, typeType(PtrSym.info.member("address").resultType))
-              val
+          case REFERENCE(_) => tpe match {
+            case TypeRef(_, PtrSym, _) => {
+              val ptrasint = new LocalVariable(".ptrasint."+local.name, typeType(Ptr_address.info.resultType).asInstanceOf[LMInt])
+              val ptrObj = new LocalVariable(".ptrobj."+local.name, classType(PtrSym).pointer)
+              (ptrObj, Seq(
+                new ptrtoint(ptrasint, local.asInstanceOf[LMValue[LMPointer]]),
+                new call_void(moduleInitFun(PtrObjSym), Seq.empty),
+                new call(ptrObj, externFun(Ptr_wrap),
+                  Seq(new CGlobalAddress(externModule(PtrObjSym)), ptrasint))
+              ))
             }
-            */
+          }
         }
       }
 
@@ -754,7 +757,10 @@ abstract class GenLLVM extends SubComponent {
                 Seq.empty, Seq.empty, None, None, None)
               val methodFun = functionForMethod(m)._1
               val modGlobal = new CGlobalAddress(externModule(m.symbol.enclClass))
+              val (marshalledArgs,argMarshalling) =
+                args.zip(m.params.map(_.sym.info)).map((marshallFromNative _).tupled).unzip
               val body = if (m.returnType == UNIT) {
+                argMarshalling.flatten ++
                 Seq(
                   new call_void(moduleInitFun(m.symbol.owner), Seq.empty),
                   new call_void(methodFun, Seq(modGlobal) ++ args),
@@ -762,10 +768,15 @@ abstract class GenLLVM extends SubComponent {
                 )
               } else {
                 val result = new LocalVariable(".result", typeKindType(m.returnType))
-                Seq(
-                  new call_void(moduleInitFun(m.symbol.owner), Seq.empty),
-                  new call(result, methodFun, Seq(modGlobal) ++ args),
-                  new ret(result)
+                val (marshalledResult, resultMarshalling) =
+                  marshallToNative(result, m.returnType.toType)
+                Seq.concat(
+                  argMarshalling.flatten,
+                  Seq(
+                    new call_void(moduleInitFun(m.symbol.owner), Seq.empty),
+                    new call(result, methodFun, Seq(modGlobal) ++ marshalledArgs)),
+                  resultMarshalling,
+                  Seq(new ret(result))
                 )
               }
               Seq(exportedFun.define(Seq(LMBlock(None, body))))
@@ -787,9 +798,9 @@ abstract class GenLLVM extends SubComponent {
             } else {
               val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
               val recvarg = if (m.symbol.isStaticMember) { Seq.empty } else { Seq(thisarg) }
-              val args = m.params.map(p => new LocalVariable(llvmName(p.sym), marshalledType(p.sym.info)))
-              val argSpec = args.map(lv => ArgSpec(lv))
-              val marshalled = args.zip(methType.paramTypes).map((marshallToNative _).tupled)
+              val args = m.params.map(p => new LocalVariable(llvmName(p.sym), localType(p)))
+              val (marshalled,marshallingCode) = args.zip(methType.paramTypes).map((marshallToNative _).tupled).unzip
+              val argSpec = marshalled.map(lv => ArgSpec(lv))
               val targetFunction = new LMFunction(
                 typeKindType(m.returnType), foreignSymbol, argSpec, false,
                 Externally_visible, Default, Ccc,
@@ -797,10 +808,10 @@ abstract class GenLLVM extends SubComponent {
               val method = functionForMethod(m)._1
               // Must marshall return value to scala
               val body = if (m.returnType == UNIT) {
-                marshalled.map(_._2).flatten ++ Seq(new call_void(targetFunction, marshalled.map(_._1)), retvoid)
+                marshallingCode.flatten ++ Seq(new call_void(targetFunction, marshalled), retvoid)
               } else {
                 val res = new LocalVariable("res", typeKindType(m.returnType))
-                marshalled.map(_._2).flatten ++ Seq(new call(res, targetFunction, args), new ret(res))
+                marshallingCode.flatten ++ Seq(new call(res, targetFunction, marshalled), new ret(res))
               }
               Seq(
                 targetFunction.declare,
@@ -1756,9 +1767,9 @@ abstract class GenLLVM extends SubComponent {
       val foreignFuns = c.methods.filter(_.symbol.hasAnnotation(ForeignAnnotSym)).flatMap(genForeignFun)
       val foreignVals = c.methods.filter(_.symbol.hasAnnotation(ForeignValueAnnotSym)).flatMap(genForeignVal)
       c.methods.filter(_.native).map(_.symbol).foreach(externFun)
+      val exportedFunctions = c.methods.filter(_.symbol.hasAnnotation(ForeignExportAnnotSym)).flatMap(exportFunction)
       val externDecls = externFuns.filterKeys(!internalFuns.contains(_)).values.map(_.declare)++externClasses.values.map(_.declare)++externStatics.values.map(_.declare)
       val otherModules = externModules.filterKeys(_.moduleClass!=c.symbol)
-      val exportedFunctions = c.methods.filter(_.symbol.hasAnnotation(ForeignExportAnnotSym)).flatMap(exportFunction)
       val module = new Module(Seq.concat(
         Seq(header_comment),
         externTypes.values.map {
