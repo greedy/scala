@@ -30,7 +30,7 @@ class Ptr[T] private[ffi] (private[ffi] val address: CIntPtr) {
   def poke(x: T)(implicit st: Storable[T]): Unit = st.poke(this, x)
   def peekElemOff(n: Int)(implicit st: Storable[T]): T = st.peekElemOff(this, n)
   def pokeElemOff(n: Int, x: T)(implicit st: Storable[T]): Unit = st.pokeElemOff(this, n, x)
-  def peekByteOff[S:Storable](n: Int) = implicitly[Storable[S]].peekByteOff(this, n)
-  def pokeByteOff[S:Storable](n: Int, x: S) = implicitly[Storable[S]].pokeByteOff(this, n, x)
+  def peekByteOff[S:Storable](n: Int): S = Storable.peekByteOff(this, n)
+  def pokeByteOff[S:Storable](n: Int, x: S): Unit = Storable.pokeByteOff(this, n, x)
   def isNull = address == 0
 }
