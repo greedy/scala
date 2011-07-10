@@ -257,7 +257,7 @@ abstract class GenLLVM extends SubComponent {
           Seq.empty, Seq.empty, None, None, None)
 
       lazy val rtIfaceCast = new LMFunction(
-        rtIfaceRef, "rt_iface_cast",
+        rtVtable, "rt_iface_cast",
         Seq(
           ArgSpec(new LocalVariable("obj", rtObject.pointer)),
           ArgSpec(new LocalVariable("iface", rtClass.pointer))
@@ -938,11 +938,15 @@ abstract class GenLLVM extends SubComponent {
                 } else {
                   srctk.toType.typeSymbol.info.baseClasses.filter(_.isTrait).indexOf(targettk.toType.typeSymbol) match {
                     case -1 => {
-                      val iface = nextvar(rtIfaceRef)
+                      val iface0 = nextvar(rtIfaceRef)
+                      val vtbl = nextvar(rtVtable)
+                      val iface1 = nextvar(rtIfaceRef)
                       val obj = nextvar(rtObject.pointer)
                       _insns.append(new bitcast(obj, src))
-                      _insns.append(new call(iface, rtIfaceCast, Seq(obj, externClassP(targettk.toType.typeSymbol))))
-                      iface
+                      _insns.append(new insertvalue(iface0, new CUndef(rtIfaceRef), obj, Seq[LMConstant[LMInt]](0)))
+                      _insns.append(new call(vtbl, rtIfaceCast, Seq(obj, externClassP(targettk.toType.typeSymbol))))
+                      _insns.append(new insertvalue(iface1, iface0, vtbl, Seq[LMConstant[LMInt]](1)))
+                      iface1
                     }
                     case tgtidx => {
                       val vtbl = nextvar(rtVtable)
