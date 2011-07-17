@@ -1,6 +1,12 @@
 Instructions
 ------------
 
+1. Run autoreconf
+2. Run ./configure
+3. Build scala with ant
+4. Enter docs/examples/llvm
+5. Run make run-sample
+
 There's an example in docs/examples/llvm/ that can be compiled and run by
 running 'make run-sample' in that directory. For comparison, you can run
 'make run-sample-jvm' to compile and run for the JVM.

@@ -34,5 +34,6 @@ CHECK_ALIGNMENT([int64_t])
 CHECK_ALIGNMENT([float])
 CHECK_ALIGNMENT([double])
 
+AC_CONFIG_SUBDIRS([src/llvmrt])
 AC_CONFIG_FILES([src/llvm-ffi/scala/ffi/ctypes.scala])
 AC_OUTPUT

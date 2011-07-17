@@ -3,38 +3,43 @@ FFISOURCES=@ffi.sources
 
 run-sample:
 	make -C ../../../src/llvmrt llvmrt.a runscala
-	make clean
-	make code.bc; make code.bc
-	../../../src/llvmrt/runscala code.bc example
+	rm -rf irfiles/example irfiles/example.stamp
+	rm -rf bin/example.bc bin/example.aot
+	make irfiles/example.stamp bin/example.bc bin/example.aot
+	../../../src/llvmrt/runscala bin/example.bc example
+	./bin/example.aot
 
 run-sample-jvm:
 	make classes
 	../../../build/quick/bin/scala -cp classes example
 
-code.bc: irfiles.stamp $(patsubst %.ll,%.bc,$(wildcard irfiles/*.ll))
-	llvm-ld -o $@ -r -disable-internalize irfiles/*.bc ../../../src/llvmrt/llvmrt.a
+irfiles/%.stamp irfiles/%/*.ll: %.scala runtime.scala
+	mkdir -p irfiles/$*
+	JAVA_OPTS=-Xmx500M ../../../build/quick/bin/scalac -no-specialization -d irfiles/$* -target:llvm $*.scala runtime.scala @base.sources $(FFISOURCES) # $(SOURCES)
+	touch irfiles/$*.stamp
 
-irfiles.stamp irfiles/*.ll: example.scala runtime.scala
-	mkdir -p irfiles
-	JAVA_OPTS=-Xmx2500M ../../../build/quick/bin/scalac -no-specialization -d irfiles -target:llvm example.scala runtime.scala apr.scala $(FFISOURCES) @base.sources # $(SOURCES)
-	touch irfiles.stamp
+bin/%.bc: irfiles/%.stamp
+	mkdir -p `dirname $@`
+	for x in irfiles/$*/*.ll ; do \
+	  llvm-as $$x; \
+	done
+	llvm-ld -o $@ -r -disable-internalize irfiles/$*/*.bc ../../../src/llvmrt/llvmrt.a
+
+bin/%.aot: bin/%.bc
+	../../../src/llvmrt/linkscala $< `basename $*`
+	llvm-ld -v -native -o $@ b.out.bc ../../../src/llvmrt/llvmrt.a -lapr-1 -L/usr/lib64 `icu-config --ldflags-libsonly ` ../../../src/llvmrt/unwind.o
+	rm -f b.out.bc
 
 classes: example.scala
 	mkdir -p classes
 	../../../build/quick/bin/scalac -d classes example.scala
 
-%.bc: %.ll
-	llvm-as $<
-
-%.ll: %.bc
-	llvm-dis $<
-
 a.out.ll: a.out.bc
 	llvm-dis $<
+
+%.bc: %.ll
+	llvm-as -o $@ $<
 
 force:
 	touch example.scala
 	$(MAKE) a.out
-
-clean:
-	rm -rf irfiles code.bc irfiles.stamp
