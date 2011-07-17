@@ -5,7 +5,7 @@ object alloc {
   @foreign("malloc") private def _malloc(n: CSizeT): CIntPtr = x
   @foreign("free") private def _free(p: CIntPtr): Unit = x
   def malloc[T:Storable]: Ptr[T] = { mallocBytes(Storable.get[Ptr[T]].size) }
-  def mallocBytes[T](n: Int): Ptr[T] = Ptr.wrap(_malloc(n.toLong))
+  def mallocBytes[T](n: CSizeT): Ptr[T] = Ptr.wrap(_malloc(n))
   def free(p: Ptr[_]) = _free(Ptr.unwrap(p))
   def alloca[A:Storable,B](f: Ptr[A] => B): B = {
     val ptr: Ptr[A] = malloc
