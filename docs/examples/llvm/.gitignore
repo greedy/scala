@@ -1,3 +1,4 @@
-irfiles*
-classes*
-code.bc
+/irfiles/
+/classes/
+/bin/
+*.bc
