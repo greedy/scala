@@ -367,6 +367,15 @@ abstract class GenLLVM extends SubComponent {
         Externally_visible, Default, Ccc,
         Seq.empty, Seq.empty, None, None, None)
 
+      lazy val rtAssertArrayBounds = new LMFunction(
+        LMVoid, "rt_assertArrayBounds",
+        Seq(
+          ArgSpec(new LocalVariable("a", rtObject.pointer)),
+          ArgSpec(new LocalVariable("i", LMInt.i32))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
       lazy val rtTypes = Seq(
         definitions.BoxedBooleanClass,
         definitions.BoxedByteClass,
@@ -428,6 +437,7 @@ abstract class GenLLVM extends SubComponent {
         unwindResume.declare,
         unwindRaiseException.declare,
         createOurException.declare,
+        rtAssertArrayBounds.declare,
         rtAssertNotNull.declare
       )
     }
@@ -1120,6 +1130,8 @@ abstract class GenLLVM extends SubComponent {
                 val item = nextvar(typeKindType(kind))
                 insns.append(new bitcast(asobj, array))
                 insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
+                insns.append(new invoke_void(rtAssertArrayBounds, Seq(asobj, index),
+                                             pass, blockExSelLabel(bb,-2)))
                 insns.append(new bitcast(asarray, array))
                 insns.append(new getelementptr(itemptr, asarray.asInstanceOf[LMValue[LMPointer]],
                   Seq(LMConstant.intconst(0), LMConstant.intconst(2), index.asInstanceOf[LMValue[LMInt]])))
