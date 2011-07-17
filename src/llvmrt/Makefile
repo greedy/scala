@@ -18,10 +18,10 @@ llvmrt_native.a: $(patsubst %.bc,%.o,$(RTOBJECTS))
 	ar cr $@ $^
 
 runscala: runscala.o wrapper.o unwind.o
-	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+	$(CXX) -Wl,--no-as-needed $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 linkscala: linkscala.o wrapper.o
-	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+	$(CXX) -Wl,--no-as-needed $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 clean:
 	rm -f *.o *.bc llvmrt.a runscala
