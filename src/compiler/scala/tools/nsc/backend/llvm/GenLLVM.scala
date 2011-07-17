@@ -1771,7 +1771,20 @@ abstract class GenLLVM extends SubComponent {
         fun.define(blocks)
       }
 
-      val name = llvmName(c.symbol)
+      val sym = if(c.symbol.hasModuleFlag) c.symbol.sourceModule
+                else c.symbol
+
+      currentRun.symData.get(sym) match {
+        case Some(p) =>
+          val symOut = getFile(c.symbol, ".sym").bufferedOutput
+          symOut.write(p.bytes.take(p.writeIndex))
+          symOut.close
+        case None =>
+          printf("MISSING pickle for %s(%x)\n", c.symbol, c.symbol.flags)
+          printf("  MISSING owner is %s (%s)\n",
+                 c.symbol.owner, currentRun.symData.isDefinedAt(c.symbol.owner))
+      }
+
       val outfile = getFile(c.symbol, ".ll")
       val outstream = new OutputStreamWriter(outfile.bufferedOutput,"US-ASCII")
       val header_comment = new Comment("Module for " + c.symbol.fullName('.'))
