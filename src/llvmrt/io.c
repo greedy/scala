@@ -11,28 +11,28 @@ struct java_lang_Object;
 
 void
 method__Ojava_Dlang_DStandardError_Mwrite_Ascala_DInt_Rscala_DUnit(
-    struct java_lang_Object *self, int32_t b)
+    struct reference self, int32_t b)
 {
   fputc(b, stderr);
 }
 
 void
 method__Ojava_Dlang_DStandardError_Mflush_Rscala_DUnit(
-    struct java_lang_Object *self)
+    struct reference self)
 {
   fflush(stderr);
 }
 
 void
 method__Ojava_Dlang_DStandardOut_Mwrite_Ascala_DInt_Rscala_DUnit(
-    struct java_lang_Object *self, int32_t b)
+    struct reference self, int32_t b)
 {
   fputc(b, stdout);
 }
 
 void
 method__Ojava_Dlang_DStandardOut_Mflush_Rscala_DUnit(
-    struct java_lang_Object *self)
+    struct reference self)
 {
   fflush(stdout);
 }
@@ -54,15 +54,16 @@ UFILE* ustdout() {
 }
 
 void
-method__Ojava_Dlang_DSystem_MdebugString_Ajava_Dlang_DString_Rscala_DUnit(struct java_lang_Object *self, struct java_lang_String *s)
+method__Ojava_Dlang_DSystem_MdebugString_Ajava_Dlang_DString_Rscala_DUnit(struct reference self, struct reference sref)
 {
+  struct java_lang_String *s = (struct java_lang_String*)sref.object;
   u_file_write(s->s, s->len, ustderr());
 }
 
 void
-method__Ojava_Dlang_DSystem_MdebugPointer_Ajava_Dlang_DObject_Rscala_DUnit(struct java_lang_Object *self, struct java_lang_Object *arg)
+method__Ojava_Dlang_DSystem_MdebugPointer_Ajava_Dlang_DObject_Rscala_DUnit(struct reference self, struct reference arg)
 {
-  fprintf(stderr, "%p\n", arg);
+  fprintf(stderr, "%p\n", arg.object);
 }
 
 void

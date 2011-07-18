@@ -24,54 +24,55 @@ struct klass class_java_Dlang_DObject = {
 
 int32_t
 method_java_Dlang_DObject_MhashCode_Rscala_DInt(
-    struct java_lang_Object *this)
+    struct reference thisref)
 {
+  struct java_lang_Object *this = thisref.object;
   return (int32_t)(((intptr_t)this)/sizeof(struct java_lang_Object));
 }
 
 bool
 method_java_Dlang_DObject_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(
-    struct java_lang_Object *this,
-    struct java_lang_Object *other)
+    struct reference thisref,
+    struct reference otherref)
 {
-  return this == other;
+  return thisref.object == otherref.object;
 }
 
-struct java_lang_Object*
+struct reference
 method_java_Dlang_DObject_Mclone_Rjava_Dlang_DObject(
-    struct java_lang_Object *this)
+    struct reference thisref)
 {
-  return NULL;
+  return (struct reference){NULL,NULL};
 }
 
 U_STRING_DECL(s_at, "@", 1);
 static bool s_at_initted = false;
 
-struct java_lang_String*
+struct reference
 method_java_Dlang_DObject_MtoString_Rjava_Dlang_DString(
-    struct java_lang_Object *this)
+    struct reference this)
 {
   struct stringlist *sl = NULL;
-  rt_string_append_string(&sl, (struct java_lang_Object*)rt_makestring(&this->klass->name));
+  rt_string_append_string(&sl, (struct java_lang_Object*)rt_makestring(&this.object->klass->name));
   if (!s_at_initted) {
     U_STRING_INIT(s_at, "@", 1);
     s_at_initted = true;
   }
   rt_string_append_ustring(&sl, 1, s_at);
-  rt_string_append_Long(&sl, (uint64_t)this);
-  return rt_stringconcat(&sl);
+  rt_string_append_Long(&sl, (uint64_t)this.object);
+  return makeref((struct java_lang_Object*)rt_stringconcat(&sl));
 }
 
 void
 method_java_Dlang_DObject_Mfinalize_Rscala_DUnit(
-    struct java_lang_Object *this)
+    struct reference this)
 {
   return;
 }
 
 void
 method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject(
-    struct java_lang_Object *this)
+    struct reference this)
 {
   return;
 }
@@ -91,19 +92,19 @@ struct java_lang_Class {
   struct klass *theklass;
 };
 
-struct java_lang_Class *
-method_java_Dlang_DClass_Mclone_Rjava_Dlang_DObject(struct java_lang_Class *self)
+struct reference
+method_java_Dlang_DClass_Mclone_Rjava_Dlang_DObject(struct reference selfref)
 {
-  return self;
+  return selfref;
 }
 
 bool
 method_java_Dlang_DClass_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(
-    struct java_lang_Class *self, 
-    struct java_lang_Object *other)
+    struct reference selfref, 
+    struct reference otherref)
 {
-  if (self->super.klass == other->klass) {
-    return self->theklass == ((struct java_lang_Class*)other)->theklass;
+  if (selfref.object->klass == otherref.object->klass) {
+    return ((struct java_lang_Class*)selfref.object)->theklass == ((struct java_lang_Class*)otherref.object)->theklass;
   } else {
     return false;
   }
@@ -111,38 +112,39 @@ method_java_Dlang_DClass_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(
 
 int32_t
 method_java_Dlang_DClass_MhashCode_Rscala_DInt(
-    struct java_lang_Class *self)
+    struct reference selfref)
 {
+  struct java_lang_Class *self = (struct java_lang_Class*)selfref.object;
   return (int32_t)(self->theklass);
 }
 
-struct java_lang_String *
-method_java_Dlang_DClass_MtoString_Rjava_Dlang_DString(
-    struct java_lang_Class *self)
+struct reference
+method_java_Dlang_DClass_MgetName_Rjava_Dlang_DString(struct reference selfref)
 {
-  return rt_makestring(&self->theklass->name);
+  return makeref((struct java_lang_Object*)rt_makestring(&((struct java_lang_Class*)selfref.object)->theklass->name));
+}
+
+struct reference
+method_java_Dlang_DClass_MtoString_Rjava_Dlang_DString(
+    struct reference selfref)
+{
+  return method_java_Dlang_DClass_MgetName_Rjava_Dlang_DString(selfref);
 }
 
 /* TODO - cache in klass struct */
-struct java_lang_Class *
+extern struct java_lang_Class *
 rt_classobject(struct klass* klass)
 {
   struct java_lang_Class *klassobj = (struct java_lang_Class*)rt_new(&class_java_Dlang_DClass);
-  method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject((struct java_lang_Object*)klassobj);
+  method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject(makeref((struct java_lang_Object*)klassobj));
   klassobj->theklass = klass;
   return klassobj;
 }
 
-struct java_lang_Class *
-method_java_Dlang_DObject_MgetClass_Rjava_Dlang_DClass(struct java_lang_Object *self)
+struct reference
+method_java_Dlang_DObject_MgetClass_Rjava_Dlang_DClass(struct reference selfref)
 {
-  return rt_classobject(self->klass);
-}
-
-struct java_lang_String *
-method_java_Dlang_DClass_MgetName_Rjava_Dlang_DString(struct java_lang_Class *self)
-{
-  return method_java_Dlang_DClass_MtoString_Rjava_Dlang_DString(self);
+  return makeref((struct java_lang_Object*)rt_classobject(selfref.object->klass));
 }
 
 static void *vtable_java_lang_Class[] = {

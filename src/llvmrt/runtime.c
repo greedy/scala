@@ -9,6 +9,11 @@
 
 extern int32_t _Unwind_RaiseException(void*);
 
+struct reference rt_makeref(struct java_lang_Object *obj)
+{
+  return makeref(obj);
+}
+
 static void printclassname(FILE* f, struct klass *klass)
 {
   fprintf(f, "%*s", klass->name.len, klass->name.bytes);
@@ -93,16 +98,17 @@ extern struct klass class_java_Dlang_DNullPointerException;
 
 extern void
 method_java_Dlang_DNullPointerException_M_Linit_G_Rjava_Dlang_DNullPointerException(
-    struct java_lang_Object *);
+    struct reference);
 
 void rt_assertNotNull(struct java_lang_Object *object)
 {
   if (object == NULL) {
     struct java_lang_Object *exception = rt_new(&class_java_Dlang_DNullPointerException);
     void *uwx;
-    method_java_Dlang_DNullPointerException_M_Linit_G_Rjava_Dlang_DNullPointerException(exception);
+    method_java_Dlang_DNullPointerException_M_Linit_G_Rjava_Dlang_DNullPointerException(makeref(exception));
     uwx = createOurException(exception);
     _Unwind_RaiseException(uwx);
+    __builtin_unreachable();
   }
 }
 
@@ -114,12 +120,12 @@ void rt_printexception(struct java_lang_Object *object)
 void *rt_argvtoarray(int argc, char **argv)
 {
   struct array *ret = new_array(OBJECT, &class_java_Dlang_DString, 1, argc);
-  struct java_lang_String** elements = (struct java_lang_String**)(&(ret->data[0]));
+  struct reference* elements = (struct reference*)(&(ret->data[0]));
   struct utf8str temp;
   for (int i = 0; i < argc; i++) {
     temp.len = strlen(argv[i]);
     temp.bytes = argv[i];
-    elements[i] = rt_makestring(&temp);
+    elements[i] = makeref((struct java_lang_Object*)rt_makestring(&temp));
   }
   return (void*)ret;
 }

@@ -6,10 +6,10 @@
 
 #define DECLARE_BOX(p,c)                              \
   struct java_lang_ ## c;                             \
-  extern struct java_lang_ ## c *                     \
+  extern struct java_lang_Object*                     \
     rt_box_ ## c (p v);                               \
   extern p                                            \
-    rt_unbox_ ## c (struct java_lang_ ## c *v)
+    rt_unbox_ ## c (struct java_lang_Object *v)
 
 DECLARE_BOX(bool, Boolean);
 DECLARE_BOX(int8_t, Byte);

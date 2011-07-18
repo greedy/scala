@@ -9,7 +9,9 @@ LDLIBS = `icu-config --ldflags-libsonly --ldflags-icuio` `llvm-config --libs $(C
 RTOBJECTS = runtime.bc object.bc boxes.bc arrays.bc strings.bc fp.bc io.bc
 
 %.bc: %.c
-	clang -std=c99 `icu-config --cppflags` -O4 -emit-llvm -c -o $@ $^
+	clang -std=c99 `icu-config --cppflags` -O4 -emit-llvm -c -o $*.sret.bc $^
+	opt -sretpromotion -o $@ $*.sret.bc
+	rm -f $*.sret.bc
 
 llvmrt.a: $(RTOBJECTS)
 	llvm-ar cr $@ $^

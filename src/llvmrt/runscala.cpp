@@ -50,14 +50,13 @@ static void do_shutdown() {
   llvm_shutdown();
 }
 
-extern void* createOurException;
 extern void* getExceptionObject;
 extern void* scalaPersonality;
 
 static void *makeFuns(const std::string &name)
 {
   if (name == "createOurException") {
-    return createOurException;
+    return (void*)createOurException;
   } else if (name == "getExceptionObject") {
     return getExceptionObject;
   } else if (name == "scalaPersonality") {

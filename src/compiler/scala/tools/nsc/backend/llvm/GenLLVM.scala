@@ -40,6 +40,8 @@ abstract class GenLLVM extends SubComponent {
 
   class ModuleGenerator {
 
+    type InstBuffer = mutable.ListBuffer[LMInstruction]
+
     val LlvmimplAnnotSym = definitions.getClass("scala.llvmimpl")
     val LlvmdefsAnnotSym = definitions.getClass("scala.llvmdefs")
     val ForeignAnnotSym = definitions.getClass("scala.ffi.foreign")
@@ -96,11 +98,11 @@ abstract class GenLLVM extends SubComponent {
     object Runtime {
       /* Types */
 
-      lazy val rtIfaceRef: LMStructure with AliasedType =
+      lazy val rtReference: LMStructure with AliasedType =
         new LMStructure(Seq(
           rtObject.pointer,
           rtVtable
-        )).aliased(".ifaceref")
+        )).aliased(".reference")
 
       lazy val rtVtable = LMInt.i8.pointer.pointer.aliased(".vtable")
 
@@ -157,7 +159,7 @@ abstract class GenLLVM extends SubComponent {
 
       lazy val rtNewArray =
         new LMFunction(
-          symType(definitions.ArrayClass), "new_array",
+          rtObject.pointer, "new_array",
           Seq(
             new LocalVariable("kind", LMInt.i8),
             new LocalVariable("etype", rtClass.pointer),
@@ -207,7 +209,7 @@ abstract class GenLLVM extends SubComponent {
         Seq.empty, Seq.empty, None, None, None)
 
       def boxfn(c: Symbol, lt: ConcreteType) = new LMFunction(
-        symType(c), "rt_box_"+c.simpleName,
+        rtObject.pointer, "rt_box_"+c.simpleName,
         Seq(
           ArgSpec(new LocalVariable("v", lt))
         ), false,
@@ -216,7 +218,7 @@ abstract class GenLLVM extends SubComponent {
       def unboxfn(c: Symbol, lt: ConcreteType) = new LMFunction(
         lt, "rt_unbox_"+c.simpleName,
         Seq(
-          ArgSpec(new LocalVariable("v", symType(c)))
+          ArgSpec(new LocalVariable("v", rtObject.pointer))
         ), false,
         Externally_visible, Default, Ccc,
         Seq.empty, Seq.empty, None, None, None)
@@ -238,9 +240,18 @@ abstract class GenLLVM extends SubComponent {
       lazy val rtUnboxDouble = unboxfn(definitions.BoxedDoubleClass, LMDouble)
       lazy val rtUnboxChar = unboxfn(definitions.BoxedCharacterClass, LMInt.i32)
 
+      lazy val rtMakeref =
+        new LMFunction(
+          rtReference, "rt_makeref",
+          Seq(
+            ArgSpec(new LocalVariable("obj", rtObject.pointer))
+          ), false,
+          Externally_visible, Default, Ccc,
+          Seq.empty, Seq.empty, None, None, None)
+
       lazy val rtMakeString =
         new LMFunction(
-          symType(definitions.StringClass), "rt_makestring",
+          rtObject.pointer, "rt_makestring",
           Seq(
             ArgSpec(new LocalVariable("s", new LMStructure(Seq(LMInt.i32, LMInt.i8.pointer)).pointer))
           ), false,
@@ -249,7 +260,7 @@ abstract class GenLLVM extends SubComponent {
 
       lazy val rtStringConcat =
         new LMFunction(
-          symType(definitions.StringClass), "rt_stringconcat",
+          rtObject.pointer, "rt_stringconcat",
           Seq(
             ArgSpec(new LocalVariable("b", LMInt.i8.pointer.pointer))
           ), false,
@@ -295,7 +306,11 @@ abstract class GenLLVM extends SubComponent {
       /* Constants */
 
       lazy val rtBoxedUnit = new LMGlobalVariable(
-        ".rt.boxedUnit", symType(definitions.BoxedUnitClass).asInstanceOf[LMPointer].target,
+        ".rt.boxedUnit", classType(definitions.BoxedUnitClass),
+        Externally_visible, Default, true)
+
+      lazy val rtBoxedUnitVtable = new LMGlobalVariable(
+        ".rt.boxedUnit.vtable", rtVtable,
         Externally_visible, Default, true)
 
       /* Exception Handling */
@@ -384,7 +399,7 @@ abstract class GenLLVM extends SubComponent {
         new TypeAlias(rtVtable),
         new TypeAlias(rtClass),
         new TypeAlias(rtIfaceInfo),
-        new TypeAlias(rtIfaceRef),
+        new TypeAlias(rtReference),
         scalaPersonality.declare,
         rtNew.declare,
         rtInitobj.declare,
@@ -406,6 +421,7 @@ abstract class GenLLVM extends SubComponent {
         rtUnboxFloat.declare,
         rtUnboxDouble.declare,
         rtUnboxChar.declare,
+        rtMakeref.declare,
         rtMakeString.declare,
         rtAppendBool.declare,
         rtAppendByte.declare,
@@ -422,6 +438,7 @@ abstract class GenLLVM extends SubComponent {
         rtIsinstanceClass.declare,
         rtIfaceCast.declare,
         rtBoxedUnit.declare,
+        rtBoxedUnitVtable.declare,
         llvmEhException.declare,
         llvmEhSelector.declare,
         rtGetExceptionObject.declare,
@@ -433,8 +450,6 @@ abstract class GenLLVM extends SubComponent {
     }
 
     import Runtime._
-
-    def isMain(c: IClass) = c.symbol.isModuleClass && c.symbol.fullName('.') == settings.Xmainclass.value
 
     def genClass(c: IClass) {
       println("Generating " + c)
@@ -490,7 +505,7 @@ abstract class GenLLVM extends SubComponent {
 
       def constValue(c: Constant): LMConstant[_<:ConcreteType] = {
         c.tag match {
-          case UnitTag => new CGlobalAddress(rtBoxedUnit)
+          case UnitTag => new CStruct(Seq(new Cbitcast(new CGlobalAddress(rtBoxedUnit), rtObject.pointer), new Cbitcast(new CGlobalAddress(rtBoxedUnitVtable), rtVtable)))
           case BooleanTag => c.booleanValue
           case ByteTag => c.byteValue
           case ShortTag => c.shortValue
@@ -500,24 +515,14 @@ abstract class GenLLVM extends SubComponent {
           case FloatTag => c.floatValue
           case DoubleTag => c.doubleValue
           case StringTag => stringConstant(c.stringValue)
-          case ClassTag => new CNull(rtObject.aliased("java_Dlang_DClass").pointer)
+          case ClassTag => new CZeroInit(rtReference)
           case NullTag if c.tpe.typeSymbol.isTrait => new CStruct(Seq(new CNull(rtObject.pointer), new CNull(rtVtable)))
-          case NullTag => new CNull(rtObject.pointer)
+          case NullTag => new CZeroInit(rtReference)
           case _ => {
             warning("Can't handle " + c + " tagged " + c.tag)
             new CUndef(typeType(c.tpe))
           }
         }
-      }
-
-      def generateMain(f: LMFunction) = {
-        val mainfun = new LMFunction(LMInt.i32, "main", Seq(ArgSpec(new LocalVariable("argc", LMInt.i32)), ArgSpec(new LocalVariable("argv", LMInt.i8.pointer.pointer))), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
-        val asobject = new LocalVariable("instance.o", rtObject.pointer)
-        val asinstance = new LocalVariable("instance", symType(c.symbol))
-        mainfun.define(Seq(
-          LMBlock(None, Seq(
-            new call_void(f, Seq(new CGlobalAddress(externModule(c.symbol)))),
-            new ret(new CInt(LMInt.i32, 0))))))
       }
 
       def recordType(t: LMType) {
@@ -547,7 +552,7 @@ abstract class GenLLVM extends SubComponent {
       }
 
       classes.values.foreach(tc => recordType(classType(tc)))
-      rtTypes.foreach(t => recordType(symType(t)))
+      rtTypes.foreach(t => recordType(classType(t)))
 
       def moduleInitFun(s: Symbol) = {
         new LMFunction(LMVoid, "initmodule_"+moduleInstanceName(s), Seq.empty, false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
@@ -557,12 +562,12 @@ abstract class GenLLVM extends SubComponent {
         if (s.isModuleClass)
           externModule(s.companionModule)
         else {
-          recordType(symType(s))
+          recordType(classType(s))
           if (c.symbol == s) {
-              new LMGlobalVariable(moduleInstanceName(s), symType(s).asInstanceOf[LMPointer].target, Externally_visible, Default, false)
+              new LMGlobalVariable(moduleInstanceName(s), classType(s), Externally_visible, Default, false)
           } else {
             externModules.getOrElseUpdate(s, {
-              new LMGlobalVariable(moduleInstanceName(s), symType(s).asInstanceOf[LMPointer].target, Externally_visible, Default, true)
+              new LMGlobalVariable(moduleInstanceName(s), classType(s), Externally_visible, Default, true)
             })
           }
         }
@@ -610,22 +615,29 @@ abstract class GenLLVM extends SubComponent {
         }
       }
 
+      def implementationOf(m: Symbol) = {
+        val typeOrder = Ordering.fromLessThan[Symbol](_.info <:< _.info)
+        val alts = c.symbol.info.members.filter(mem => mem.info <:< m.info && mem.name == m.name)
+        if (alts.isEmpty) throw new Exception("No implementation of " + m + ": " + m.info + " in " + c) else alts.min(typeOrder)
+      }
+
+      val classVtable = {
+        val basevirts = virtualMethods(c.symbol)
+        val virts = basevirts.map(implementationOf _)
+        val vfuns = virts.map(v => if (v.isIncompleteIn(c.symbol)) new CNull(LMInt.i8.pointer) else new CFunctionAddress(externFun(v)))
+        new CArray(LMInt.i8.pointer, vfuns.map(f => new Cbitcast(f, LMInt.i8.pointer)))
+      }
+
+      val classVtableGlobal = {
+        new LMGlobalVariable(".vtable", classVtable.tpe, Private, Default, true)
+      }
+
       val classInfo: Seq[ModuleComp] = {
-        def implementationOf(m: Symbol) = {
-          val typeOrder = Ordering.fromLessThan[Symbol](_.info <:< _.info)
-          val alts = c.symbol.info.members.filter(mem => mem.info <:< m.info && mem.name == m.name)
-          if (alts.isEmpty) throw new Exception("No implementation of " + m + ": " + m.info + " in " + c) else alts.min(typeOrder)
-        }
         val ct = classType(c)
         val supers = Stream.iterate(c.symbol.superClass)(_.superClass).takeWhile(s => s != NoSymbol)
         val traits = c.symbol.info.baseClasses.filter(_.isTrait)
         supers.map(classType).foreach(recordType)
         recordType(ct)
-        val basevirts = virtualMethods(c.symbol)
-        val virts = basevirts.map(implementationOf _)
-        val vfuns = virts.map(v => if (v.isIncompleteIn(c.symbol)) new CNull(LMInt.i8.pointer) else new CFunctionAddress(externFun(v)))
-        val vtable = new CArray(LMInt.i8.pointer, vfuns.map(f => new Cbitcast(f, LMInt.i8.pointer)))
-        val vtableg = new LMGlobalVariable(".vtable", vtable.tpe, Private, Default, true)
         val traitinfo = traits.map { t =>
           val tvirts = virtualMethods(t)
           val tvimpls = tvirts.map(implementationOf _)
@@ -639,7 +651,7 @@ abstract class GenLLVM extends SubComponent {
         val ci = new CStruct(Seq(n,
                                  new Cptrtoint(new Cgetelementptr(new CNull(ct.pointer), Seq[LMConstant[LMInt]](1), ct.pointer), LMInt.i32),
                                  externClassP(c.symbol.superClass),
-                                 new Cgetelementptr(vtableg, Seq[CInt](0,0), rtVtable),
+                                 new Cgetelementptr(classVtableGlobal, Seq[CInt](0,0), rtVtable),
                                  new CNull(rtClass.pointer),
                                  new CNull(rtClass.pointer),
                                  new CInt(LMInt.i32, traitinfo.length),
@@ -652,7 +664,7 @@ abstract class GenLLVM extends SubComponent {
           Seq(
             new TypeAlias(cig.tpe.aliased("thisclass")),
             cig.define(ci),
-            vtableg.define(vtable),
+            classVtableGlobal.define(classVtable),
             statics.define(new CZeroInit(statType))
           ),
           traitinfo.map(ti => ti._1.define(ti._2))
@@ -661,12 +673,10 @@ abstract class GenLLVM extends SubComponent {
 
       val moduleInfo: Seq[ModuleComp] = {
         if (c.symbol.isModuleClass && c.symbol.isStatic && !c.symbol.isImplClass) {
-          val ig = new LMGlobalVariable(moduleInstanceName(c.symbol), symType(c.symbol).asInstanceOf[LMPointer].target, Externally_visible, Default, false)
+          val ig = new LMGlobalVariable(moduleInstanceName(c.symbol), classType(c.symbol), Externally_visible, Default, false)
           val initStarted = new LMGlobalVariable("init_started", LMInt.i1, Internal, Default, false)
           val initFinished = new LMGlobalVariable("init_finished", LMInt.i1, Internal, Default, false)
           val initFun = moduleInitFun(c.symbol)
-          val asinstance = new LocalVariable("instance", symType(c.symbol).asInstanceOf[LMPointer])
-          val asvalue = new LocalVariable("value", symType(c.symbol).asInstanceOf[LMPointer].target)
           val initStartedv = new LocalVariable("init_started_v", LMInt.i1)
           val initFinishedv = new LocalVariable("init_finished_v", LMInt.i1)
           val initFundef = initFun.define(Seq(
@@ -683,7 +693,7 @@ abstract class GenLLVM extends SubComponent {
             LMBlock(Some(Label("not_started")), Seq(
               new store(LMConstant.boolconst(true), new CGlobalAddress(initStarted)),
               new call_void(rtInitobj, Seq(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), externClassP(c.symbol))),
-              new call_void(externFun(c.lookupMethod("<init>").get.symbol), Seq(new CGlobalAddress(ig))),
+              new call_void(externFun(c.lookupMethod("<init>").get.symbol), Seq(new CStruct(Seq(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), new Cgetelementptr(classVtableGlobal, Seq[CInt](0,0), rtVtable))))),
               new store(LMConstant.boolconst(true), new CGlobalAddress(initFinished)),
               retvoid
             ))))
@@ -708,9 +718,10 @@ abstract class GenLLVM extends SubComponent {
             case TypeRef(_, PtrSym, _) => {
               val resultVar = new LocalVariable(".asptr."+local.name, marshalledType(tpe).asInstanceOf[LMPointer])
               val addressVal = new LocalVariable(".addr."+local.name, typeType(Ptr_address.info.resultType).asInstanceOf[LMInt])
+              /* XXX - cheating */
               (resultVar, Seq(
                 new call(addressVal, externFun(Ptr_unwrap),
-                  Seq(new CGlobalAddress(externModule(PtrObjSym)), local)),
+                  Seq(new CZeroInit(rtReference), local)),
                 new inttoptr(resultVar, addressVal)
               ))
             }
@@ -724,12 +735,13 @@ abstract class GenLLVM extends SubComponent {
           case REFERENCE(_) => tpe match {
             case TypeRef(_, PtrSym, _) => {
               val ptrasint = new LocalVariable(".ptrasint."+local.name, typeType(Ptr_address.info.resultType).asInstanceOf[LMInt])
-              val ptrObj = new LocalVariable(".ptrobj."+local.name, classType(PtrSym).pointer)
+              val ptrObj = new LocalVariable(".ptrobj."+local.name, rtReference)
               (ptrObj, Seq(
                 new ptrtoint(ptrasint, local.asInstanceOf[LMValue[LMPointer]]),
                 new call_void(moduleInitFun(PtrObjSym), Seq.empty),
+                /* XXX cheating */
                 new call(ptrObj, externFun(Ptr_wrap),
-                  Seq(new CGlobalAddress(externModule(PtrObjSym)), ptrasint))
+                  Seq(new CZeroInit(rtReference), ptrasint))
               ))
             }
           }
@@ -756,7 +768,8 @@ abstract class GenLLVM extends SubComponent {
                 Externally_visible, Default, Ccc,
                 Seq.empty, Seq.empty, None, None, None)
               val methodFun = functionForMethod(m)._1
-              val modGlobal = new CGlobalAddress(externModule(m.symbol.enclClass))
+              /* XXX fixme */
+              val modGlobal = new CStruct(Seq(new Cbitcast(new CGlobalAddress(externModule(m.symbol.enclClass)), rtObject.pointer), new CNull(rtVtable)))
               val (marshalledArgs,argMarshalling) =
                 args.zip(m.params.map(_.sym.info)).map((marshallFromNative _).tupled).unzip
               val body = if (m.returnType == UNIT) {
@@ -856,9 +869,6 @@ abstract class GenLLVM extends SubComponent {
         val fun = functionForMethod(m)._1
         recordType(fun.tpe)
         fun.args.map(_.lmvar.tpe).foreach(recordType)
-        if (isMain(c) && m.params.isEmpty && m.symbol.simpleName.toString().trim() == "main" && fun.resultType == LMVoid) {
-          extraDefs += generateMain(fun)
-        }
         val body = m.symbol.getAnnotation(LlvmimplAnnotSym) match {
           case Some(AnnotationInfo(_,List(Literal(Constant(s: String))),_)) => s
           case Some(x) => error("Invalid llvmimpl annotation"); ""
@@ -868,13 +878,10 @@ abstract class GenLLVM extends SubComponent {
       }
       def genFun(m: IMethod) = {
         internalFuns += m.symbol
-        val thisCell = new LocalVariable("__this", rtObject.pointer.pointer)
+        val thisCell = new LocalVariable("__this", rtReference.pointer)
         val (fun,args) = functionForMethod(m)
         recordType(fun.tpe)
         fun.args.map(_.lmvar.tpe).foreach(recordType)
-        if (isMain(c) && m.params.isEmpty && m.symbol.simpleName.toString().trim() == "main" && fun.resultType == LMVoid) {
-          extraDefs += generateMain(fun)
-        }
         val blocks: mutable.ListBuffer[LMBlock] = new mutable.ListBuffer
         val unreachableBlock = Label("_unreachable_")
         blocks.append(new LMBlock(Some(unreachableBlock), Seq(unreachable)))
@@ -920,67 +927,80 @@ abstract class GenLLVM extends SubComponent {
           def popn(n: Int) {
             for (_ <- 0 until n) stack.pop
           }
-          implicit val insns: mutable.ListBuffer[LMInstruction] = new mutable.ListBuffer
+          implicit val insns: InstBuffer = new mutable.ListBuffer
           val pass = Label("__PASS__")
           val excpreds = bb.code.blocks.filter(pb => pb.exceptionSuccessors.contains(bb))
           val dirpreds = bb.code.blocks.filter(_.directSuccessors contains bb)
           val preds = (excpreds ++ dirpreds).filter(reachable)
           insns.append(new icomment("predecessors: "+preds.map(_.fullString).mkString(",")+" successors: "+bb.successors.map(_.fullString).mkString(" ")))
-          def cast(src: LMValue[_<:ConcreteType], srctk: TypeKind, targettk: TypeKind)(implicit _insns: mutable.ListBuffer[LMInstruction]): LMValue[_<:ConcreteType] = {
+          def loadobjvtbl(src: LMValue[SomeConcreteType])(implicit _insns: InstBuffer): LMValue[SomeConcreteType] = {
+            val asobj = nextvar(rtObject.pointer)
+            val clsa = nextvar(rtClass.pointer.pointer)
+            val cls = nextvar(rtClass.pointer)
+            val vtbla = nextvar(rtVtable.pointer)
+            val vtbl = nextvar(rtVtable)
+            _insns.append(new bitcast(asobj, src))
+            _insns.append(new getelementptr(clsa, asobj, Seq[CInt](0,0)))
+            _insns.append(new load(cls, clsa))
+            _insns.append(new getelementptr(vtbla, cls, Seq[CInt](0,3)))
+            _insns.append(new load(vtbl, vtbla))
+            vtbl
+          }
+          def getptrref(src: LMValue[SomeConcreteType])(implicit _insns: InstBuffer): LMValue[SomeConcreteType] = {
+            val ref = nextvar(rtReference)
+            val asobj = nextvar(rtObject.pointer)
+            _insns.append(new bitcast(asobj, src))
+            _insns.append(new call(ref, rtMakeref, Seq(asobj)))
+            ref
+          }
+          def getrefptr(src: LMValue[SomeConcreteType])(implicit _insns: InstBuffer): LMValue[LMPointer] = {
+            val obj = nextvar(rtObject.pointer)
+            _insns.append(new extractvalue(obj, src.asInstanceOf[LMValue[rtReference.type]], Seq[CInt](0)))
+            obj.asInstanceOf[LMValue[LMPointer]]
+          }
+          def getrefvtbl(src: LMValue[SomeConcreteType])(implicit _insns: InstBuffer): LMValue[LMPointer] = {
+            val vtbl = nextvar(rtVtable)
+            _insns.append(new extractvalue(vtbl, src.asInstanceOf[LMValue[rtReference.type]], Seq[CInt](1)))
+            vtbl.asInstanceOf[LMValue[LMPointer]]
+          }
+          def cast(src: LMValue[_<:ConcreteType], srctk: TypeKind, targettk: TypeKind)(implicit _insns: InstBuffer): LMValue[_<:ConcreteType] = {
             _insns.append(new icomment("cast "+src.rep+" from "+srctk+" to "+targettk))
             if (srctk == targettk) {
               src
             } else if (srctk.isRefOrArrayType && targettk.isRefOrArrayType) {
               recordType(typeKindType(targettk))
+              val obj = getrefptr(src)(_insns)
               if (targettk.isInterfaceType) {
-                if (srctk.isInterfaceType) {
-                  cast(cast(src, srctk, ObjectReference)(_insns), ObjectReference, targettk)(_insns)
-                } else {
-                  srctk.toType.typeSymbol.info.baseClasses.filter(_.isTrait).indexOf(targettk.toType.typeSymbol) match {
-                    case -1 => {
-                      val iface0 = nextvar(rtIfaceRef)
-                      val vtbl = nextvar(rtVtable)
-                      val iface1 = nextvar(rtIfaceRef)
-                      val obj = nextvar(rtObject.pointer)
-                      _insns.append(new bitcast(obj, src))
-                      _insns.append(new insertvalue(iface0, new CUndef(rtIfaceRef), obj, Seq[LMConstant[LMInt]](0)))
-                      _insns.append(new call(vtbl, rtIfaceCast, Seq(obj, externClassP(targettk.toType.typeSymbol))))
-                      _insns.append(new insertvalue(iface1, iface0, vtbl, Seq[LMConstant[LMInt]](1)))
-                      iface1
-                    }
-                    case tgtidx => {
-                      val vtbl = nextvar(rtVtable)
-                      val vtblptr = nextvar(rtVtable.pointer)
-                      val clsptrptr = nextvar(rtClass.pointer.pointer)
-                      val clsptr = nextvar(rtClass.pointer)
-                      val asobj = nextvar(rtObject.pointer)
-                      val iref0 = nextvar(rtIfaceRef)
-                      val iref1 = nextvar(rtIfaceRef)
-                      _insns.append(new bitcast(asobj, src))
-                      _insns.append(new getelementptr(clsptrptr, asobj, Seq[LMConstant[LMInt]](0, 0)))
-                      _insns.append(new load(clsptr, clsptrptr))
-                      _insns.append(new getelementptr(vtblptr, clsptr, Seq[LMConstant[LMInt]](0, 7, tgtidx, 1)))
-                      _insns.append(new load(vtbl, vtblptr))
-                      _insns.append(new insertvalue(iref0, new CUndef(rtIfaceRef), asobj, Seq[LMConstant[LMInt]](0)))
-                      _insns.append(new insertvalue(iref1, iref0, vtbl, Seq[LMConstant[LMInt]](1)))
-                      iref1
-                    }
+                srctk.toType.typeSymbol.info.baseClasses.filter(_.isTrait).indexOf(targettk.toType.typeSymbol) match {
+                  case -1 => {
+                    val iface0 = nextvar(rtReference)
+                    val vtbl = nextvar(rtVtable)
+                    val iface1 = nextvar(rtReference)
+                    _insns.append(new insertvalue(iface0, new CUndef(rtReference), obj, Seq[LMConstant[LMInt]](0)))
+                    _insns.append(new call(vtbl, rtIfaceCast, Seq(obj, externClassP(targettk.toType.typeSymbol))))
+                    _insns.append(new insertvalue(iface1, iface0, vtbl, Seq[LMConstant[LMInt]](1)))
+                    iface1
+                  }
+                  case tgtidx => {
+                    val vtbl = nextvar(rtVtable)
+                    val vtblptr = nextvar(rtVtable.pointer)
+                    val clsptrptr = nextvar(rtClass.pointer.pointer)
+                    val clsptr = nextvar(rtClass.pointer)
+                    val iref0 = nextvar(rtReference)
+                    val iref1 = nextvar(rtReference)
+                    _insns.append(new getelementptr(clsptrptr, obj, Seq[LMConstant[LMInt]](0, 0)))
+                    _insns.append(new load(clsptr, clsptrptr))
+                    _insns.append(new getelementptr(vtblptr, clsptr, Seq[LMConstant[LMInt]](0, 7, tgtidx, 1)))
+                    _insns.append(new load(vtbl, vtblptr))
+                    _insns.append(new insertvalue(iref0, new CUndef(rtReference), obj, Seq[LMConstant[LMInt]](0)))
+                    _insns.append(new insertvalue(iref1, iref0, vtbl, Seq[LMConstant[LMInt]](1)))
+                    iref1
                   }
                 }
+              } else if (!targettk.isInterfaceType && !srctk.isInterfaceType) {
+                src
               } else {
-                if (srctk.isInterfaceType) {
-                  if (targettk == ObjectReference) {
-                    val obj = nextvar(rtObject.pointer)
-                    _insns.append(new extractvalue(obj, src.asInstanceOf[LMValue[rtIfaceRef.type]], Seq[CInt](0)))
-                    obj
-                  } else {
-                    cast(cast(src, srctk, ObjectReference)(_insns), ObjectReference, targettk)(_insns)
-                  }
-                } else {
-                  val v = nextvar(typeKindType(targettk))
-                  _insns.append(new bitcast(v, src))
-                  v
-                }
+                getptrref(obj)(_insns)
               }
             } else if (srctk.isValueType && targettk.isValueType) {
               if (srctk.isIntegralType && targettk.isIntegralType) {
@@ -1043,7 +1063,7 @@ abstract class GenLLVM extends SubComponent {
           insns.append(new icomment("direct successors: " + bb.directSuccessors.map(_.fullString).mkString("; ")))
           insns.append(new icomment("exception successors: " + bb.exceptionSuccessors.map(_.fullString).mkString("; ")))
           insns.append(new icomment("indirect exception successors: " + bb.indirectExceptionSuccessors.map(_.fullString).mkString("; ")))
-          val predcasts = new mutable.ListBuffer[LMInstruction]
+          val predcasts = new InstBuffer
           //println("Entering " + blockName(bb))
           //println("My consumed types are:\n"+consumedTypes.zipWithIndex.map(x => x._2 + " => " + x._1).mkString("\n"))
           /*
@@ -1067,9 +1087,9 @@ abstract class GenLLVM extends SubComponent {
                 insns.append(new phi(reg, sources))
                 stack.push((reg, tpe))
               } else {
-                val asobj = nextvar(rtObject.pointer)
-                val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,rtObject.pointer)))
-                val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).findIndexOf(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,rtObject.pointer)))
+                val asobj = nextvar(rtReference)
+                val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
+                val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).findIndexOf(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
                 val sources = dirsources ++ excsources
                 insns.append(new phi(asobj, sources))
                 stack.push((cast(asobj, ObjectReference, tpe)(predcasts), tpe))
@@ -1086,10 +1106,10 @@ abstract class GenLLVM extends SubComponent {
             insns.append(new icomment("stack before: "+stack.map{case (v,s) => v.rep + " " + s}.mkString(", ")))
             i match {
               case THIS(clasz) => {
-                val v = nextvar(rtObject.pointer)
+                val v = nextvar(rtReference)
                 val thisTk = if (clasz == definitions.ArrayClass) ARRAY(NothingReference) else REFERENCE(clasz)
                 insns.append(new load(v, thisCell))
-                stack.push((cast(v, ObjectReference, thisTk), thisTk))
+                stack.push((v, thisTk))
               }
               case STORE_THIS(_) => {
                 val (t,tk) = stack.pop
@@ -1105,7 +1125,7 @@ abstract class GenLLVM extends SubComponent {
                     val g = nextconst(value)
                     val v = nextvar(rtMakeString.resultType)
                     insns.append(new call(v, rtMakeString, Seq(new CGlobalAddress(g))))
-                    stack.push((v,toTypeKind(const.tpe)))
+                    stack.push((getptrref(v),toTypeKind(const.tpe)))
                 } else {
                   stack.push((value,toTypeKind(const.tpe)))
                 }
@@ -1115,12 +1135,11 @@ abstract class GenLLVM extends SubComponent {
                 val index = stack.pop._1
                 val array = stack.pop._1
                 val asarray = nextvar(arraylmtype)
-                val asobj = nextvar(rtObject.pointer)
+                val asobj = getrefptr(array)
                 val itemptr = nextvar(typeKindType(kind).pointer)
                 val item = nextvar(typeKindType(kind))
-                insns.append(new bitcast(asobj, array))
                 insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
-                insns.append(new bitcast(asarray, array))
+                insns.append(new bitcast(asarray, asobj))
                 insns.append(new getelementptr(itemptr, asarray.asInstanceOf[LMValue[LMPointer]],
                   Seq(LMConstant.intconst(0), LMConstant.intconst(2), index.asInstanceOf[LMValue[LMInt]])))
                 insns.append(new load(item, itemptr))
@@ -1132,7 +1151,7 @@ abstract class GenLLVM extends SubComponent {
                 stack.push((v, local.kind))
               }
               case LOAD_FIELD(field, isStatic) if (field == definitions.BoxedUnit_UNIT) => {
-                stack.push((new CGlobalAddress(rtBoxedUnit), BoxedUnitReference))
+                stack.push((constValue(Constant(())), BoxedUnitReference))
               }
               case i@LOAD_FIELD(field, false) => {
                 val v = nextvar(symType(field))
@@ -1143,10 +1162,11 @@ abstract class GenLLVM extends SubComponent {
                     assume(fieldidx >= 0)
                     val (ivar,isym) = stack.pop
                     val instance = cast(ivar,isym,toTypeKind(field.owner.tpe))
-                    val asobj = nextvar(rtObject.pointer)
-                    insns.append(new bitcast(asobj, instance))
+                    val asobj = getrefptr(instance)
+                    val instptr = nextvar(classType(field.owner).pointer)
+                    insns.append(new bitcast(instptr, asobj))
                     insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
-                    insns.append(new getelementptr(fieldptr, instance.asInstanceOf[LMValue[LMPointer]], Seq(new CInt(LMInt.i8,0),new CInt(LMInt.i32,fieldidx+1))))
+                    insns.append(new getelementptr(fieldptr, instptr.asInstanceOf[LMValue[LMPointer]], Seq(new CInt(LMInt.i8,0),new CInt(LMInt.i32,fieldidx+1))))
                     insns.append(new load(v, fieldptr))
                     stack.push((v,toTypeKind(field.tpe)))
                   case None =>
@@ -1173,7 +1193,7 @@ abstract class GenLLVM extends SubComponent {
               }
               case LOAD_MODULE(module) => {
                 insns.append(new call_void(moduleInitFun(module), Seq.empty))
-                stack.push((new CGlobalAddress(externModule(module)), REFERENCE(module)))
+                stack.push((getptrref(new Cbitcast(new CGlobalAddress(externModule(module)),rtObject.pointer)), REFERENCE(module)))
               }
               case STORE_ARRAY_ITEM(kind) => {
                 val arraylmtype = arrayType(kind.toType.typeSymbol)
@@ -1182,9 +1202,8 @@ abstract class GenLLVM extends SubComponent {
                 val array = stack.pop._1
                 val asarray = nextvar(arraylmtype)
                 val itemptr = nextvar(typeKindType(kind).pointer)
-                insns.append(new bitcast(asarray, array))
-                val asobj = nextvar(rtObject.pointer)
-                insns.append(new bitcast(asobj, array))
+                val asobj = getrefptr(array)
+                insns.append(new bitcast(asarray, asobj))
                 insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
                 insns.append(new getelementptr(itemptr, asarray.asInstanceOf[LMValue[LMPointer]],
                   Seq(LMConstant.intconst(0), LMConstant.intconst(2), index.asInstanceOf[LMValue[LMInt]])))
@@ -1203,10 +1222,11 @@ abstract class GenLLVM extends SubComponent {
                     val (value,valuesym) = stack.pop
                     val (iv,ik) = stack.pop
                     val instance = cast(iv,ik,toTypeKind(field.owner.tpe))
-                    val asobj = nextvar(rtObject.pointer)
-                    insns.append(new bitcast(asobj, instance))
+                    val instptr = nextvar(classType(field.owner).pointer)
+                    val asobj = getrefptr(iv)
+                    insns.append(new bitcast(instptr, asobj))
                     insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
-                    insns.append(new getelementptr(fieldptr, instance.asInstanceOf[LMValue[LMPointer]], Seq(new CInt(LMInt.i8,0),new CInt(LMInt.i32,fieldidx+1))))
+                    insns.append(new getelementptr(fieldptr, instptr.asInstanceOf[LMValue[LMPointer]], Seq(new CInt(LMInt.i8,0),new CInt(LMInt.i32,fieldidx+1))))
                     insns.append(new store(cast(value, valuesym, toTypeKind(field.tpe)), fieldptr))
                   case None =>
                     error("No field info for "+field.owner+" needed to lookup position of "+field)
@@ -1380,10 +1400,9 @@ abstract class GenLLVM extends SubComponent {
                     val asarray = nextvar(arraylmtype)
                     val lenptr = nextvar(LMInt.i32.pointer)
                     val len = nextvar(LMInt.i32)
-                    val asobj = nextvar(rtObject.pointer)
-                    insns.append(new bitcast(asobj, array))
+                    val asobj = getrefptr(array)
+                    insns.append(new bitcast(asarray, asobj))
                     insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
-                    insns.append(new bitcast(asarray, array))
                     insns.append(new getelementptr(lenptr, asarray.asInstanceOf[LMValue[LMPointer]],
                       Seq(LMConstant.intconst(0), LMConstant.intconst(1))))
                     insns.append(new load(len, lenptr))
@@ -1428,12 +1447,8 @@ abstract class GenLLVM extends SubComponent {
                       }
                     }
                     val asobj = nextvar(rtObject.pointer)
-                    if (vs.isInterfaceType) {
-                      val ifaceinfo = v.asInstanceOf[LMValue[rtIfaceRef.type]]
-                      insns.append(new extractvalue(asobj, ifaceinfo, Seq(LMConstant.intconst(0))))
-                    } else {
-                      insns.append(new bitcast(asobj, v))
-                    }
+                    val ifaceinfo = v.asInstanceOf[LMValue[rtReference.type]]
+                    insns.append(new extractvalue(asobj, ifaceinfo, Seq(LMConstant.intconst(0))))
                     insns.append(new invoke_void(rtAppendString, Seq(s, asobj), pass, blockExSelLabel(bb,-2)))
                   }
                   case EndConcat => {
@@ -1447,7 +1462,7 @@ abstract class GenLLVM extends SubComponent {
                     }
                     val v = nextvar(rtStringConcat.resultType)
                     insns.append(new call(v, rtStringConcat, Seq(s)))
-                    stack.push((v, StringReference))
+                    stack.push((getptrref(v), StringReference))
                   }
                   case _ => warning("unsupported primitive op " + primitive)
                 }
@@ -1463,37 +1478,18 @@ abstract class GenLLVM extends SubComponent {
                 val args = stack.take(funtype.argTypes.size).reverse.toBuffer
                 style match {
                   case Static(true) | Dynamic | SuperCall(_) =>
-                    insns.append(new invoke_void(rtAssertNotNull, Seq(cast(args(0)._1, args(0)._2, ObjectReference)), pass, blockExSelLabel(bb,-2)))
+                    insns.append(new invoke_void(rtAssertNotNull, Seq(getrefptr(args(0)._1)), pass, blockExSelLabel(bb,-2)))
                   case _ => ()
                 }
                 val fun = style match {
                   case Dynamic if method.isEffectivelyFinal && !method.isDeferred =>
                     new CFunctionAddress(externFun(method))
                   case Dynamic => {
-                    val vtbl = nextvar(rtVtable)
                     /* TODO - don't cast to trait if method present in receiver vtable */
-                    if (method.owner.isTrait) {
-                      args(0) = (cast(args(0)._1, args(0)._2, toTypeKind(method.owner.tpe)), toTypeKind(method.owner.tpe))
-                    }
+                    args(0) = (cast(args(0)._1, args(0)._2, toTypeKind(method.owner.tpe)), toTypeKind(method.owner.tpe))
                     val mnum = virtualMethods(method.owner).indexWhere(vm => vm.name == method.name && vm.info <:< method.info)
                     assert(mnum >= 0)
-                    if (args.head._2.toType.typeSymbol.isTrait) {
-                      val ifaceinfo = args.head._1.asInstanceOf[LMValue[rtIfaceRef.type]]
-                      val receiverobj = nextvar(rtObject.pointer)
-                      args(0) = (receiverobj, ObjectReference)
-                      insns.append(new extractvalue(receiverobj, ifaceinfo, Seq[LMConstant[LMInt]](0)))
-                      insns.append(new extractvalue(vtbl, ifaceinfo, Seq[LMConstant[LMInt]](1)))
-                    } else {
-                      val asobj = nextvar(rtObject.pointer)
-                      val clsa = nextvar(rtClass.pointer.pointer)
-                      val cls = nextvar(rtClass.pointer)
-                      val vtbla = nextvar(rtVtable.pointer)
-                      insns.append(new bitcast(asobj, args.head._1))
-                      insns.append(new getelementptr(clsa, asobj, Seq[CInt](0,0)))
-                      insns.append(new load(cls, clsa))
-                      insns.append(new getelementptr(vtbla, cls, Seq[CInt](0,3)))
-                      insns.append(new load(vtbl, vtbla))
-                    }
+                    val vtbl = getrefvtbl(args(0)._1)
                     val funptraddr = nextvar(LMInt.i8.pointer.pointer)
                     val funptr = nextvar(LMInt.i8.pointer)
                     insns.append(new getelementptr(funptraddr, vtbl, Seq[CInt](mnum)))
@@ -1518,19 +1514,24 @@ abstract class GenLLVM extends SubComponent {
               }
               case NEW(kind) => {
                 val asobject = nextvar(rtObject.pointer)
+                val vtbla = nextvar(rtVtable.pointer)
+                val vtbl = nextvar(rtVtable)
+                val asref0 = nextvar(rtReference)
+                val asref1 = nextvar(rtReference)
+                insns.append(new getelementptr(vtbla, externClassP(kind.toType.typeSymbol), Seq[CInt](0,3)))
+                insns.append(new load(vtbl, vtbla))
                 insns.append(new call(asobject, rtNew, Seq(externClassP(kind.toType.typeSymbol))))
-                val casted = nextvar(typeKindType(kind))
-                recordType(casted.tpe)
-                insns.append(new bitcast(casted, asobject))
-                stack.push((casted,kind))
+                insns.append(new insertvalue(asref0, new CUndef(rtReference), asobject, Seq[CInt](0)))
+                insns.append(new insertvalue(asref1, asref0, vtbl, Seq[CInt](1)))
+                stack.push((asref1,kind))
               }
               case CREATE_ARRAY(elem, ndims) => {
                 val et = if (elem.isValueType) new CNull(rtClass.pointer) else externClassP(elem.toType.typeSymbol)
                 val dims = stack.take(ndims).toList.reverse.map(_._1)
-                val array = nextvar(symType(definitions.ArrayClass))
+                val array = nextvar(rtObject.pointer)
                 popn(i.consumed)
                 insns.append(new call(array, rtNewArray, Seq(LMConstant.byteconst(rtArrayKind(elem)), et, LMConstant.intconst(ndims)) ++ dims))
-                stack.push((array, ArrayN(elem, ndims)))
+                stack.push((getptrref(array), ArrayN(elem, ndims)))
               }
               case IS_INSTANCE(tpe) => {
                 val (ref,sym) = stack.pop()
@@ -1538,7 +1539,7 @@ abstract class GenLLVM extends SubComponent {
                 val tpes = tpe.toType.typeSymbol
                 val cls = externClassP(tpes)
                 val fun = if (tpes.isTrait) rtIsinstanceIface else rtIsinstanceClass
-                insns.append(new call(v, fun, Seq(cast(ref, sym, ObjectReference), cls)))
+                insns.append(new call(v, fun, Seq(getrefptr(ref), cls)))
                 stack.push((v, BOOL))
               }
               case CHECK_CAST(tpe) => {
@@ -1573,8 +1574,8 @@ abstract class GenLLVM extends SubComponent {
                     case DOUBLE =>
                       insns.append(new fcmp(result, floatop, arg.asInstanceOf[LMValue[LMDouble]], cmpto.asInstanceOf[LMValue[LMFloat]]))
                     case REFERENCE(_) | ARRAY(_) =>
-                      val argasobj = cast(arg, kind, ObjectReference).asInstanceOf[LMValue[LMPointer]]
-                      val cmptoasobj = cast(cmpto, kind, ObjectReference).asInstanceOf[LMValue[LMPointer]]
+                      val argasobj = getrefptr(arg)
+                      val cmptoasobj = getrefptr(cmpto)
                       insns.append(new icmp_p(result, intop, argasobj, cmptoasobj))
                   }
                 }
@@ -1603,7 +1604,7 @@ abstract class GenLLVM extends SubComponent {
                     case (a,DOUBLE) =>
                       insns.append(new fcmp(result, floatop, a.asInstanceOf[LMValue[LMDouble]], cmpto.asInstanceOf[LMValue[LMFloat]]))
                     case (a,tk@(REFERENCE(_) | ARRAY(_))) =>
-                      insns.append(new icmp_p(result, intop, cast(a,tk,ObjectReference).asInstanceOf[LMValue[LMPointer]], new CNull(rtObject.pointer)))
+                      insns.append(new icmp_p(result, intop, getrefptr(a), new CNull(rtObject.pointer)))
                   }
                 }
                 val cond = op match {
@@ -1628,7 +1629,7 @@ abstract class GenLLVM extends SubComponent {
                 val (exception,esym) = stack.pop
                 val uwx = nextvar(LMInt.i8.pointer)
                 val junk = nextvar(LMInt.i32)
-                insns.append(new call(uwx, createOurException, Seq(cast(exception, esym, ObjectReference))))
+                insns.append(new call(uwx, createOurException, Seq(getrefptr(exception))))
                 insns.append(new invoke(junk, unwindRaiseException, Seq(uwx), unreachableBlock, blockExSelLabel(bb,-2)))
               }
               case DROP(kind) => stack.pop
@@ -1646,7 +1647,7 @@ abstract class GenLLVM extends SubComponent {
               case LOAD_EXCEPTION(klass) => {
                 val exception = nextvar(rtObject.pointer)
                 insns.append(new load(exception, currentException))
-                stack.push((cast(exception,ObjectReference,REFERENCE(klass)), REFERENCE(klass)))
+                stack.push((cast(getptrref(exception),ObjectReference,REFERENCE(klass)), REFERENCE(klass)))
               }
               case BOX(k) => {
                 val unboxed = stack.pop._1
@@ -1663,7 +1664,7 @@ abstract class GenLLVM extends SubComponent {
                 }
                 val boxed = nextvar(fun.resultType)
                 insns.append(new call(boxed, fun, Seq(unboxed)))
-                stack.push((boxed, REFERENCE(definitions.boxedClass(k.toType.typeSymbol))))
+                stack.push((getptrref(boxed), REFERENCE(definitions.boxedClass(k.toType.typeSymbol))))
               }
               case UNBOX(k) => {
                 val boxed = stack.pop
@@ -1679,7 +1680,7 @@ abstract class GenLLVM extends SubComponent {
                   case x => error("Don't know how to unbox "+x); rtUnboxi1
                 }
                 val unboxed = nextvar(fun.resultType)
-                insns.append(new call(unboxed, fun, Seq(cast(boxed._1,boxed._2,REFERENCE(definitions.boxedClass(k.toType.typeSymbol))))))
+                insns.append(new call(unboxed, fun, Seq(getrefptr(boxed._1))))
                 stack.push((unboxed, k))
               }
             }
@@ -1689,7 +1690,7 @@ abstract class GenLLVM extends SubComponent {
           // minus 2 to account for comment after
           val terminator = insns.remove(insns.length-2)
 
-          val tailinsns = new mutable.ListBuffer[LMInstruction]
+          val tailinsns = new InstBuffer
           //println("Mapping outgoing stack for " + blockName(bb))
           //println("producedTypes = " + producedTypes)
           //println("stack is "  + stack)
@@ -1700,14 +1701,14 @@ abstract class GenLLVM extends SubComponent {
               tailinsns.append(new select(new LocalVariable(blockName(bb)+".out."+n.toString, tpe), CTrue, src, new CUndef(tpe)))
             } else {
               val temp = cast(src, ssym, ObjectReference)
-              val asobj = new LocalVariable(blockName(bb)+".out."+n.toString, rtObject.pointer)
+              val asobj = new LocalVariable(blockName(bb)+".out."+n.toString, rtReference)
               tailinsns.append(new select(asobj, CTrue, temp, temp))
             }
           }
           insns.append(terminator)
           blocks.append(LMBlock(Some(blockLabel(bb)), headinsns ++ Seq(new br(blockLabel(bb,0)))))
           var blocknum = 0
-          val curblockinsns = new mutable.ListBuffer[LMInstruction]
+          val curblockinsns = new InstBuffer
           insns.foreach {
             case inv: invoke[_] =>
               if (inv.normal eq pass) {
@@ -1748,11 +1749,9 @@ abstract class GenLLVM extends SubComponent {
           Seq.empty
         } else {
           val a = args.head
-          val thisObj = new LocalVariable(".this.object", rtObject.pointer)
           Seq(
-            new alloca(thisCell, rtObject.pointer),
-            new bitcast(thisObj, a._1.lmvar),
-            new store(thisObj, thisCell)
+            new alloca(thisCell, rtReference),
+            new store(a._1.lmvar, thisCell)
           )
         }
         blocks.insert(0,LMBlock(Some(Label(".entry.")), allocaLocals ++ handleThis ++ storeArgs ++ Seq(new alloca(currentException, rtObject.pointer), new br(blockLabel(m.code.startBlock)))))
@@ -1856,8 +1855,7 @@ abstract class GenLLVM extends SubComponent {
           case definitions.DoubleClass => LMDouble
           case definitions.CharClass => LMInt.i32
           case definitions.UnitClass => LMVoid
-          case x if x.isTrait => rtIfaceRef
-          case x => classType(x).pointer
+          case x => rtReference
         }
     }
 
@@ -1865,7 +1863,7 @@ abstract class GenLLVM extends SubComponent {
       if (s == definitions.ObjectClass) {
         rtObject
       } else if (s.isTrait) {
-        rtIfaceRef
+        rtReference
       } else {
         LMOpaque.aliased(llvmName(s))
       }
@@ -1877,7 +1875,7 @@ abstract class GenLLVM extends SubComponent {
         val argTypes = if (s.isStaticMember) {
           baseArgTypes
         } else {
-          val recvtpe = if (s.owner.isTrait) rtObject.pointer else symType(s.owner)
+          val recvtpe = rtReference
           recvtpe +: baseArgTypes
         }
         new LMFunctionType(

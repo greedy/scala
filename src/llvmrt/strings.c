@@ -43,16 +43,16 @@ struct klass class_java_Dlang_DString = {
 
 void
 method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(
-    struct java_lang_String* s)
+    struct reference sref)
 {
-  method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject((struct java_lang_Object*)s);
+  method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject(sref);
 }
 
 struct java_lang_String*
 rt_stringcreate(UChar *buffer, int32_t len)
 {
   struct java_lang_String *ret = (struct java_lang_String*)rt_new(&class_java_Dlang_DString);
-  method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(ret);
+  method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(makeref((struct java_lang_Object*)ret));
   ret->len = len;
   ret->s = buffer;
   return ret;
@@ -193,86 +193,86 @@ struct java_Dlang_DDouble;
 
 extern int64_t
 method_java_Dlang_DLong_MlongValue_Rscala_DLong(
-    struct java_Dlang_DLong *self);
+    struct reference);
 
-struct java_lang_String*
+struct reference
 method_java_Dlang_DLong_MtoString_Rjava_Dlang_DString(
-    struct java_Dlang_DLong *self)
+    struct reference self)
 {
   UChar *s;
   int32_t len;
   s = ustring_for_long(method_java_Dlang_DLong_MlongValue_Rscala_DLong(self), 8, &len);
-  return rt_stringcreate(s, len);
+  return makeref((struct java_lang_Object*)rt_stringcreate(s, len));
 }
 
 extern int32_t
 method_java_Dlang_DInteger_MintValue_Rscala_DInt(
-    struct java_Dlang_DInteger *self);
+    struct reference self);
 
-struct java_lang_String*
+struct reference
 method_java_Dlang_DInteger_MtoString_Rjava_Dlang_DString(
-    struct java_Dlang_DInteger *self)
+    struct reference self)
 {
   UChar *s;
   int32_t len;
   s = ustring_for_int(method_java_Dlang_DInteger_MintValue_Rscala_DInt(self), 8, &len);
-  return rt_stringcreate(s, len);
+  return makeref((struct java_lang_Object*)rt_stringcreate(s, len));
 }
 
 extern int32_t
 method_java_Dlang_DByte_MintValue_Rscala_DInt(
-    struct java_Dlang_DByte *self);
+    struct reference self);
 
-struct java_lang_String*
+struct reference
 method_java_Dlang_DByte_MtoString_Rjava_Dlang_DString(
-    struct java_Dlang_DByte *self)
+    struct reference self)
 {
   UChar *s;
   int32_t len;
   s = ustring_for_int(method_java_Dlang_DByte_MintValue_Rscala_DInt(self), 3, &len);
-  return rt_stringcreate(s, len);
+  return makeref((struct java_lang_Object*)rt_stringcreate(s, len));
 }
 
 extern int32_t
 method_java_Dlang_DShort_MintValue_Rscala_DInt(
-    struct java_Dlang_DShort *self);
+    struct reference self);
 
-struct java_lang_String*
+struct reference
 method_java_Dlang_DShort_MtoString_Rjava_Dlang_DString(
-    struct java_Dlang_DShort *self)
+    struct reference self)
 {
   UChar *s;
   int32_t len;
   s = ustring_for_int(method_java_Dlang_DShort_MintValue_Rscala_DInt(self), 6, &len);
-  return rt_stringcreate(s, len);
+  return makeref((struct java_lang_Object*)rt_stringcreate(s, len));
 }
 
 extern double
 method_java_Dlang_DFloat_MdoubleValue_Rscala_DDouble(
-    struct java_Dlang_DFloat *self);
+    struct reference self);
 
-struct java_lang_String*
+struct reference
 method_java_Dlang_DFloat_MtoString_Rjava_Dlang_DString(
-    struct java_Dlang_DFloat *self)
+    struct reference self)
 {
   UChar *s;
   int32_t len;
   s = ustring_for_double(method_java_Dlang_DFloat_MdoubleValue_Rscala_DDouble(self), 3, &len);
-  return rt_stringcreate(s, len);
+  return makeref((struct java_lang_Object*)rt_stringcreate(s, len));
 }
 
 extern double
 method_java_Dlang_DDouble_MdoubleValue_Rscala_DDouble(
-    struct java_Dlang_DDouble *self);
+    struct reference self);
 
-struct java_lang_String*
+struct reference
 method_java_Dlang_DDouble_MtoString_Rjava_Dlang_DString(
-    struct java_Dlang_DDouble *self)
+    struct reference self)
 {
   UChar *s;
   int32_t len;
   s = ustring_for_double(method_java_Dlang_DDouble_MdoubleValue_Rscala_DDouble(self), 3, &len);
-  return rt_stringcreate(s, len);
+  return makeref((struct java_lang_Object*)rt_stringcreate(s, len));
 }
 
 void rt_string_append_number(
@@ -399,7 +399,7 @@ void rt_string_append_Float(
   rt_string_append_Double(s, v);
 }
 
-typedef struct java_lang_String* (*toStringFn)(struct java_lang_Object*);
+typedef struct reference (*toStringFn)(struct reference);
 
 void rt_string_append_string(
     struct stringlist **s,
@@ -412,7 +412,7 @@ void rt_string_append_string(
   *s = n;
 
   toString = sobj->klass->vtable[4];
-  ss = toString(sobj);
+  ss = (struct java_lang_String*)toString(makeref(sobj)).object;
 
   n->len = ss->len;
   n->s = ss->s;
@@ -430,8 +430,9 @@ void rt_string_append_ustring(
   *s = n;
 }
 
-int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_String* self)
+int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct reference selfref)
 {
+  struct java_lang_String *self = (struct java_lang_String*)selfref.object;
   int32_t hashcode = 0;
   for (int32_t i = 0; i < self->len; i++) {
     hashcode += self->s[i] * 13;
@@ -439,8 +440,10 @@ int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_String*
   return hashcode;
 }
 
-bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct java_lang_String* self, struct java_lang_Object* other)
+bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct reference selfref, struct reference otherref)
 {
+  struct java_lang_String *self = (struct java_lang_String*)selfref.object;
+  struct java_lang_Object *other = otherref.object;
   if (other->klass == &class_java_Dlang_DString) {
     struct java_lang_String *os = (struct java_lang_String*)other;
     return 0 == u_strCompare(self->s, self->len, os->s, os->len, TRUE);
@@ -449,21 +452,21 @@ bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struc
   }
 }
 
-struct java_lang_Object *method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct java_lang_String* self)
+struct reference method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct reference selfref)
 {
-  return (struct java_lang_Object*)self;
+  return selfref;
 }
 
-struct java_lang_String *method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct java_lang_String* self)
+struct reference method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct reference selfref)
 {
-  return self;
+  return selfref;
 }
 
 struct java_lang_String *
 rt_stringconcat(struct stringlist **s)
 {
   struct java_lang_String *ret = (struct java_lang_String*)rt_new(&class_java_Dlang_DString);
-  method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(ret);
+  method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(makeref((struct java_lang_Object*)ret));
   UChar *buffer;
   UChar *wp;
   int32_t totlen = 0;
@@ -486,11 +489,12 @@ rt_stringconcat(struct stringlist **s)
   return ret;
 }
 
-struct array *
+struct reference
 method__Ojava_Dlang_DString_Mutf8bytes_Ajava_Dlang_DString_R_Nscala_DByte(
-    void *self,
-    const struct java_lang_String *s)
+    struct reference selfref,
+    struct reference sref)
 {
+  struct java_lang_String *s = (struct java_lang_String*)sref.object;
   enum UErrorCode uerr = U_ZERO_ERROR;
   char *buffer;
   int32_t bufsize = s->len;
@@ -509,8 +513,8 @@ method__Ojava_Dlang_DString_Mutf8bytes_Ajava_Dlang_DString_R_Nscala_DByte(
     struct array *ret = new_array(BYTE, NULL, 1, reqsize);
     memcpy(ret->data, buffer, reqsize);
     free(buffer);
-    return ret;
+    return makeref((struct java_lang_Object*)ret);
   } else {
-    return NULL;
+    return makeref(NULL);
   }
 }

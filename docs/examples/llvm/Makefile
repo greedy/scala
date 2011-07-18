@@ -15,7 +15,7 @@ run-sample-jvm:
 
 irfiles/%.stamp irfiles/%/*.ll: %.scala runtime.scala
 	mkdir -p irfiles/$*
-	JAVA_OPTS=-Xmx500M ../../../build/quick/bin/scalac -no-specialization -d irfiles/$* -target:llvm $*.scala runtime.scala @base.sources $(FFISOURCES) # $(SOURCES)
+	JAVA_OPTS=-Xmx500M ../../../build/quick/bin/scalac -no-specialization -d irfiles/$* -target:llvm $*.scala apr.scala runtime.scala @base.sources $(FFISOURCES) # $(SOURCES)
 	touch irfiles/$*.stamp
 
 bin/%.bc: irfiles/%.stamp

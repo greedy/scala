@@ -1,13 +1,22 @@
 #ifndef RUNTIME_H
 #define RUNTIME_H
 
-#include "object.h"
-#include "klass.h"
-
-struct ifaceref {
+struct reference {
   struct java_lang_Object *object;
   void **vtable;
 };
+
+#include "object.h"
+#include "klass.h"
+
+inline struct reference makeref(struct java_lang_Object *object) {
+  struct reference ret = {NULL,NULL};
+  if (object != NULL) {
+    ret.object = object;
+    ret.vtable = object->klass->vtable;
+  }
+  return ret;
+}
 
 extern struct java_lang_Object* rt_new(struct klass *klass);
 extern void rt_initobj(struct java_lang_Object *object, struct klass *klass);

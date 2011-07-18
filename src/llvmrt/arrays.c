@@ -80,7 +80,7 @@ new_array(uint8_t k, struct klass *et, int32_t ndims, int32_t dim0, ...)
       break;
     case OBJECT:
       aclass = arrayof(et);
-      eltsize = sizeof(void*);
+      eltsize = sizeof(struct reference);
       break;
   }
   datasize = sizeof(struct array) + dim0 * eltsize;
