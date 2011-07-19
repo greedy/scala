@@ -1776,7 +1776,7 @@ abstract class GenLLVM extends SubComponent {
 
       currentRun.symData.get(sym) match {
         case Some(p) =>
-          val symOut = getFile(c.symbol, ".sym").bufferedOutput
+          val symOut = getSymFile(sym).bufferedOutput
           symOut.write(p.bytes.take(p.writeIndex))
           symOut.close
         case None =>
@@ -1912,6 +1912,15 @@ abstract class GenLLVM extends SubComponent {
       } else {
         typeType(s.tpe)
       }
+    }
+
+    def getSymFile(sym: Symbol): AbstractFile = {
+      val src = atPhase(currentRun.phaseNamed("llvm").prev)(sym.sourceFile)
+      var dir = settings.outputDirs.outputDirFor(src)
+      for(arc <- sym.fullName.split("\\.").toList.init) {
+        dir = dir.subdirectoryNamed(arc)
+      }
+      dir.fileNamed(sym.encodedName + ".sym")
     }
 
     def getFile(sym: Symbol, suffix: String): AbstractFile = {
