@@ -2,12 +2,13 @@ object inner {
 
   class Foo {
     var z = 8
-    val q = new {
+    class Bar {
       def frob {
         System.out.println(z)
         z += 1
       }
     }
+    val q = new Bar
   }
 
   def main(args: Array[String]) {
