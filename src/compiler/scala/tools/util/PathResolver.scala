@@ -9,9 +9,9 @@ package util
 import java.net.{ URL, MalformedURLException }
 import scala.util.Properties._
 import nsc.{ Settings, GenericRunnerSettings }
-import nsc.util.{ ClassPath, JavaClassPath, ScalaClassLoader }
+import nsc.util.{ ClassPath, MergedClassPath, JavaClassPath, ScalaClassLoader }
 import nsc.io.{ File, Directory, Path, AbstractFile }
-import ClassPath.{ JavaContext, DefaultJavaContext, join, split }
+import ClassPath.{ JavaContext, DefaultJavaContext, ClassPathContext, join, split }
 import PartialFunction.condOpt
 
 // Loosely based on the draft specification at:
@@ -138,10 +138,10 @@ object PathResolver {
       )
   }
 
-  def fromPathString(path: String, context: JavaContext = DefaultJavaContext): JavaClassPath = {
+  def fromPathString(path: String, context: JavaContext = DefaultJavaContext): MergedClassPath[AbstractFile] = {
     val s = new Settings()
     s.classpath.value = path
-    new PathResolver(s, context) result
+    new JavaPathResolver(s, context) result
   }
 
   /** With no arguments, show the interesting values in Environment and Defaults.
@@ -156,7 +156,7 @@ object PathResolver {
     else {
       val settings = new Settings()
       val rest = settings.processArguments(args.toList, false)._2
-      val pr = new PathResolver(settings)
+      val pr = new JavaPathResolver(settings)
       println(" COMMAND: 'scala %s'".format(args.mkString(" ")))
       println("RESIDUAL: 'scala %s'\n".format(rest.mkString(" ")))
       pr.result.show
@@ -165,8 +165,11 @@ object PathResolver {
 }
 import PathResolver.{ Defaults, Environment, firstNonEmpty, ppcp }
 
-class PathResolver(settings: Settings, context: JavaContext) {
-  def this(settings: Settings) = this(settings, if (settings.inline.value) new JavaContext else DefaultJavaContext)
+abstract class PathResolver[X <: ClassPathContext[AbstractFile]]
+(settings: Settings, context: X) {
+
+  def newClassPath(containers: IndexedSeq[ClassPath[AbstractFile]],
+                   context: X): MergedClassPath[AbstractFile]
 
   private def cmdLineOrElse(name: String, alt: String) = {
     (commandLineFor(name) match {
@@ -235,8 +238,8 @@ class PathResolver(settings: Settings, context: JavaContext) {
 
   def containers = Calculated.containers
 
-  lazy val result = {
-    val cp = new JavaClassPath(containers.toIndexedSeq, context)
+  lazy val result: MergedClassPath[AbstractFile] = {
+    val cp = newClassPath(containers.toIndexedSeq, context)
     if (settings.Ylogcp.value) {
       Console.println("Classpath built from " + settings.toConciseString)
       Console.println("Defaults: " + PathResolver.Defaults)
@@ -250,4 +253,16 @@ class PathResolver(settings: Settings, context: JavaContext) {
   }
 
   def asURLs = result.asURLs
+}
+
+class JavaPathResolver(settings: Settings, context: JavaContext)
+extends PathResolver[JavaContext](settings, context) {
+  def this(settings: Settings) =
+    this(settings, if (settings.inline.value) new JavaContext
+                   else DefaultJavaContext)
+
+  def newClassPath(containers: IndexedSeq[ClassPath[AbstractFile]],
+                   context: JavaContext) = {
+    new JavaClassPath(containers, context)
+  }
 }
