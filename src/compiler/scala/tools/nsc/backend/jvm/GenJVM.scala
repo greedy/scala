@@ -200,7 +200,6 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with 
     def scalaSignatureAddingMarker(jclass: JClass, sym: Symbol): Option[AnnotationInfo] =
       currentRun.symData get sym match {
         case Some(pickle) if !jclass.getName().endsWith("$") =>
-          printf("JVM: FOUND pickle sym %s\n", sym)
           val scalaAttr =
             fjbgContext.JOtherAttribute(jclass, jclass, tpnme.ScalaSignatureATTR.toString,
                                         versionPickle.bytes, versionPickle.writeIndex)
@@ -214,7 +213,6 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with 
           currentRun.symData -= sym.companionSymbol
           Some(scalaAnnot)
         case _ =>
-          printf("JVM: MISSING pickle sym %s\n", sym)
           val markerAttr =
             fjbgContext.JOtherAttribute(jclass, jclass, tpnme.ScalaATTR.toString, new Array[Byte](0), 0)
           jclass addAttribute markerAttr
