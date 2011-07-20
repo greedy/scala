@@ -6,7 +6,7 @@
 package scala.tools.nsc
 package backend
 
-import llvm.GenLLVM
+import llvm.{GenLLVM, LLVMPathResolver}
 import io.AbstractFile
 import scala.tools.util.JavaPathResolver
 
@@ -14,7 +14,7 @@ trait LLVMPlatform extends Platform[AbstractFile] {
   import global._
   import definitions._
 
-  lazy val classPath  = new JavaPathResolver(settings).result
+  lazy val classPath  = new LLVMPathResolver(settings).result
   def rootLoader = new loaders.JavaPackageLoader(classPath)
 
   object genLLVM extends {
