@@ -1554,7 +1554,7 @@ abstract class GenLLVM extends SubComponent {
                 }
               }
               case CALL_METHOD(method, style) => {
-                println("CALL_METHOD " + method + " " + style)
+                //println("CALL_METHOD " + method + " " + style)
                 val funtype = symType(method).asInstanceOf[LMFunctionType]
                 val contextargs = style match {
                   case Static(true) | Dynamic | SuperCall(_) =>
@@ -1562,9 +1562,9 @@ abstract class GenLLVM extends SubComponent {
                   case Static(false) => Seq.empty
                 }
                 val argsyms = contextargs ++ method.tpe.paramTypes.map(toTypeKind)
-                println("argument kinds: " + argsyms.mkString("(",", ",")"))
+                //println("argument kinds: " + argsyms.mkString("(",", ",")"))
                 val args = stack.take(argsyms.length).reverse.toBuffer
-                println("arguments: " + args.mkString("\n\t","\n\t",""))
+                //println("arguments: " + args.mkString("\n\t","\n\t",""))
                 style match {
                   case Static(true) | Dynamic | SuperCall(_) =>
                     insns.append(new invoke_void(rtAssertNotNull, Seq(getrefptr(args(0)._1)), pass, blockExSelLabel(bb,-2)))
@@ -1587,7 +1587,7 @@ abstract class GenLLVM extends SubComponent {
                   }
                   case _ => new CFunctionAddress(externFun(method))
                 }
-                println("function: " + fun.tperep)
+                //println("function: " + fun.tperep)
                 recordType(funtype.returnType)
                 funtype.argTypes.foreach(recordType)
                 popn(args.length)
