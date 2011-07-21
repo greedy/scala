@@ -338,7 +338,7 @@ package java {
     object ThreadLocal {
       class ThreadLocalMap
     }
-    class ThreadLocal[T <: AnyRef] {
+    class ThreadLocal[T] {
       final var hasValue = false
       final var i: T = _
       final var v: T = _
@@ -354,7 +354,7 @@ package java {
       def createMap(t: Thread, firstValue: T) {}
       def getMap(t: Thread) = m
     }
-    class InheritableThreadLocal[T <: AnyRef] extends ThreadLocal[T] {
+    class InheritableThreadLocal[T] extends ThreadLocal[T] {
     }
     object String {
       @native def utf8bytes(s: String): Array[scala.Byte]
@@ -426,7 +426,17 @@ package java {
       def print(d: Double): Unit = print(d.toString)
       def print(s: Array[Char]): Unit = print("character array")
       def print(s: String): Unit = if (s eq null) print("null") else { write(String.utf8bytes(s)) }
-      def print(o: Object): Unit = if (o eq null) print("null") else print(o.toString)
+      def print(x: Any): Unit = x match {
+        case b: Boolean => print(b)
+        case c: Char => print(c)
+        case i: Int => print(i)
+        case l: Long => print(l)
+        case f: Float => print(f)
+        case d: Double => print(d)
+        case s: Array[Char] => print(s)
+        case s: String => print(s)
+        case o: Object => if (o eq null) print("null") else print(o.toString)
+      }
       def println(): Unit = write(10)
       def println(x: Boolean): Unit = { print(x); println() }
       def println(x: Char): Unit = { print(x); println() }
@@ -435,7 +445,7 @@ package java {
       def println(x: Float): Unit = { print(x); println() }
       def println(x: Double): Unit = { print(x); println() }
       def println(x: String): Unit = { print(x); println() }
-      def println(x: Object): Unit = { print(x); println() }
+      def println(x: Any): Unit = { print(x); println() }
       def printf(format: String, args: Array[Object]): Unit = print("printf")
       def printf(l: Locale, format: String, args: Array[Object]): Unit = print("printf")
       def format(format: String, args: Array[Object]): Unit = print("printf")
