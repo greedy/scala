@@ -5,9 +5,8 @@ run-sample:
 	make -C ../../../src/llvmrt llvmrt.a runscala
 	rm -rf irfiles/example irfiles/example.stamp
 	rm -rf bin/example.bc bin/example.aot
-	make irfiles/example.stamp bin/example.bc bin/example.aot
+	make irfiles/example.stamp bin/example.bc
 	../../../src/llvmrt/runscala bin/example.bc example
-	./bin/example.aot
 
 run-sample-jvm:
 	make classes
@@ -24,6 +23,8 @@ bin/%.bc: irfiles/%.stamp
 	  llvm-as $$x; \
 	done
 	llvm-ld -o $@ -r -disable-internalize irfiles/$*/*.bc ../../../src/llvmrt/llvmrt.a
+	opt -O3 -o bin/$*.opt.bc $@
+	mv bin/$*.opt.bc $@
 
 bin/%.aot: bin/%.bc
 	../../../src/llvmrt/linkscala $< `basename $*`
