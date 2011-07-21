@@ -23,6 +23,24 @@ abstract class GenLLVM extends SubComponent {
 
   override def newPhase(p: Phase) = new LLVMPhase(p)
 
+  type SomeConcreteType = LMType with ConcreteType
+
+  sealed trait FunctionArgument {
+    def argSpecs: Seq[ArgSpec]
+  }
+  case class ValueArgument(l: Local, argVar: LocalVariable[SomeConcreteType]) extends FunctionArgument {
+    def argSpecs = Seq(ArgSpec(argVar, Seq.empty))
+  }
+  case class ReferenceArgument(l: Local, ptrVar: LocalVariable[SomeConcreteType], vtblVar: LocalVariable[SomeConcreteType]) extends FunctionArgument {
+    def argSpecs = Seq(ArgSpec(ptrVar, Seq.empty), ArgSpec(vtblVar, Seq.empty))
+  }
+  case class ThisArgument(ptrVar: LocalVariable[SomeConcreteType], vtblVar: LocalVariable[SomeConcreteType]) extends FunctionArgument {
+    def argSpecs = Seq(ArgSpec(ptrVar, Seq.empty), ArgSpec(vtblVar, Seq.empty))
+  }
+  case class VtableReturn(retVar: LocalVariable[LMPointer]) extends FunctionArgument {
+    def argSpecs = Seq(ArgSpec(retVar, Seq.empty))
+  }
+
   class LLVMPhase(prev: Phase) extends ICodePhase(prev) {
     def name = phaseName
 
@@ -240,9 +258,9 @@ abstract class GenLLVM extends SubComponent {
       lazy val rtUnboxDouble = unboxfn(definitions.BoxedDoubleClass, LMDouble)
       lazy val rtUnboxChar = unboxfn(definitions.BoxedCharacterClass, LMInt.i32)
 
-      lazy val rtMakeref =
+      lazy val rtLoadVtable  =
         new LMFunction(
-          rtReference, "rt_makeref",
+          rtVtable, "rt_loadvtable",
           Seq(
             ArgSpec(new LocalVariable("obj", rtObject.pointer))
           ), false,
@@ -421,7 +439,7 @@ abstract class GenLLVM extends SubComponent {
         rtUnboxFloat.declare,
         rtUnboxDouble.declare,
         rtUnboxChar.declare,
-        rtMakeref.declare,
+        rtLoadVtable.declare,
         rtMakeString.declare,
         rtAppendBool.declare,
         rtAppendByte.declare,
@@ -471,11 +489,37 @@ abstract class GenLLVM extends SubComponent {
         case None => ()
       }
 
-      def functionForMethod(m: IMethod): (LMFunction, Seq[(ArgSpec,Symbol)]) = {
-        val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
-        val recvarg = if (m.symbol.isStaticMember) { Seq.empty } else { Seq((thisarg, c.symbol)) }
-        val args = recvarg ++ m.params.map(p => (ArgSpec(new LocalVariable(llvmName(p.sym), localType(p))), p.sym))
-        val fun = new LMFunction(typeType(m.returnType.toType), "method_"+llvmName(m.symbol), args.map(_._1), false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
+      def functionArguments(m: IMethod): Seq[FunctionArgument] = {
+        val baseArguments = m.params.map { p =>
+          val baseName = llvmName(p.sym)
+          if (p.kind.isRefOrArrayType) {
+            ReferenceArgument(p, new LocalVariable(baseName+".ptr", rtObject.pointer),
+                                 new LocalVariable(baseName+".vtbl", rtVtable))
+          } else {
+            ValueArgument(p, new LocalVariable(baseName, localType(p)))
+          }
+        }
+        val argsWithReciever = if (m.symbol.isStaticMember) {
+          baseArguments
+        } else {
+          val thisArg =
+            ThisArgument(new LocalVariable(".this.ptr", rtObject.pointer),
+                         new LocalVariable(".this.vtbl", rtVtable))
+          thisArg +: baseArguments
+        }
+        val argsWithReturnedVtable = if (m.returnType.isRefOrArrayType) {
+          argsWithReciever :+ VtableReturn(new LocalVariable(".returnedVtable", rtVtable.pointer))
+        } else {
+          argsWithReciever
+        }
+        argsWithReturnedVtable
+      }
+
+      def functionForMethod(m: IMethod): (LMFunction,Seq[FunctionArgument]) = {
+        val args = functionArguments(m)
+        val retLMType = if (m.returnType.isRefOrArrayType) rtObject.pointer else typeKindType(m.returnType)
+        val fun = new LMFunction(retLMType, "method_"+llvmName(m.symbol), args.flatMap(_.argSpecs),
+          false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
         (fun, args)
       }
 
@@ -515,9 +559,8 @@ abstract class GenLLVM extends SubComponent {
           case FloatTag => c.floatValue
           case DoubleTag => c.doubleValue
           case StringTag => stringConstant(c.stringValue)
-          case ClassTag => new CZeroInit(rtReference)
-          case NullTag if c.tpe.typeSymbol.isTrait => new CStruct(Seq(new CNull(rtObject.pointer), new CNull(rtVtable)))
-          case NullTag => new CZeroInit(rtReference)
+          case ClassTag => new CStruct(Seq(new CNull(rtObject.pointer), new CNull(rtVtable)))
+          case NullTag => new CStruct(Seq(new CNull(rtObject.pointer), new CNull(rtVtable)))
           case _ => {
             warning("Can't handle " + c + " tagged " + c.tag)
             new CUndef(typeType(c.tpe))
@@ -693,7 +736,7 @@ abstract class GenLLVM extends SubComponent {
             LMBlock(Some(Label("not_started")), Seq(
               new store(LMConstant.boolconst(true), new CGlobalAddress(initStarted)),
               new call_void(rtInitobj, Seq(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), externClassP(c.symbol))),
-              new call_void(externFun(c.lookupMethod("<init>").get.symbol), Seq(new CStruct(Seq(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), new Cgetelementptr(classVtableGlobal, Seq[CInt](0,0), rtVtable))))),
+              new call_void(externFun(c.lookupMethod("<init>").get.symbol), Seq(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), new Cgetelementptr(classVtableGlobal, Seq[CInt](0,0), rtVtable))),
               new store(LMConstant.boolconst(true), new CGlobalAddress(initFinished)),
               retvoid
             ))))
@@ -709,19 +752,26 @@ abstract class GenLLVM extends SubComponent {
         }
       }
 
-      type SomeConcreteType = LMType with ConcreteType
-
       def marshallToNative(local: LocalVariable[_ <: SomeConcreteType], tpe: Type): (LocalVariable[_ <: SomeConcreteType],Seq[LMInstruction]) = {
         toTypeKind(tpe) match {
           case BOOL|BYTE|SHORT|CHAR|INT|LONG|FLOAT|DOUBLE => (local, Seq.empty)
           case REFERENCE(_) => tpe match {
             case TypeRef(_, PtrSym, _) => {
+              val localStruct = local.asInstanceOf[LocalVariable[rtReference.type]]
               val resultVar = new LocalVariable(".asptr."+local.name, marshalledType(tpe).asInstanceOf[LMPointer])
               val addressVal = new LocalVariable(".addr."+local.name, typeType(Ptr_address.info.resultType).asInstanceOf[LMInt])
+              val modAsObjPtr = new Cbitcast(externModule(PtrObjSym), rtObject.pointer)
+              val moduleVtable = new LocalVariable(".modvtbl."+local.name, rtVtable)
+              val ptrObj = new LocalVariable(".ptrobj."+local.name, rtObject.pointer)
+              val ptrVtable = new LocalVariable(".ptrvtable."+local.name, rtVtable)
               /* XXX - cheating */
               (resultVar, Seq(
+                new call_void(moduleInitFun(PtrObjSym), Seq.empty),
+                new call(moduleVtable, rtLoadVtable, Seq(modAsObjPtr)),
+                new extractvalue(ptrObj, localStruct, Seq[CInt](0)),
+                new extractvalue(ptrVtable, localStruct, Seq[CInt](1)),
                 new call(addressVal, externFun(Ptr_unwrap),
-                  Seq(new CZeroInit(rtReference), local)),
+                  Seq(modAsObjPtr, moduleVtable, ptrObj, ptrVtable)),
                 new inttoptr(resultVar, addressVal)
               ))
             }
@@ -735,13 +785,23 @@ abstract class GenLLVM extends SubComponent {
           case REFERENCE(_) => tpe match {
             case TypeRef(_, PtrSym, _) => {
               val ptrasint = new LocalVariable(".ptrasint."+local.name, typeType(Ptr_address.info.resultType).asInstanceOf[LMInt])
-              val ptrObj = new LocalVariable(".ptrobj."+local.name, rtReference)
-              (ptrObj, Seq(
+              val ptrObj = new LocalVariable(".ptrobj."+local.name, rtObject.pointer)
+              val ptrVtableP = new LocalVariable(".ptrvtblp."+local.name, rtVtable.pointer)
+              val ptrVtable = new LocalVariable(".ptrvtbl."+local.name, rtVtable)
+              val moduleVtable = new LocalVariable(".modvtbl."+local.name, rtVtable)
+              val modAsObjPtr = new Cbitcast(externModule(PtrObjSym), rtObject.pointer)
+              val refTemp = new LocalVariable(".reftemp."+local.name, rtReference)
+              val refResult = new LocalVariable(".refresult."+local.name, rtReference)
+              (refResult, Seq(
+                new alloca(ptrVtableP, rtVtable),
                 new ptrtoint(ptrasint, local.asInstanceOf[LMValue[LMPointer]]),
                 new call_void(moduleInitFun(PtrObjSym), Seq.empty),
+                new call(moduleVtable, rtLoadVtable, Seq(modAsObjPtr)),
                 /* XXX cheating */
-                new call(ptrObj, externFun(Ptr_wrap),
-                  Seq(new CZeroInit(rtReference), ptrasint))
+                new call(ptrObj, externFun(Ptr_wrap), Seq(modAsObjPtr, moduleVtable, ptrasint, ptrVtableP)),
+                new load(ptrVtable, ptrVtableP),
+                new insertvalue(refTemp, new CUndef(rtReference), ptrObj, Seq[CInt](0)),
+                new insertvalue(refResult, refTemp, ptrVtable, Seq[CInt](1))
               ))
             }
           }
@@ -769,25 +829,36 @@ abstract class GenLLVM extends SubComponent {
                 Seq.empty, Seq.empty, None, None, None)
               val methodFun = functionForMethod(m)._1
               /* XXX fixme */
-              val modGlobal = new CStruct(Seq(new Cbitcast(new CGlobalAddress(externModule(m.symbol.enclClass)), rtObject.pointer), new CNull(rtVtable)))
+              val modGlobal = new Cbitcast(new CGlobalAddress(externModule(m.symbol.enclClass)), rtObject.pointer)
+              val modVtable = new CNull(rtVtable)
               val (marshalledArgs,argMarshalling) =
                 args.zip(m.params.map(_.sym.info)).map((marshallFromNative _).tupled).unzip
+              val unpacked = marshalledArgs.collect {
+                case arg if arg.tpe == rtReference =>
+                  val argStruct = arg.asInstanceOf[LocalVariable[rtReference.type]]
+                  val ptr = new LocalVariable(".objptr."+argStruct.name, rtObject.pointer)
+                  val vtbl = new LocalVariable(".objvtbl."+argStruct.name, rtVtable)
+                  (Seq(ptr, vtbl), Seq(new extractvalue(ptr, argStruct, Seq[CInt](0)), new extractvalue(vtbl, argStruct, Seq[CInt](1))))
+                case arg => (Seq(arg), Seq.empty)
+              }
+              val callArgs = Seq(modGlobal, modVtable) ++ unpacked.flatMap(_._1)
+              val prologue = new call_void(moduleInitFun(m.symbol.owner), Seq.empty) +: (argMarshalling.flatten ++ unpacked.flatMap(_._2))
               val body = if (m.returnType == UNIT) {
-                argMarshalling.flatten ++
-                Seq(
-                  new call_void(moduleInitFun(m.symbol.owner), Seq.empty),
-                  new call_void(methodFun, Seq(modGlobal) ++ args),
-                  retvoid
+                Seq.concat(
+                  prologue,
+                  Seq(
+                    new call_void(methodFun, callArgs),
+                    retvoid
+                  )
                 )
               } else {
                 val result = new LocalVariable(".result", typeKindType(m.returnType))
                 val (marshalledResult, resultMarshalling) =
                   marshallToNative(result, m.returnType.toType)
                 Seq.concat(
-                  argMarshalling.flatten,
+                  prologue,
                   Seq(
-                    new call_void(moduleInitFun(m.symbol.owner), Seq.empty),
-                    new call(result, methodFun, Seq(modGlobal) ++ marshalledArgs)),
+                    new call(result, methodFun, callArgs)),
                   resultMarshalling,
                   Seq(new ret(result))
                 )
@@ -809,22 +880,32 @@ abstract class GenLLVM extends SubComponent {
             } else if (methType.paramTypes.exists(pt => !isMarshallable(pt))) {
               error("Foreign function must take marshallable parameters"); Seq.empty
             } else {
-              val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
-              val recvarg = if (m.symbol.isStaticMember) { Seq.empty } else { Seq(thisarg) }
-              val args = m.params.map(p => new LocalVariable(llvmName(p.sym), localType(p)))
-              val (marshalled,marshallingCode) = args.zip(methType.paramTypes).map((marshallToNative _).tupled).unzip
+              val (method, methodArgs) = functionForMethod(m)
+              // Must marshall return value to scala
+              val (mappedArgs,argMapping) = methodArgs.flatMap {
+                case ValueArgument(l, argVar) => Seq((argVar, Seq.empty))
+                case ReferenceArgument(l, ptrVar, vtblVar) =>
+                  val ref0 = new LocalVariable(".ref0."+llvmName(l.sym), rtReference)
+                  val ref1 = new LocalVariable(".ref1."+llvmName(l.sym), rtReference)
+                  Seq((ref1, Seq(
+                    new insertvalue(ref0, new CUndef(rtReference), ptrVar, Seq[CInt](0)),
+                    new insertvalue(ref1, ref0, vtblVar, Seq[CInt](1))
+                  )))
+                case ThisArgument(ptrVar, vtblVar) =>
+                  Seq.empty
+                case VtableReturn(_) => sys.error("vtablereturn not valid in foreign method")
+              }.unzip
+              val (marshalled,marshallingCode) = mappedArgs.zip(methType.paramTypes).map((marshallToNative _).tupled).unzip
               val argSpec = marshalled.map(lv => ArgSpec(lv))
               val targetFunction = new LMFunction(
                 typeKindType(m.returnType), foreignSymbol, argSpec, false,
                 Externally_visible, Default, Ccc,
                 Seq.empty, Seq.empty, None, None, None)
-              val method = functionForMethod(m)._1
-              // Must marshall return value to scala
               val body = if (m.returnType == UNIT) {
-                marshallingCode.flatten ++ Seq(new call_void(targetFunction, marshalled), retvoid)
+                argMapping.flatten ++ marshallingCode.flatten ++ Seq(new call_void(targetFunction, marshalled), retvoid)
               } else {
                 val res = new LocalVariable("res", typeKindType(m.returnType))
-                marshallingCode.flatten ++ Seq(new call(res, targetFunction, marshalled), new ret(res))
+                argMapping.flatten ++ marshallingCode.flatten ++ Seq(new call(res, targetFunction, marshalled), new ret(res))
               }
               Seq(
                 targetFunction.declare,
@@ -879,7 +960,8 @@ abstract class GenLLVM extends SubComponent {
       def genFun(m: IMethod) = {
         internalFuns += m.symbol
         val thisCell = new LocalVariable("__this", rtReference.pointer)
-        val (fun,args) = functionForMethod(m)
+        val vtableReturn = new LocalVariable(".returned.vtable", rtVtable.pointer)
+        val (fun,argsInfo) = functionForMethod(m)
         recordType(fun.tpe)
         fun.args.map(_.lmvar.tpe).foreach(recordType)
         val blocks: mutable.ListBuffer[LMBlock] = new mutable.ListBuffer
@@ -947,11 +1029,15 @@ abstract class GenLLVM extends SubComponent {
             vtbl
           }
           def getptrref(src: LMValue[SomeConcreteType])(implicit _insns: InstBuffer): LMValue[SomeConcreteType] = {
-            val ref = nextvar(rtReference)
+            val ref0 = nextvar(rtReference)
+            val ref1 = nextvar(rtReference)
             val asobj = nextvar(rtObject.pointer)
+            val vtbl = nextvar(rtVtable)
             _insns.append(new bitcast(asobj, src))
-            _insns.append(new call(ref, rtMakeref, Seq(asobj)))
-            ref
+            _insns.append(new call(vtbl, rtLoadVtable, Seq(asobj)))
+            _insns.append(new insertvalue(ref0, new CUndef(rtReference), asobj, Seq[CInt](0)))
+            _insns.append(new insertvalue(ref1, ref0, vtbl, Seq[CInt](1)))
+            ref1
           }
           def getrefptr(src: LMValue[SomeConcreteType])(implicit _insns: InstBuffer): LMValue[LMPointer] = {
             val obj = nextvar(rtObject.pointer)
@@ -1468,6 +1554,7 @@ abstract class GenLLVM extends SubComponent {
                 }
               }
               case CALL_METHOD(method, style) => {
+                println("CALL_METHOD " + method + " " + style)
                 val funtype = symType(method).asInstanceOf[LMFunctionType]
                 val contextargs = style match {
                   case Static(true) | Dynamic | SuperCall(_) =>
@@ -1475,7 +1562,9 @@ abstract class GenLLVM extends SubComponent {
                   case Static(false) => Seq.empty
                 }
                 val argsyms = contextargs ++ method.tpe.paramTypes.map(toTypeKind)
-                val args = stack.take(funtype.argTypes.size).reverse.toBuffer
+                println("argument kinds: " + argsyms.mkString("(",", ",")"))
+                val args = stack.take(argsyms.length).reverse.toBuffer
+                println("arguments: " + args.mkString("\n\t","\n\t",""))
                 style match {
                   case Static(true) | Dynamic | SuperCall(_) =>
                     insns.append(new invoke_void(rtAssertNotNull, Seq(getrefptr(args(0)._1)), pass, blockExSelLabel(bb,-2)))
@@ -1498,17 +1587,32 @@ abstract class GenLLVM extends SubComponent {
                   }
                   case _ => new CFunctionAddress(externFun(method))
                 }
+                println("function: " + fun.tperep)
                 recordType(funtype.returnType)
                 funtype.argTypes.foreach(recordType)
-                popn(funtype.argTypes.length)
+                popn(args.length)
                 val castedfun = nextvar(funtype.pointer)
                 insns.append(new bitcast(castedfun, fun))
                 val castedargs = args.zip(argsyms).map { case ((v,s),d) => cast(v,s,d) }
+                val expandedArgs = castedargs.flatMap {
+                  case arg if arg.tpe == rtReference => Seq(getrefptr(arg), getrefvtbl(arg))
+                  case arg => Seq(arg)
+                }
                 if (funtype.returnType == LMVoid) {
-                  insns.append(new invoke_void(castedfun, castedargs, pass, blockExSelLabel(bb,-2), Ccc, Seq.empty, Seq.empty))
+                  insns.append(new invoke_void(castedfun, expandedArgs, pass, blockExSelLabel(bb,-2), Ccc, Seq.empty, Seq.empty))
+                } else if (funtype.returnType == rtObject.pointer) {
+                  val v = nextvar(rtObject.pointer)
+                  val vt = nextvar(rtVtable)
+                  val asref0 = nextvar(rtReference)
+                  val asref1 = nextvar(rtReference)
+                  insns.append(new invoke(v, castedfun, expandedArgs :+ vtableReturn, pass, blockExSelLabel(bb,-2), Ccc, Seq.empty, Seq.empty))
+                  insns.append(new load(vt, vtableReturn))
+                  insns.append(new insertvalue(asref0, new CUndef(rtReference), v, Seq[CInt](0)))
+                  insns.append(new insertvalue(asref1, asref0, vt, Seq[CInt](1)))
+                  stack.push((asref1, toTypeKind(method.tpe.resultType)))
                 } else {
                   val v = nextvar(funtype.returnType)
-                  insns.append(new invoke(v, castedfun, castedargs, pass, blockExSelLabel(bb,-2), Ccc, Seq.empty, Seq.empty))
+                  insns.append(new invoke(v, castedfun, expandedArgs, pass, blockExSelLabel(bb,-2), Ccc, Seq.empty, Seq.empty))
                   stack.push((v,toTypeKind(method.tpe.resultType)))
                 }
               }
@@ -1620,6 +1724,11 @@ abstract class GenLLVM extends SubComponent {
               case RETURN(kind) => {
                 if (kind == UNIT) {
                   insns.append(retvoid)
+                } else if (kind.isRefOrArrayType) {
+                  val (v,s) = stack.pop
+                  val vtblOut: LocalVariable[LMPointer] = argsInfo.collect { case VtableReturn(outVar) => outVar }.head
+                  insns.append(new store(getrefvtbl(v), vtblOut))
+                  insns.append(new ret(getrefptr(v)))
                 } else {
                   val (v,s) = stack.pop
                   insns.append(new ret(cast(v,s,kind)))
@@ -1744,17 +1853,28 @@ abstract class GenLLVM extends SubComponent {
         }
 
         val allocaLocals = m.locals.map(l => new alloca(localCell(l), typeKindType(l.kind)))
-        val storeArgs = m.locals.flatMap(l => args.find(_._2==l.sym).map(a => new store(a._1.lmvar, localCell(l))))
-        val handleThis = if (m.symbol.isStaticMember) {
-          Seq.empty
-        } else {
-          val a = args.head
-          Seq(
-            new alloca(thisCell, rtReference),
-            new store(a._1.lmvar, thisCell)
-          )
+        val handleArgs = argsInfo.flatMap {
+          case ValueArgument(l, argVar) => Seq(new store(argVar, localCell(l)))
+          case ReferenceArgument(l, ptrVar, vtblVar) =>
+            val ref0 = nextvar(rtReference)
+            val ref1 = nextvar(rtReference)
+            Seq(
+              new insertvalue(ref0, new CUndef(rtReference), ptrVar, Seq[CInt](0)),
+              new insertvalue(ref1, ref0, vtblVar, Seq[CInt](1)),
+              new store(ref1, localCell(l))
+            )
+          case ThisArgument(ptrVar, vtblVar) =>
+            val ref0 = nextvar(rtReference)
+            val ref1 = nextvar(rtReference)
+            Seq(
+              new alloca(thisCell, rtReference),
+              new insertvalue(ref0, new CUndef(rtReference), ptrVar, Seq[CInt](0)),
+              new insertvalue(ref1, ref0, vtblVar, Seq[CInt](1)),
+              new store(ref1, thisCell)
+            )
+          case VtableReturn(_) => Seq.empty
         }
-        blocks.insert(0,LMBlock(Some(Label(".entry.")), allocaLocals ++ handleThis ++ storeArgs ++ Seq(new alloca(currentException, rtObject.pointer), new br(blockLabel(m.code.startBlock)))))
+        blocks.insert(0,LMBlock(Some(Label(".entry.")), allocaLocals ++ handleArgs ++ Seq(new alloca(vtableReturn, rtVtable), new alloca(currentException, rtObject.pointer), new br(blockLabel(m.code.startBlock)))))
         fun.define(blocks)
       }
 
@@ -1871,6 +1991,12 @@ abstract class GenLLVM extends SubComponent {
 
     def symType(s: Symbol): ConcreteType = {
       if (s.isMethod) {
+        def unpackReference(lmtype: ConcreteType): Seq[ConcreteType] = {
+          lmtype match {
+            case `rtReference` => rtReference.types
+            case x => Seq(x)
+          }
+        }
         val baseArgTypes = s.tpe.paramTypes.map(typeType)
         val argTypes = if (s.isStaticMember) {
           baseArgTypes
@@ -1878,9 +2004,12 @@ abstract class GenLLVM extends SubComponent {
           val recvtpe = rtReference
           recvtpe +: baseArgTypes
         }
+        val rawReturnType = if (s.isClassConstructor) LMVoid else typeType(s.tpe.resultType)
+        val extArgTypes = if (rawReturnType == rtReference) argTypes :+ rtVtable.pointer else argTypes
+        val returnType = if (rawReturnType == rtReference) rtObject.pointer else rawReturnType
         new LMFunctionType(
-          if (s.isClassConstructor) LMVoid else typeType(s.tpe.resultType),
-          argTypes,
+          returnType,
+          extArgTypes.flatMap(unpackReference),
           false)
       } else {
         typeType(s.tpe)

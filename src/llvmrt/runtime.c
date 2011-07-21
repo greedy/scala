@@ -9,11 +9,6 @@
 
 extern int32_t _Unwind_RaiseException(void*);
 
-struct reference rt_makeref(struct java_lang_Object *obj)
-{
-  return makeref(obj);
-}
-
 static void printclassname(FILE* f, struct klass *klass)
 {
   fprintf(f, "%*s", klass->name.len, klass->name.bytes);
@@ -98,14 +93,14 @@ extern struct klass class_java_Dlang_DNullPointerException;
 
 extern void
 method_java_Dlang_DNullPointerException_M_Linit_G_Rjava_Dlang_DNullPointerException(
-    struct reference);
+    struct java_lang_Object *self, vtable selfVtable);
 
 void rt_assertNotNull(struct java_lang_Object *object)
 {
   if (object == NULL) {
     struct java_lang_Object *exception = rt_new(&class_java_Dlang_DNullPointerException);
     void *uwx;
-    method_java_Dlang_DNullPointerException_M_Linit_G_Rjava_Dlang_DNullPointerException(makeref(exception));
+    method_java_Dlang_DNullPointerException_M_Linit_G_Rjava_Dlang_DNullPointerException(exception, rt_loadvtable(exception));
     uwx = createOurException(exception);
     _Unwind_RaiseException(uwx);
     __builtin_unreachable();
@@ -125,7 +120,17 @@ void *rt_argvtoarray(int argc, char **argv)
   for (int i = 0; i < argc; i++) {
     temp.len = strlen(argv[i]);
     temp.bytes = argv[i];
-    elements[i] = makeref((struct java_lang_Object*)rt_makestring(&temp));
+    struct java_lang_Object *s = (struct java_lang_Object*)rt_makestring(&temp);
+    elements[i].object = s;
+    elements[i].vtable = rt_loadvtable(s);
   }
   return (void*)ret;
+}
+
+vtable rt_loadvtable(struct java_lang_Object *obj)
+{
+  if (obj == NULL)
+    return NULL;
+  else
+    return obj->klass->vtable;
 }

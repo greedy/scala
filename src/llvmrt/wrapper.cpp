@@ -49,7 +49,7 @@ createMainWrapperFunction(
   FunctionType *funtype = FunctionType::get(Type::getVoidTy(ctx), argtypes, false);
   Function *ret = Function::Create(funtype, Function::ExternalLinkage, name, &module);
 
-  Function *makeref = module.getFunction("rt_makeref");
+  Function *loadvtable = module.getFunction("rt_loadvtable");
 
   Function::arg_iterator funargs = ret->arg_begin();
   Value* argc = funargs++;
@@ -65,8 +65,12 @@ createMainWrapperFunction(
 
   builder.CreateCall(modInitFn);
 
-  args.push_back(builder.CreateCall(makeref, builder.CreateBitCast(moduleGlobal, makeref->getFunctionType()->getParamType(0))));
-  args.push_back(builder.CreateCall(makeref, builder.CreateBitCast(builder.CreateCall2(module.getFunction("rt_argvtoarray"), argc, argv), makeref->getFunctionType()->getParamType(0))));
+  Value *argvObj = builder.CreateCall2(module.getFunction("rt_argvtoarray"), argc, argv);
+
+  args.push_back(builder.CreateBitCast(moduleGlobal, realMain->getFunctionType()->getParamType(0)));
+  args.push_back(builder.CreateCall(loadvtable, builder.CreateBitCast(moduleGlobal, loadvtable->getFunctionType()->getParamType(0))));
+  args.push_back(builder.CreateBitCast(argvObj, realMain->getFunctionType()->getParamType(2)));
+  args.push_back(builder.CreateCall(loadvtable, builder.CreateBitCast(argvObj, loadvtable->getFunctionType()->getParamType(0))));
 
   builder.CreateInvoke(realMain, normalBlock, exceptionBlock, args.begin(), args.end());
 

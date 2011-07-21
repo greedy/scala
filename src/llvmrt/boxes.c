@@ -5,23 +5,26 @@
   struct object_java_lang_ ## c;                                                  \
   extern struct object_java_lang_ ## c module__Ojava_Dlang_D ## c;                \
   extern void initmodule_module__Ojava_Dlang_D ## c();                            \
-  extern struct reference                                                         \
+  extern struct java_lang_Object*                                                 \
   method__Ojava_Dlang_D ## c ## _MvalueOf_Ascala_D ## k ## _Rjava_Dlang_D ## c    \
-    (struct reference, p);                                                        \
+    (struct java_lang_Object*, vtable, p, vtable*);                               \
   extern p                                                                        \
   method_java_Dlang_D ## c ## _M ## g ## _Rscala_D ## k (                         \
-      struct reference);                                                          \
+      struct java_lang_Object*, vtable);                                          \
   struct java_lang_Object *rt_box_ ## c (p v)                                     \
   {                                                                               \
+    vtable vtbl;                                                                  \
+    struct java_lang_Object *mod =                                                \
+      (struct java_lang_Object*)&module__Ojava_Dlang_D ## c;                      \
     initmodule_module__Ojava_Dlang_D ## c();                                      \
     return                                                                        \
     method__Ojava_Dlang_D ## c ## _MvalueOf_Ascala_D ## k ## _Rjava_Dlang_D ## c  \
-    (makeref((struct java_lang_Object*)&module__Ojava_Dlang_D ## c), v).object;   \
+    (mod, mod->klass->vtable, v, &vtbl);                                          \
   }                                                                               \
   p rt_unbox_ ## c(struct java_lang_Object *v)                                    \
   {                                                                               \
     return                                                                        \
-    method_java_Dlang_D ## c ## _M ## g ## _Rscala_D ## k (makeref(v));           \
+    method_java_Dlang_D ## c ## _M ## g ## _Rscala_D ## k (v, rt_loadvtable(v));  \
   }
 
 #define DEFINE_BOX(p,c,g) DEFINE_BOX2(p,c,c,g)

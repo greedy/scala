@@ -24,10 +24,10 @@ struct _Ojava_lang_String {
 
 extern struct java_lang_String* rt_makestring(struct utf8str *s);
 
-extern int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct reference);
-extern bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct reference, struct reference);
-extern struct reference method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct reference);
-extern struct reference method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct reference);
+extern int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_Object *self, vtable selfVtable);
+extern bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct java_lang_Object*, vtable, struct java_lang_Object*, vtable);
+extern struct java_lang_Object* method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct java_lang_Object*, vtable, vtable *);
+extern struct java_lang_Object* method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct java_lang_Object*, vtable, vtable *);
 
 
 void rt_string_append_Boolean(
@@ -86,16 +86,16 @@ void rt_string_append_ustring(
     int32_t len,
     UChar *buf);
 
-int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct reference self)
+int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_Object* self, vtable selfVtable)
 ;
 
-bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct reference self, struct reference other)
+bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct java_lang_Object *self, vtable selfVtable, struct java_lang_Object *other, vtable otherVtable)
 ;
 
-struct reference method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct reference self)
+struct java_lang_Object* method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct java_lang_Object *self, vtable selfVtable, vtable *vtableOut);
 ;
 
-struct reference method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct reference self)
+struct java_lang_Object* method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct java_lang_Object *self, vtable selfVtable, vtable *vtableOut)
 ;
 
 struct java_lang_String *

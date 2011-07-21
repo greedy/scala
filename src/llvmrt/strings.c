@@ -43,16 +43,16 @@ struct klass class_java_Dlang_DString = {
 
 void
 method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(
-    struct reference sref)
+    struct java_lang_Object *self, vtable selfVtable)
 {
-  method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject(sref);
+  method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject(self, selfVtable);
 }
 
 struct java_lang_String*
 rt_stringcreate(UChar *buffer, int32_t len)
 {
   struct java_lang_String *ret = (struct java_lang_String*)rt_new(&class_java_Dlang_DString);
-  method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(makeref((struct java_lang_Object*)ret));
+  method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString((struct java_lang_Object*)ret, rt_loadvtable((struct java_lang_Object*)ret));
   ret->len = len;
   ret->s = buffer;
   return ret;
@@ -193,86 +193,104 @@ struct java_Dlang_DDouble;
 
 extern int64_t
 method_java_Dlang_DLong_MlongValue_Rscala_DLong(
-    struct reference);
+    struct java_lang_Object *self, vtable selfVtable);
 
-struct reference
+struct java_lang_Object*
 method_java_Dlang_DLong_MtoString_Rjava_Dlang_DString(
-    struct reference self)
+    struct java_lang_Object *self, vtable selfVtable,
+    vtable *vtableOut)
 {
   UChar *s;
   int32_t len;
-  s = ustring_for_long(method_java_Dlang_DLong_MlongValue_Rscala_DLong(self), 8, &len);
-  return makeref((struct java_lang_Object*)rt_stringcreate(s, len));
+  s = ustring_for_long(method_java_Dlang_DLong_MlongValue_Rscala_DLong(self, selfVtable), 8, &len);
+  struct java_lang_Object *ret = (struct java_lang_Object*)rt_stringcreate(s, len);
+  *vtableOut = rt_loadvtable(ret);
+  return ret;
 }
 
 extern int32_t
 method_java_Dlang_DInteger_MintValue_Rscala_DInt(
-    struct reference self);
+    struct java_lang_Object *self, vtable selfVtable);
 
-struct reference
+struct java_lang_Object*
 method_java_Dlang_DInteger_MtoString_Rjava_Dlang_DString(
-    struct reference self)
+    struct java_lang_Object *self, vtable selfVtable,
+    vtable *vtableOut)
 {
   UChar *s;
   int32_t len;
-  s = ustring_for_int(method_java_Dlang_DInteger_MintValue_Rscala_DInt(self), 8, &len);
-  return makeref((struct java_lang_Object*)rt_stringcreate(s, len));
+  s = ustring_for_int(method_java_Dlang_DInteger_MintValue_Rscala_DInt(self, selfVtable), 8, &len);
+  struct java_lang_Object *ret = (struct java_lang_Object*)rt_stringcreate(s, len);
+  *vtableOut = rt_loadvtable(ret);
+  return ret;
 }
 
 extern int32_t
 method_java_Dlang_DByte_MintValue_Rscala_DInt(
-    struct reference self);
+    struct java_lang_Object *self, vtable selfVtable);
 
-struct reference
+struct java_lang_Object*
 method_java_Dlang_DByte_MtoString_Rjava_Dlang_DString(
-    struct reference self)
+    struct java_lang_Object *self, vtable selfVtable,
+    vtable *vtableOut)
 {
   UChar *s;
   int32_t len;
-  s = ustring_for_int(method_java_Dlang_DByte_MintValue_Rscala_DInt(self), 3, &len);
-  return makeref((struct java_lang_Object*)rt_stringcreate(s, len));
+  s = ustring_for_int(method_java_Dlang_DByte_MintValue_Rscala_DInt(self, selfVtable), 3, &len);
+  struct java_lang_Object *ret = (struct java_lang_Object*)rt_stringcreate(s, len);
+  *vtableOut = rt_loadvtable(ret);
+  return ret;
 }
 
 extern int32_t
 method_java_Dlang_DShort_MintValue_Rscala_DInt(
-    struct reference self);
+    struct java_lang_Object *self, vtable selfVtable);
 
-struct reference
+struct java_lang_Object*
 method_java_Dlang_DShort_MtoString_Rjava_Dlang_DString(
-    struct reference self)
+    struct java_lang_Object *self, vtable selfVtable,
+    vtable *vtableOut)
 {
   UChar *s;
   int32_t len;
-  s = ustring_for_int(method_java_Dlang_DShort_MintValue_Rscala_DInt(self), 6, &len);
-  return makeref((struct java_lang_Object*)rt_stringcreate(s, len));
+  s = ustring_for_int(method_java_Dlang_DShort_MintValue_Rscala_DInt(self, selfVtable), 6, &len);
+  struct java_lang_Object *ret = (struct java_lang_Object*)rt_stringcreate(s, len);
+  *vtableOut = rt_loadvtable(ret);
+  return ret;
 }
 
 extern double
 method_java_Dlang_DFloat_MdoubleValue_Rscala_DDouble(
-    struct reference self);
+    struct java_lang_Object *self, vtable selfVtable);
 
-struct reference
+struct java_lang_Object*
 method_java_Dlang_DFloat_MtoString_Rjava_Dlang_DString(
-    struct reference self)
+    struct java_lang_Object *self, vtable selfVtable,
+    vtable *vtableOut)
 {
   UChar *s;
   int32_t len;
-  s = ustring_for_double(method_java_Dlang_DFloat_MdoubleValue_Rscala_DDouble(self), 3, &len);
-  return makeref((struct java_lang_Object*)rt_stringcreate(s, len));
+  s = ustring_for_double(method_java_Dlang_DFloat_MdoubleValue_Rscala_DDouble(self, selfVtable), 3, &len);
+  struct java_lang_Object *ret = (struct java_lang_Object*)rt_stringcreate(s, len);
+  *vtableOut = rt_loadvtable(ret);
+  return ret;
 }
 
 extern double
 method_java_Dlang_DDouble_MdoubleValue_Rscala_DDouble(
-    struct reference self);
+    struct java_lang_Object *self, vtable selfVtable);
 
-struct reference
+struct java_lang_Object*
 method_java_Dlang_DDouble_MtoString_Rjava_Dlang_DString(
-    struct reference self)
+    struct java_lang_Object *self, vtable selfVtable,
+    vtable *vtableOut)
 {
   UChar *s;
   int32_t len;
-  s = ustring_for_double(method_java_Dlang_DDouble_MdoubleValue_Rscala_DDouble(self), 3, &len);
-  return makeref((struct java_lang_Object*)rt_stringcreate(s, len));
+  s = ustring_for_double(method_java_Dlang_DDouble_MdoubleValue_Rscala_DDouble(self, selfVtable), 3, &len);
+  struct java_lang_Object *ret = (struct java_lang_Object*)rt_stringcreate(s, len);
+  *vtableOut = rt_loadvtable(ret);
+  return ret;
 }
 
 void rt_string_append_number(
@@ -399,20 +417,23 @@ void rt_string_append_Float(
   rt_string_append_Double(s, v);
 }
 
-typedef struct reference (*toStringFn)(struct reference);
+typedef struct java_lang_Object* (*toStringFn)(struct java_lang_Object *, vtable, vtable*);
 
 void rt_string_append_string(
     struct stringlist **s,
     struct java_lang_Object *sobj)
 {
+  vtable tempVtable;
   struct java_lang_String *ss;
   toStringFn toString;
   struct stringlist *n = malloc(sizeof(struct stringlist));
   n->prev = *s;
   *s = n;
 
+  /* XXX sharing string data could make GC hard */
+
   toString = sobj->klass->vtable[4];
-  ss = (struct java_lang_String*)toString(makeref(sobj)).object;
+  ss = (struct java_lang_String*)toString(sobj, rt_loadvtable(sobj), &tempVtable);
 
   n->len = ss->len;
   n->s = ss->s;
@@ -430,9 +451,9 @@ void rt_string_append_ustring(
   *s = n;
 }
 
-int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct reference selfref)
+int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_Object *s, vtable selfVtable)
 {
-  struct java_lang_String *self = (struct java_lang_String*)selfref.object;
+  struct java_lang_String *self = (struct java_lang_String*)s;
   int32_t hashcode = 0;
   for (int32_t i = 0; i < self->len; i++) {
     hashcode += self->s[i] * 13;
@@ -440,11 +461,10 @@ int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct reference selfref
   return hashcode;
 }
 
-bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct reference selfref, struct reference otherref)
+bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct java_lang_Object *s, vtable selfVtable, struct java_lang_Object *other, vtable otherVtable)
 {
-  struct java_lang_String *self = (struct java_lang_String*)selfref.object;
-  struct java_lang_Object *other = otherref.object;
-  if (other->klass == &class_java_Dlang_DString) {
+  struct java_lang_String *self = (struct java_lang_String*)s;
+  if (other && other->klass == &class_java_Dlang_DString) {
     struct java_lang_String *os = (struct java_lang_String*)other;
     return 0 == u_strCompare(self->s, self->len, os->s, os->len, TRUE);
   } else {
@@ -452,21 +472,27 @@ bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struc
   }
 }
 
-struct reference method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct reference selfref)
+struct java_lang_Object*
+method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct java_lang_Object *self, vtable selfVtable,
+    vtable *vtableOut)
 {
-  return selfref;
+  *vtableOut = selfVtable;
+  return self;
 }
 
-struct reference method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct reference selfref)
+struct java_lang_Object*
+method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct java_lang_Object *self, vtable selfVtable,
+    vtable *vtableOut)
 {
-  return selfref;
+  *vtableOut = selfVtable;
+  return (struct java_lang_Object*)self;
 }
 
 struct java_lang_String *
 rt_stringconcat(struct stringlist **s)
 {
   struct java_lang_String *ret = (struct java_lang_String*)rt_new(&class_java_Dlang_DString);
-  method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(makeref((struct java_lang_Object*)ret));
+  method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString((struct java_lang_Object*)ret, rt_loadvtable((struct java_lang_Object*)ret));
   UChar *buffer;
   UChar *wp;
   int32_t totlen = 0;
@@ -489,12 +515,12 @@ rt_stringconcat(struct stringlist **s)
   return ret;
 }
 
-struct reference
+struct java_lang_Object*
 method__Ojava_Dlang_DString_Mutf8bytes_Ajava_Dlang_DString_R_Nscala_DByte(
-    struct reference selfref,
-    struct reference sref)
+    struct java_lang_Object *self, vtable selfVtable,
+    struct java_lang_String *s, vtable sVtable,
+    vtable *vtableOut)
 {
-  struct java_lang_String *s = (struct java_lang_String*)sref.object;
   enum UErrorCode uerr = U_ZERO_ERROR;
   char *buffer;
   int32_t bufsize = s->len;
@@ -513,8 +539,10 @@ method__Ojava_Dlang_DString_Mutf8bytes_Ajava_Dlang_DString_R_Nscala_DByte(
     struct array *ret = new_array(BYTE, NULL, 1, reqsize);
     memcpy(ret->data, buffer, reqsize);
     free(buffer);
-    return makeref((struct java_lang_Object*)ret);
+    *vtableOut = rt_loadvtable((struct java_lang_Object*)ret);
+    return (struct java_lang_Object*)ret;
   } else {
-    return makeref(NULL);
+    *vtableOut = NULL;
+    return NULL;
   }
 }

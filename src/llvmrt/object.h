@@ -23,28 +23,30 @@ rt_classobject(struct klass*);
 
 extern int32_t
 method_java_Dlang_DObject_MhashCode_Rscala_DInt(
-    struct reference self);
+    struct java_lang_Object *self, vtable selfVtable);
 
 extern bool
 method_java_Dlang_DObject_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(
-    struct reference self,
-    struct reference other);
+    struct java_lang_Object *self, vtable selfVtable,
+    struct java_lang_Object *other, vtable otherVtable);
 
-extern struct reference
+extern struct java_lang_Object*
 method_java_Dlang_DObject_Mclone_Rjava_Dlang_DObject(
-    struct reference self);
+    struct java_lang_Object *self, vtable selfVtable,
+    vtable *vtableOut);
 
-extern struct reference
+extern struct java_lang_Object*
 method_java_Dlang_DObject_MtoString_Rjava_Dlang_DString(
-    struct reference self);
+    struct java_lang_Object *self, vtable selfVtable,
+    vtable *vtableOut);
 
 extern void
 method_java_Dlang_DObject_Mfinalize_Rscala_DUnit(
-    struct reference self);
+    struct java_lang_Object *self, vtable selfVtable);
 
 extern void
 method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject(
-    struct reference self);
+    struct java_lang_Object *self, vtable selfVtable);
 
 extern struct klass class_scala_DscalaObject;
 
