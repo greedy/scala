@@ -24,22 +24,22 @@ struct klass class_java_Dlang_DObject = {
 
 int32_t
 method_java_Dlang_DObject_MhashCode_Rscala_DInt(
-    struct java_lang_Object *this, vtable thisVtable)
+    struct java_lang_Object *this, vtable_t thisVtable)
 {
   return (int32_t)(((intptr_t)this)/sizeof(struct java_lang_Object));
 }
 
 bool
 method_java_Dlang_DObject_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(
-    struct java_lang_Object *this, vtable thisVtable,
-    struct java_lang_Object *other, vtable otherVtable)
+    struct java_lang_Object *this, vtable_t thisVtable,
+    struct java_lang_Object *other, vtable_t otherVtable)
 {
   return this == other;
 }
 
 struct java_lang_Object*
 method_java_Dlang_DObject_Mclone_Rjava_Dlang_DObject(
-    struct java_lang_Object *this, vtable thisVtable, vtable *vtableOut)
+    struct java_lang_Object *this, vtable_t thisVtable, vtable_t *vtableOut)
 {
   *vtableOut = NULL;
   return NULL;
@@ -50,8 +50,8 @@ static bool s_at_initted = false;
 
 struct java_lang_Object*
 method_java_Dlang_DObject_MtoString_Rjava_Dlang_DString(
-    struct java_lang_Object *this, vtable thisVtable,
-    vtable *vtableOut)
+    struct java_lang_Object *this, vtable_t thisVtable,
+    vtable_t *vtableOut)
 {
   struct stringlist *sl = NULL;
   rt_string_append_string(&sl, (struct java_lang_Object*)rt_makestring(&this->klass->name));
@@ -68,14 +68,14 @@ method_java_Dlang_DObject_MtoString_Rjava_Dlang_DString(
 
 void
 method_java_Dlang_DObject_Mfinalize_Rscala_DUnit(
-    struct java_lang_Object *this, vtable thisVtable)
+    struct java_lang_Object *this, vtable_t thisVtable)
 {
   return;
 }
 
 void
 method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject(
-    struct java_lang_Object *this, vtable thisVtable)
+    struct java_lang_Object *this, vtable_t thisVtable)
 {
   return;
 }
@@ -96,7 +96,7 @@ struct java_lang_Class {
 };
 
 struct java_lang_Object*
-method_java_Dlang_DClass_Mclone_Rjava_Dlang_DObject(struct java_lang_Object *self, vtable selfVtable, vtable *vtableOut)
+method_java_Dlang_DClass_Mclone_Rjava_Dlang_DObject(struct java_lang_Object *self, vtable_t selfVtable, vtable_t *vtableOut)
 {
   *vtableOut = self->klass->vtable;
   return self;
@@ -104,8 +104,8 @@ method_java_Dlang_DClass_Mclone_Rjava_Dlang_DObject(struct java_lang_Object *sel
 
 bool
 method_java_Dlang_DClass_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(
-    struct java_lang_Object *self, vtable selfVtable, 
-    struct java_lang_Object *other, vtable otherVtable)
+    struct java_lang_Object *self, vtable_t selfVtable, 
+    struct java_lang_Object *other, vtable_t otherVtable)
 {
   if (self->klass == other->klass) {
     return ((struct java_lang_Class*)self)->theklass == ((struct java_lang_Class*)other)->theklass;
@@ -116,13 +116,13 @@ method_java_Dlang_DClass_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(
 
 int32_t
 method_java_Dlang_DClass_MhashCode_Rscala_DInt(
-    struct java_lang_Object *self, vtable selfVtable)
+    struct java_lang_Object *self, vtable_t selfVtable)
 {
   return (int32_t)(((struct java_lang_Class*)self)->theklass);
 }
 
 struct java_lang_Object*
-method_java_Dlang_DClass_MgetName_Rjava_Dlang_DString(struct java_lang_Object *self, vtable selfVtable, vtable *vtableOut)
+method_java_Dlang_DClass_MgetName_Rjava_Dlang_DString(struct java_lang_Object *self, vtable_t selfVtable, vtable_t *vtableOut)
 {
   struct java_lang_Object *ret = (struct java_lang_Object*)rt_makestring(&((struct java_lang_Class*)self)->theklass->name);
   *vtableOut = rt_loadvtable(ret);
@@ -131,7 +131,7 @@ method_java_Dlang_DClass_MgetName_Rjava_Dlang_DString(struct java_lang_Object *s
 
 struct java_lang_Object*
 method_java_Dlang_DClass_MtoString_Rjava_Dlang_DString(
-    struct java_lang_Object *self, vtable selfVtable, vtable *vtableOut)
+    struct java_lang_Object *self, vtable_t selfVtable, vtable_t *vtableOut)
 {
   return method_java_Dlang_DClass_MgetName_Rjava_Dlang_DString(self, selfVtable, vtableOut);
 }
@@ -147,7 +147,7 @@ rt_classobject(struct klass* klass)
 }
 
 struct java_lang_Object*
-method_java_Dlang_DObject_MgetClass_Rjava_Dlang_DClass(struct java_lang_Object *self, vtable selfVtable, vtable *vtableOut)
+method_java_Dlang_DObject_MgetClass_Rjava_Dlang_DClass(struct java_lang_Object *self, vtable_t selfVtable, vtable_t *vtableOut)
 {
   struct java_lang_Object *ret = (struct java_lang_Object*)rt_classobject(self->klass);
   *vtableOut = rt_loadvtable(ret);

@@ -91,7 +91,7 @@ extern struct klass class_java_Dlang_DNullPointerException;
 
 extern void
 method_java_Dlang_DNullPointerException_M_Linit_G_Rjava_Dlang_DNullPointerException(
-    struct java_lang_Object *self, vtable selfVtable);
+    struct java_lang_Object *self, vtable_t selfVtable);
 
 void rt_assertNotNull(struct java_lang_Object *object)
 {
@@ -125,7 +125,7 @@ void *rt_argvtoarray(int argc, char **argv)
   return (void*)ret;
 }
 
-vtable rt_loadvtable(struct java_lang_Object *obj)
+vtable_t rt_loadvtable(struct java_lang_Object *obj)
 {
   if (obj == NULL)
     return NULL;

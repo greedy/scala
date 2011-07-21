@@ -24,10 +24,10 @@ struct _Ojava_lang_String {
 
 extern struct java_lang_String* rt_makestring(struct utf8str *s);
 
-extern int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_Object *self, vtable selfVtable);
-extern bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct java_lang_Object*, vtable, struct java_lang_Object*, vtable);
-extern struct java_lang_Object* method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct java_lang_Object*, vtable, vtable *);
-extern struct java_lang_Object* method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct java_lang_Object*, vtable, vtable *);
+extern int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_Object *self, vtable_t selfVtable);
+extern bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct java_lang_Object*, vtable_t, struct java_lang_Object*, vtable_t);
+extern struct java_lang_Object* method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct java_lang_Object*, vtable_t, vtable_t *);
+extern struct java_lang_Object* method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct java_lang_Object*, vtable_t, vtable_t *);
 
 
 void rt_string_append_Boolean(
@@ -86,16 +86,16 @@ void rt_string_append_ustring(
     int32_t len,
     UChar *buf);
 
-int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_Object* self, vtable selfVtable)
+int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_Object* self, vtable_t selfVtable)
 ;
 
-bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct java_lang_Object *self, vtable selfVtable, struct java_lang_Object *other, vtable otherVtable)
+bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct java_lang_Object *self, vtable_t selfVtable, struct java_lang_Object *other, vtable_t otherVtable)
 ;
 
-struct java_lang_Object* method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct java_lang_Object *self, vtable selfVtable, vtable *vtableOut);
+struct java_lang_Object* method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct java_lang_Object *self, vtable_t selfVtable, vtable_t *vtableOut);
 ;
 
-struct java_lang_Object* method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct java_lang_Object *self, vtable selfVtable, vtable *vtableOut)
+struct java_lang_Object* method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct java_lang_Object *self, vtable_t selfVtable, vtable_t *vtableOut)
 ;
 
 struct java_lang_String *

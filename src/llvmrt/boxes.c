@@ -7,13 +7,13 @@
   extern void initmodule_module__Ojava_Dlang_D ## c();                            \
   extern struct java_lang_Object*                                                 \
   method__Ojava_Dlang_D ## c ## _MvalueOf_Ascala_D ## k ## _Rjava_Dlang_D ## c    \
-    (struct java_lang_Object*, vtable, p, vtable*);                               \
+    (struct java_lang_Object*, vtable_t, p, vtable_t*);                           \
   extern p                                                                        \
   method_java_Dlang_D ## c ## _M ## g ## _Rscala_D ## k (                         \
-      struct java_lang_Object*, vtable);                                          \
+      struct java_lang_Object*, vtable_t);                                        \
   struct java_lang_Object *rt_box_ ## c (p v)                                     \
   {                                                                               \
-    vtable vtbl;                                                                  \
+    vtable_t vtbl;                                                                \
     struct java_lang_Object *mod =                                                \
       (struct java_lang_Object*)&module__Ojava_Dlang_D ## c;                      \
     initmodule_module__Ojava_Dlang_D ## c();                                      \

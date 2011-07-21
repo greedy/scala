@@ -11,28 +11,28 @@ struct java_lang_Object;
 
 void
 method__Ojava_Dlang_DStandardError_Mwrite_Ascala_DInt_Rscala_DUnit(
-    struct java_lang_Object *self, vtable selfVtable, int32_t b)
+    struct java_lang_Object *self, vtable_t selfVtable, int32_t b)
 {
   fputc(b, stderr);
 }
 
 void
 method__Ojava_Dlang_DStandardError_Mflush_Rscala_DUnit(
-    struct java_lang_Object *self, vtable selfVtable)
+    struct java_lang_Object *self, vtable_t selfVtable)
 {
   fflush(stderr);
 }
 
 void
 method__Ojava_Dlang_DStandardOut_Mwrite_Ascala_DInt_Rscala_DUnit(
-    struct java_lang_Object *self, vtable selfVtable, int32_t b)
+    struct java_lang_Object *self, vtable_t selfVtable, int32_t b)
 {
   fputc(b, stdout);
 }
 
 void
 method__Ojava_Dlang_DStandardOut_Mflush_Rscala_DUnit(
-    struct java_lang_Object *self, vtable selfVtable)
+    struct java_lang_Object *self, vtable_t selfVtable)
 {
   fflush(stdout);
 }
@@ -54,14 +54,14 @@ UFILE* ustdout() {
 }
 
 void
-method__Ojava_Dlang_DSystem_MdebugString_Ajava_Dlang_DString_Rscala_DUnit(struct java_lang_Object *self, vtable selfVtable, struct java_lang_Object *sobj, vtable *sVtable)
+method__Ojava_Dlang_DSystem_MdebugString_Ajava_Dlang_DString_Rscala_DUnit(struct java_lang_Object *self, vtable_t selfVtable, struct java_lang_Object *sobj, vtable_t *sVtable)
 {
   struct java_lang_String *s = (struct java_lang_String*)sobj;
   u_file_write(s->s, s->len, ustderr());
 }
 
 void
-method__Ojava_Dlang_DSystem_MdebugPointer_Ajava_Dlang_DObject_Rscala_DUnit(struct java_lang_Object *self, vtable selfVtable, struct java_lang_Object *arg, vtable argVtable)
+method__Ojava_Dlang_DSystem_MdebugPointer_Ajava_Dlang_DObject_Rscala_DUnit(struct java_lang_Object *self, vtable_t selfVtable, struct java_lang_Object *arg, vtable_t argVtable)
 {
   fprintf(stderr, "%p\n", arg);
 }

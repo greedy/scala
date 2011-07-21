@@ -115,7 +115,7 @@ extern struct klass class_java_Dlang_DArrayIndexOutOfBoundsException;
 
 extern void
 method_java_Dlang_DArrayIndexOutOfBoundsException_M_Linit_G_Rjava_Dlang_DArrayIndexOutOfBoundsException(
-    struct java_lang_Object *, vtable);
+    struct java_lang_Object *, vtable_t);
 
 void rt_assertArrayBounds(struct array *arr,
                           uint32_t i)

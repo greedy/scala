@@ -43,7 +43,7 @@ struct klass class_java_Dlang_DString = {
 
 void
 method_java_Dlang_DString_M_Linit_G_Rjava_Dlang_DString(
-    struct java_lang_Object *self, vtable selfVtable)
+    struct java_lang_Object *self, vtable_t selfVtable)
 {
   method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject(self, selfVtable);
 }
@@ -193,12 +193,12 @@ struct java_Dlang_DDouble;
 
 extern int64_t
 method_java_Dlang_DLong_MlongValue_Rscala_DLong(
-    struct java_lang_Object *self, vtable selfVtable);
+    struct java_lang_Object *self, vtable_t selfVtable);
 
 struct java_lang_Object*
 method_java_Dlang_DLong_MtoString_Rjava_Dlang_DString(
-    struct java_lang_Object *self, vtable selfVtable,
-    vtable *vtableOut)
+    struct java_lang_Object *self, vtable_t selfVtable,
+    vtable_t *vtableOut)
 {
   UChar *s;
   int32_t len;
@@ -210,12 +210,12 @@ method_java_Dlang_DLong_MtoString_Rjava_Dlang_DString(
 
 extern int32_t
 method_java_Dlang_DInteger_MintValue_Rscala_DInt(
-    struct java_lang_Object *self, vtable selfVtable);
+    struct java_lang_Object *self, vtable_t selfVtable);
 
 struct java_lang_Object*
 method_java_Dlang_DInteger_MtoString_Rjava_Dlang_DString(
-    struct java_lang_Object *self, vtable selfVtable,
-    vtable *vtableOut)
+    struct java_lang_Object *self, vtable_t selfVtable,
+    vtable_t *vtableOut)
 {
   UChar *s;
   int32_t len;
@@ -227,12 +227,12 @@ method_java_Dlang_DInteger_MtoString_Rjava_Dlang_DString(
 
 extern int32_t
 method_java_Dlang_DByte_MintValue_Rscala_DInt(
-    struct java_lang_Object *self, vtable selfVtable);
+    struct java_lang_Object *self, vtable_t selfVtable);
 
 struct java_lang_Object*
 method_java_Dlang_DByte_MtoString_Rjava_Dlang_DString(
-    struct java_lang_Object *self, vtable selfVtable,
-    vtable *vtableOut)
+    struct java_lang_Object *self, vtable_t selfVtable,
+    vtable_t *vtableOut)
 {
   UChar *s;
   int32_t len;
@@ -244,12 +244,12 @@ method_java_Dlang_DByte_MtoString_Rjava_Dlang_DString(
 
 extern int32_t
 method_java_Dlang_DShort_MintValue_Rscala_DInt(
-    struct java_lang_Object *self, vtable selfVtable);
+    struct java_lang_Object *self, vtable_t selfVtable);
 
 struct java_lang_Object*
 method_java_Dlang_DShort_MtoString_Rjava_Dlang_DString(
-    struct java_lang_Object *self, vtable selfVtable,
-    vtable *vtableOut)
+    struct java_lang_Object *self, vtable_t selfVtable,
+    vtable_t *vtableOut)
 {
   UChar *s;
   int32_t len;
@@ -261,12 +261,12 @@ method_java_Dlang_DShort_MtoString_Rjava_Dlang_DString(
 
 extern double
 method_java_Dlang_DFloat_MdoubleValue_Rscala_DDouble(
-    struct java_lang_Object *self, vtable selfVtable);
+    struct java_lang_Object *self, vtable_t selfVtable);
 
 struct java_lang_Object*
 method_java_Dlang_DFloat_MtoString_Rjava_Dlang_DString(
-    struct java_lang_Object *self, vtable selfVtable,
-    vtable *vtableOut)
+    struct java_lang_Object *self, vtable_t selfVtable,
+    vtable_t *vtableOut)
 {
   UChar *s;
   int32_t len;
@@ -278,12 +278,12 @@ method_java_Dlang_DFloat_MtoString_Rjava_Dlang_DString(
 
 extern double
 method_java_Dlang_DDouble_MdoubleValue_Rscala_DDouble(
-    struct java_lang_Object *self, vtable selfVtable);
+    struct java_lang_Object *self, vtable_t selfVtable);
 
 struct java_lang_Object*
 method_java_Dlang_DDouble_MtoString_Rjava_Dlang_DString(
-    struct java_lang_Object *self, vtable selfVtable,
-    vtable *vtableOut)
+    struct java_lang_Object *self, vtable_t selfVtable,
+    vtable_t *vtableOut)
 {
   UChar *s;
   int32_t len;
@@ -417,13 +417,13 @@ void rt_string_append_Float(
   rt_string_append_Double(s, v);
 }
 
-typedef struct java_lang_Object* (*toStringFn)(struct java_lang_Object *, vtable, vtable*);
+typedef struct java_lang_Object* (*toStringFn)(struct java_lang_Object *, vtable_t, vtable_t*);
 
 void rt_string_append_string(
     struct stringlist **s,
     struct java_lang_Object *sobj)
 {
-  vtable tempVtable;
+  vtable_t tempVtable;
   struct java_lang_String *ss;
   toStringFn toString;
   struct stringlist *n = malloc(sizeof(struct stringlist));
@@ -451,7 +451,7 @@ void rt_string_append_ustring(
   *s = n;
 }
 
-int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_Object *s, vtable selfVtable)
+int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_Object *s, vtable_t selfVtable)
 {
   struct java_lang_String *self = (struct java_lang_String*)s;
   int32_t hashcode = 0;
@@ -461,7 +461,7 @@ int32_t method_java_Dlang_DString_MhashCode_Rscala_DInt(struct java_lang_Object 
   return hashcode;
 }
 
-bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct java_lang_Object *s, vtable selfVtable, struct java_lang_Object *other, vtable otherVtable)
+bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struct java_lang_Object *s, vtable_t selfVtable, struct java_lang_Object *other, vtable_t otherVtable)
 {
   struct java_lang_String *self = (struct java_lang_String*)s;
   if (other && other->klass == &class_java_Dlang_DString) {
@@ -473,16 +473,16 @@ bool method_java_Dlang_DString_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean(struc
 }
 
 struct java_lang_Object*
-method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct java_lang_Object *self, vtable selfVtable,
-    vtable *vtableOut)
+method_java_Dlang_DString_Mclone_Rjava_Dlang_DObject(struct java_lang_Object *self, vtable_t selfVtable,
+    vtable_t *vtableOut)
 {
   *vtableOut = selfVtable;
   return self;
 }
 
 struct java_lang_Object*
-method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct java_lang_Object *self, vtable selfVtable,
-    vtable *vtableOut)
+method_java_Dlang_DString_MtoString_Rjava_Dlang_DString(struct java_lang_Object *self, vtable_t selfVtable,
+    vtable_t *vtableOut)
 {
   *vtableOut = selfVtable;
   return (struct java_lang_Object*)self;
@@ -517,9 +517,9 @@ rt_stringconcat(struct stringlist **s)
 
 struct java_lang_Object*
 method__Ojava_Dlang_DString_Mutf8bytes_Ajava_Dlang_DString_R_Nscala_DByte(
-    struct java_lang_Object *self, vtable selfVtable,
-    struct java_lang_String *s, vtable sVtable,
-    vtable *vtableOut)
+    struct java_lang_Object *self, vtable_t selfVtable,
+    struct java_lang_String *s, vtable_t sVtable,
+    vtable_t *vtableOut)
 {
   enum UErrorCode uerr = U_ZERO_ERROR;
   char *buffer;
