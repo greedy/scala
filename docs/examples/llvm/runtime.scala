@@ -635,62 +635,60 @@ package scala {
     def printf(fmt: String, args: Any*): Unit = { }
   }
   */
-  /*
   package runtime {
     class ObjectRef(var elem: Object) extends Object with java.io.Serializable {
-      override def toString() = "" + elem
+      //override def toString() = "" + elem
     }
     class BooleanRef(var elem: scala.Boolean) extends Object with java.io.Serializable {
-      override def toString() = "" + elem
+      //override def toString() = "" + elem
     }
     class ByteRef(var elem: scala.Byte) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Byte.toString(elem)
+      //override def toString() = java.lang.Byte.toString(elem)
     }
     class CharRef(var elem: scala.Char) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Character.toString(elem)
+      //override def toString() = java.lang.Character.toString(elem)
     }
     class DoubleRef(var elem: scala.Double) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Double.toString(elem)
+      //override def toString() = java.lang.Double.toString(elem)
     }
     class FloatRef(var elem: scala.Float) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Float.toString(elem)
+      //override def toString() = java.lang.Float.toString(elem)
     }
     class IntRef(var elem: scala.Int) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Integer.toString(elem)
+      //override def toString() = java.lang.Integer.toString(elem)
     }
     class LongRef(var elem: scala.Long) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Long.toString(elem)
+      //override def toString() = java.lang.Long.toString(elem)
     }
     class ShortRef(var elem: scala.Short) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Short.toString(elem)
+      //override def toString() = java.lang.Short.toString(elem)
     }
     class VolatileObjectRef(var elem: Object) extends Object with java.io.Serializable {
-      override def toString() = "" + elem
+      //override def toString() = "" + elem
     }
     class VolatileBooleanRef(var elem: scala.Boolean) extends Object with java.io.Serializable {
-      override def toString() = "" + elem
+      //override def toString() = "" + elem
     }
     class VolatileByteRef(var elem: scala.Byte) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Byte.toString(elem)
+      //override def toString() = java.lang.Byte.toString(elem)
     }
     class VolatileCharRef(var elem: scala.Char) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Character.toString(elem)
+      //override def toString() = java.lang.Character.toString(elem)
     }
     class VolatileDoubleRef(var elem: scala.Double) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Double.toString(elem)
+      //override def toString() = java.lang.Double.toString(elem)
     }
     class VolatileFloatRef(var elem: scala.Float) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Float.toString(elem)
+      //override def toString() = java.lang.Float.toString(elem)
     }
     class VolatileIntRef(var elem: scala.Int) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Integer.toString(elem)
+      //override def toString() = java.lang.Integer.toString(elem)
     }
     class VolatileLongRef(var elem: scala.Long) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Long.toString(elem)
+      //override def toString() = java.lang.Long.toString(elem)
     }
     class VolatileShortRef(var elem: scala.Short) extends Object with java.io.Serializable {
-      override def toString() = java.lang.Short.toString(elem)
+      //override def toString() = java.lang.Short.toString(elem)
     }
   }
-  */
 }
