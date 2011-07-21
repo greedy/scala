@@ -668,6 +668,12 @@ trait Symbols /* extends reflect.generic.Symbols*/ { self: SymbolTable =>
 
     private def stripLocalSuffix(s: String) = s stripSuffix nme.LOCAL_SUFFIX_STRING
 
+    /* This was duplicated in GenJVM, GenMSIL, and GenLLVM. Since it's
+       an operation entirely on Symbols, better to move it here. */
+    def moduleSuffix =
+      if (hasModuleFlag && !isMethod && !isImplClass && !isJavaDefined) "$"
+      else ""
+
     /** The encoded full path name of this symbol, where outer names and inner names
      *  are separated by periods.
      */
