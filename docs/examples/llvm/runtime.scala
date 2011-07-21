@@ -479,7 +479,7 @@ package scala {
       def unboxToLong(l: Object): Long = if (l eq null) 0 else l.asInstanceOf[java.lang.Long].longValue()
       def unboxToFloat(f: Object): Float = if (f eq null) 0 else f.asInstanceOf[java.lang.Float].floatValue()
       def unboxToDouble(d: Object): Double = if (d eq null) 0 else d.asInstanceOf[java.lang.Double].doubleValue()
-      def equals(x: Object, y: Object): Boolean = if (x eq y) true else equals2(x,y)
+      def equalsExternal(x: Object, y: Object): Boolean = if (x eq y) true else equals2(x,y)
       def equals2(x: Object, y: Object): Boolean = {
         x match {
           case xn: java.lang.Number => equalsNumObject(xn, y)

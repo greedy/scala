@@ -26,7 +26,7 @@ abstract class GenICode extends SubComponent  {
   import definitions.{
     ArrayClass, ObjectClass, ThrowableClass, StringClass, StringModule, NothingClass, NullClass, AnyRefClass,
     Object_equals, Object_isInstanceOf, Object_asInstanceOf, ScalaRunTimeModule,
-    BoxedNumberClass, BoxedCharacterClass,
+    BoxesRunTimeClass, BoxedNumberClass, BoxedCharacterClass,
     getMember
   }
   import scalaPrimitives.{
@@ -1581,6 +1581,9 @@ abstract class GenICode extends SubComponent  {
             def default = platform.externalEquals
             platform match {
               case x: JavaPlatform =>
+                if (forLLVM) {
+                  ctx.bb.emit(LOAD_MODULE(BoxesRunTimeClass))
+                }
                 import x._
                   if (l.tpe <:< BoxedNumberClass.tpe) {
                     if (r.tpe <:< BoxedNumberClass.tpe) externalEqualsNumNum
@@ -1599,7 +1602,13 @@ abstract class GenICode extends SubComponent  {
 
         val ctx1 = genLoad(l, ctx, ObjectReference)
         val ctx2 = genLoad(r, ctx1, ObjectReference)
-        ctx2.bb.emit(CALL_METHOD(equalsMethod, if (settings.XO.value) Dynamic else Static(false)))
+        log("must use special equals method: " + equalsMethod);
+        val style = {
+          if (settings.XO.value) Dynamic
+          else if (forLLVM) Static(true)
+          else Static(false)
+        }
+        ctx2.bb.emit(CALL_METHOD(equalsMethod, style))
         ctx2.bb.emit(CZJUMP(thenCtx.bb, elseCtx.bb, NE, BOOL))
         ctx2.bb.close
       }

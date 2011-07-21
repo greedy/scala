@@ -10,6 +10,7 @@ import llvm.GenLLVM
 
 trait LLVMPlatform extends JavaPlatform {
   import global._
+  import definitions._
 
   object genLLVM extends {
     val global: LLVMPlatform.this.global.type = LLVMPlatform.this.global
@@ -18,4 +19,6 @@ trait LLVMPlatform extends JavaPlatform {
   } with GenLLVM
 
   override def platformPhases = List(genLLVM)
+
+  override lazy val externalEquals          = getMember(BoxesRunTimeClass, "equalsExternal")
 }
