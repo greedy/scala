@@ -1896,24 +1896,19 @@ abstract class GenLLVM extends SubComponent {
                sym.detailedString)
       }
 
-      debugSym("LLVM compiling", c.symbol)
+      val sym = if(c.symbol.isModuleClass) c.symbol.linkedClassOfClass
+                else c.symbol
 
-      assert(c.symbol.isClass || c.symbol.isModuleClass, c.symbol)
-
-      val symSigOpt = currentRun.symData.get(c.symbol) match {
-        case Some(p) => Some(c.symbol, p)
-        case None =>
-          debugSym(" trying", c.symbol.companionModule)
-          currentRun.symData.get(c.symbol.companionModule).map(sig => (c.symbol.companionModule, sig))
-      }
-
-      for((sym,sig) <- symSigOpt) {
+      for(pickle <- (currentRun.symData.get(sym) orElse
+                     currentRun.symData.get(sym.companionSymbol)))
+        {
           val symFile = getSymFile(sym)
-          printf(" writing: %s\n", symFile)
           val symOut = symFile.bufferedOutput
-          symOut.write(sig.bytes.take(sig.writeIndex))
+          symOut.write(pickle.bytes.take(pickle.writeIndex))
           symOut.close
-      }
+          currentRun.symData -= sym
+          currentRun.symData -= sym.companionSymbol
+        }
 
       val outfile = getFile(c.symbol, ".ll")
       val outstream = new OutputStreamWriter(outfile.bufferedOutput,"US-ASCII")
@@ -2058,7 +2053,7 @@ abstract class GenLLVM extends SubComponent {
       for(arc <- sym.fullName.split("\\.").init) {
         dir = dir.subdirectoryNamed(arc)
       }
-      dir.fileNamed(sym.encodedName + sym.moduleSuffix + ".sym")
+      dir.fileNamed(sym.encodedName + ".sym")
     }
 
     def getFile(sym: Symbol, suffix: String): AbstractFile = {

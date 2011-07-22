@@ -333,13 +333,9 @@ abstract class SymbolLoaders {
   class SymFileLoader(val file: AbstractFile) extends SymbolLoader {
     protected def description = "sym file " + file.toString
     protected def doComplete(root: Symbol) {
-      printf("LLVM READING %s into %s\n", file, root)
-      printf(" -- root.sourceModule is %s\n", root.sourceModule)
-      printf(" -- root.owner is %s\n", root.owner)
-      printf(" -- flags before %x\n", root.flags)
-      unpickler.unpickle(file.toByteArray, 0, root, root.sourceModule,
-                         file.name)
-      printf(" -- flags after %x\n", root.flags)
+      val (cls, obj) = if(root.isModule) (root.companionSymbol, root)
+                       else (root, root.companionSymbol)
+      unpickler.unpickle(file.toByteArray, 0, cls, obj, file.name)
     }
   }
 
