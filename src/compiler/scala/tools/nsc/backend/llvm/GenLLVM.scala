@@ -660,18 +660,26 @@ abstract class GenLLVM extends SubComponent {
         }
       }
 
+      val virtualMethodCache: mutable.Map[Symbol,List[Symbol]] = new mutable.HashMap
+
       def virtualMethods(s: Symbol): List[Symbol] = {
-        if (s == NoSymbol) Nil
-        else {
-          val myvirts = s.info.decls.toList.filter(d => d.isMethod && !d.isConstructor && !(d.isOverride && s.superClass.info.members.exists(mem => mem.info <:< d.info && mem.name == d.name)) && (d.isDeferred || !d.isEffectivelyFinal))
-          (virtualMethods(s.superClass) ++ myvirts.sortBy(methodSig _)).toList
-        }
+        virtualMethodCache.getOrElseUpdate(s,
+          if (s == NoSymbol) Nil
+          else {
+            val myvirts = s.info.decls.toList.filter(d => d.isMethod && !d.isConstructor && !(d.isOverride && s.superClass.info.members.exists(mem => mem.info <:< d.info && mem.name == d.name)) && (d.isDeferred || !d.isEffectivelyFinal))
+            (virtualMethods(s.superClass) ++ myvirts.sortBy(methodSig _)).toList
+          }
+        )
       }
 
+      def implementationOfCache: mutable.Map[Symbol,Symbol] = new mutable.HashMap
+
       def implementationOf(m: Symbol) = {
-        val typeOrder = Ordering.fromLessThan[Symbol](_.info <:< _.info)
-        val alts = c.symbol.info.members.filter(mem => mem.info <:< m.info && mem.name == m.name)
-        if (alts.isEmpty) throw new Exception("No implementation of " + m + ": " + m.info + " in " + c) else alts.min(typeOrder)
+        implementationOfCache.getOrElseUpdate(m, {
+          val typeOrder = Ordering.fromLessThan[Symbol](_.info <:< _.info)
+          val alts = c.symbol.info.members.filter(mem => mem.info <:< m.info && mem.name == m.name)
+          if (alts.isEmpty) throw new Exception("No implementation of " + m + ": " + m.info + " in " + c) else alts.min(typeOrder)
+        })
       }
 
       val classVtable = {
