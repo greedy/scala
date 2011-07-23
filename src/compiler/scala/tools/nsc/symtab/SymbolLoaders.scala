@@ -319,6 +319,7 @@ abstract class SymbolLoaders {
     protected def description = "class file "+ classfile.toString
 
     protected def doComplete(root: Symbol) {
+      //printf("Reading %s from %s\n", root.detailedString, classfile)
       val start = startTimer(classReadNanos)
       classfileParser.parse(classfile, root)
       stopTimer(classReadNanos, start)
@@ -333,6 +334,7 @@ abstract class SymbolLoaders {
   class SymFileLoader(val file: AbstractFile) extends SymbolLoader {
     protected def description = "sym file " + file.toString
     protected def doComplete(root: Symbol) {
+      //printf("Reading %s from %s\n", root.detailedString, file)
       val (cls, obj) = if(root.isModule) (root.companionSymbol, root)
                        else (root, root.companionSymbol)
       unpickler.unpickle(file.toByteArray, 0, cls, obj, file.name)
