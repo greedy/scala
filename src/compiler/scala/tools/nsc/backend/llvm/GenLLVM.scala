@@ -1185,7 +1185,7 @@ abstract class GenLLVM extends SubComponent {
               recordType(lt)
               if (tpe.isValueType || tpe == ConcatClass) {
                 val reg = new LocalVariable(blockName(bb)+".in."+n.toString,lt)
-                val dirsources = dirpreds.map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
+                val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
                 val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).findIndexOf(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
                 val sources = dirsources ++ excsources
                 insns.append(new phi(reg, sources))
