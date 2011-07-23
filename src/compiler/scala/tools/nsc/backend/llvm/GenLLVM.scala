@@ -1896,8 +1896,18 @@ abstract class GenLLVM extends SubComponent {
                sym.detailedString)
       }
 
-      val sym = if(c.symbol.isModuleClass) c.symbol.linkedClassOfClass
-                else c.symbol
+      //debugSym("compiling", c.symbol)
+
+      val sym =
+        if(c.symbol.isModuleClass) {
+          if(c.symbol.linkedClassOfClass == NoSymbol)
+            c.symbol.companionSymbol
+          else
+            c.symbol.linkedClassOfClass
+        }
+        else c.symbol
+
+      //debugSym(" substituting", sym)
 
       for(pickle <- (currentRun.symData.get(sym) orElse
                      currentRun.symData.get(sym.companionSymbol)))

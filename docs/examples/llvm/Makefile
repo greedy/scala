@@ -17,11 +17,23 @@ irfiles/%.stamp irfiles/%/*.ll: %.scala runtime.scala
 	JAVA_OPTS=-Xmx500M ../../../build/quick/bin/scalac -no-specialization -d irfiles/$* -target:llvm $*.scala apr.scala runtime.scala @base.sources $(FFISOURCES) # $(SOURCES)
 	touch irfiles/$*.stamp
 
+## To test separate compilation, make bin/separate2.bc
 irfiles/separate2.stamp: separate1.scala separate2.scala runtime.scala
 	mkdir -p irfiles/separate2
 	JAVA_OPTS=-Xmx500M ../../../build/quick/bin/scalac -no-specialization -cp irfiles/separate2 -d irfiles/separate2 -target:llvm separate1.scala runtime.scala @base.sources $(FFISOURCES)
 	JAVA_OPTS=-Xmx500M ../../../build/quick/bin/scalac -no-specialization -cp irfiles/separate2 -d irfiles/separate2 -target:llvm separate2.scala runtime.scala @base.sources $(FFISOURCES)
 	touch irfiles/separate2.stamp
+
+## Compiling even runtime.scala separately -- requires boot class
+## manipulation to compile, and even then doesn't run properly. Try
+## make bin/separate3.bc
+BOOTCLASSPATH=/usr/lib/jvm/java-6-sun-1.6.0.26/jre/lib/rt.jar
+irfiles/separate3.stamp: separate1.scala separate2.scala runtime.scala
+	mkdir -p irfiles/separate3
+	JAVA_OPTS=-Xmx500M ../../../build/quick/bin/scalac -no-specialization -Dsun.boot.class.path=irfiles/separate3:$(BOOTCLASSPATH) -d irfiles/separate3 -target:llvm runtime.scala @base.sources $(FFISOURCES)
+	JAVA_OPTS=-Xmx500M ../../../build/quick/bin/scalac -no-specialization -Dsun.boot.class.path=irfiles/separate3:$(BOOTCLASSPATH) -d irfiles/separate3 -target:llvm separate1.scala @base.sources $(FFISOURCES)
+	JAVA_OPTS=-Xmx500M ../../../build/quick/bin/scalac -no-specialization -Dsun.boot.class.path=irfiles/separate3:$(BOOTCLASSPATH) -d irfiles/separate3 -target:llvm separate2.scala @base.sources $(FFISOURCES)
+	touch irfiles/separate3.stamp
 
 bin/%.bc: irfiles/%.stamp
 	mkdir -p `dirname $@`
