@@ -372,7 +372,7 @@ abstract class Erasure extends AddInterfaces
               boxedSig(tp)
             }
           def classSig: String =
-            "L"+atPhase(currentRun.icodePhase)(sym.fullName + sym.moduleSuffix).replace('.', '/')
+            "L"+atPhase(currentRun.icodePhase)(sym.fullName + global.genJVM.moduleSuffix(sym)).replace('.', '/')
           def classSigSuffix: String =
             "."+sym.name
 

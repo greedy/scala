@@ -2036,13 +2036,19 @@ abstract class GenMSIL extends SubComponent {
     }
 
     def nestingAwareFullClassname(csym: Symbol) : String = {
-      val suffix = csym.moduleSuffix
+      val suffix = moduleSuffix(csym)
       val res = if (csym.isNestedClass)
         nestingAwareFullClassname(csym.owner) + "+" + csym.encodedName
       else
         csym.fullName
       res + suffix
     }
+
+  /** cut&pasted from GenJVM */
+  def moduleSuffix(sym: Symbol) =
+    if (sym.hasFlag(Flags.MODULE) && !sym.isMethod &&
+       !sym.isImplClass && !sym.hasFlag(Flags.JAVA)) "$"
+    else "";
 
     /** Adds a static initializer which creates an instance of the module
      *  class (calls the primary constructor). A special primary constructor
