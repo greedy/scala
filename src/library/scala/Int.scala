@@ -171,7 +171,7 @@ object Int extends AnyValCompanion {
    *  @throws     ClassCastException  if the argument is not a java.lang.Integer
    *  @return     the Int resulting from calling intValue() on `x`
    */
-  def unbox(x: java.lang.Object): Int = x.asInstanceOf[java.lang.Integer].intValue()
+  def unbox(x: java.lang.Object): Int = x.asInstanceOf[java.lang.Integer].intValue
 
   /** The String representation of the scala.Int companion object.
    */

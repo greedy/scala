@@ -171,7 +171,7 @@ object Char extends AnyValCompanion {
    *  @throws     ClassCastException  if the argument is not a java.lang.Character
    *  @return     the Char resulting from calling charValue() on `x`
    */
-  def unbox(x: java.lang.Object): Char = x.asInstanceOf[java.lang.Character].charValue()
+  def unbox(x: java.lang.Object): Char = x.asInstanceOf[java.lang.Character].charValue
 
   /** The String representation of the scala.Char companion object.
    */

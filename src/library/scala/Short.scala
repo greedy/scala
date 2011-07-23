@@ -171,7 +171,7 @@ object Short extends AnyValCompanion {
    *  @throws     ClassCastException  if the argument is not a java.lang.Short
    *  @return     the Short resulting from calling shortValue() on `x`
    */
-  def unbox(x: java.lang.Object): Short = x.asInstanceOf[java.lang.Short].shortValue()
+  def unbox(x: java.lang.Object): Short = x.asInstanceOf[java.lang.Short].shortValue
 
   /** The String representation of the scala.Short companion object.
    */

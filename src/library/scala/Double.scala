@@ -158,7 +158,7 @@ object Double extends AnyValCompanion {
    *  @throws     ClassCastException  if the argument is not a java.lang.Double
    *  @return     the Double resulting from calling doubleValue() on `x`
    */
-  def unbox(x: java.lang.Object): Double = x.asInstanceOf[java.lang.Double].doubleValue()
+  def unbox(x: java.lang.Object): Double = x.asInstanceOf[java.lang.Double].doubleValue
 
   /** The String representation of the scala.Double companion object.
    */

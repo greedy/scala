@@ -171,7 +171,7 @@ object Byte extends AnyValCompanion {
    *  @throws     ClassCastException  if the argument is not a java.lang.Byte
    *  @return     the Byte resulting from calling byteValue() on `x`
    */
-  def unbox(x: java.lang.Object): Byte = x.asInstanceOf[java.lang.Byte].byteValue()
+  def unbox(x: java.lang.Object): Byte = x.asInstanceOf[java.lang.Byte].byteValue
 
   /** The String representation of the scala.Byte companion object.
    */

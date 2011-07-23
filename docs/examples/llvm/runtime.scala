@@ -51,18 +51,17 @@ package java {
     class NullPointerException(message: String) extends Exception(message) {
       def this() = this(null)
     }
-    /*
+    class Void private()
     object Void {
-      val TYPE = null
+      val TYPE: Class[Void] = null
     }
-    */
     abstract class Number {
-      def byteValue(): scala.Byte 
-      def shortValue(): scala.Short
-      def intValue(): scala.Int
-      def longValue(): scala.Long
-      def floatValue(): scala.Float
-      def doubleValue(): scala.Double
+      def byteValue: scala.Byte = shortValue.toByte
+      def shortValue: scala.Short = intValue.toShort
+      def intValue: scala.Int
+      def longValue: scala.Long
+      def floatValue: scala.Float
+      def doubleValue: scala.Double
     }
     object Boolean {
       val TYPE = null
@@ -86,12 +85,12 @@ package java {
       def toString(b: scala.Byte) = valueOf(b).toString
     }
     class Byte(value: scala.Byte) extends Number {
-      def byteValue(): scala.Byte = value.toByte
-      def shortValue(): scala.Short = value.toShort
-      def intValue(): scala.Int = value.toInt
-      def longValue(): scala.Long = value.toLong
-      def floatValue(): scala.Float = value.toFloat
-      def doubleValue(): scala.Double = value.toDouble
+      // def byteValue: scala.Byte = value.toByte
+      // def shortValue: scala.Short = value.toShort
+      def intValue: scala.Int = value.toInt
+      def longValue: scala.Long = value.toLong
+      def floatValue: scala.Float = value.toFloat
+      def doubleValue: scala.Double = value.toDouble
       @native override def toString(): java.lang.String = "byte"
     }
     object Short {
@@ -103,12 +102,12 @@ package java {
       def toString(s: scala.Short) = valueOf(s).toString
     }
     class Short(value: scala.Short) extends Number {
-      def byteValue(): scala.Byte = value.toByte
-      def shortValue(): scala.Short = value.toShort
-      def intValue(): scala.Int = value.toInt
-      def longValue(): scala.Long = value.toLong
-      def floatValue(): scala.Float = value.toFloat
-      def doubleValue(): scala.Double = value.toDouble
+      // def byteValue: scala.Byte = value.toByte
+      // def shortValue: scala.Short = value.toShort
+      def intValue: scala.Int = value.toInt
+      def longValue: scala.Long = value.toLong
+      def floatValue: scala.Float = value.toFloat
+      def doubleValue: scala.Double = value.toDouble
       @native override def toString(): java.lang.String = "short"
     }
     object Integer {
@@ -139,14 +138,16 @@ package java {
       def toHexString(i: scala.Int): java.lang.String = sys.error("unimplemented")
       def toOctalString(i: scala.Int): java.lang.String = sys.error("unimplemented")
       def toString(i: scala.Int) = valueOf(i).toString
+
+      def rotateLeft(i: scala.Int, amt: scala.Int) = (i << (32-amt)) | (i >>> amt)
     }
     class Integer(value: scala.Int) extends Number {
-      def byteValue(): scala.Byte = value.toByte
-      def shortValue(): scala.Short = value.toShort
-      def intValue(): scala.Int = value.toInt
-      def longValue(): scala.Long = value.toLong
-      def floatValue(): scala.Float = value.toFloat
-      def doubleValue(): scala.Double = value.toDouble
+      // def byteValue: scala.Byte = value.toByte
+      // def shortValue: scala.Short = value.toShort
+      def intValue: scala.Int = value.toInt
+      def longValue: scala.Long = value.toLong
+      def floatValue: scala.Float = value.toFloat
+      def doubleValue: scala.Double = value.toDouble
       @native override def toString(): java.lang.String
     }
     object Character {
@@ -201,13 +202,13 @@ package java {
       def toString(c: scala.Char) = valueOf(c).toString
     }
     class Character(value: scala.Char) {
-      def byteValue(): scala.Byte = value.toByte
-      def shortValue(): scala.Short = value.toShort
-      def intValue(): scala.Int = value.toInt
-      def longValue(): scala.Long = value.toLong
-      def floatValue(): scala.Float = value.toFloat
-      def doubleValue(): scala.Double = value.toDouble
-      def charValue(): scala.Char = value
+      // def byteValue: scala.Byte = value.toByte
+      // def shortValue: scala.Short = value.toShort
+      def intValue: scala.Int = value.toInt
+      def longValue: scala.Long = value.toLong
+      def floatValue: scala.Float = value.toFloat
+      def doubleValue: scala.Double = value.toDouble
+      def charValue: scala.Char = value
       override def toString(): java.lang.String = "char"
     }
     object Long {
@@ -223,12 +224,12 @@ package java {
       def toString(i: scala.Long) = valueOf(i).toString
     }
     class Long(value: scala.Long) extends Number {
-      def byteValue(): scala.Byte = value.toByte
-      def shortValue(): scala.Short = value.toShort
-      def intValue(): scala.Int = value.toInt
-      def longValue(): scala.Long = value.toLong
-      def floatValue(): scala.Float = value.toFloat
-      def doubleValue(): scala.Double = value.toDouble
+      // def byteValue: scala.Byte = value.toByte
+      // def shortValue: scala.Short = value.toShort
+      def intValue: scala.Int = value.toInt
+      def longValue: scala.Long = value.toLong
+      def floatValue: scala.Float = value.toFloat
+      def doubleValue: scala.Double = value.toDouble
       @native override def toString(): java.lang.String = "long"
     }
     object Float {
@@ -259,12 +260,12 @@ package java {
     }
     class Float(value: scala.Float) extends Number {
       /* Conversions */
-      def byteValue(): scala.Byte = value.toByte
-      def shortValue(): scala.Short = value.toShort
-      def intValue(): scala.Int = value.toInt
-      def longValue(): scala.Long = value.toLong
-      def floatValue(): scala.Float = value.toFloat
-      def doubleValue(): scala.Double = value.toDouble
+      // def byteValue: scala.Byte = value.toByte
+      // def shortValue: scala.Short = value.toShort
+      def intValue: scala.Int = value.toInt
+      def longValue: scala.Long = value.toLong
+      def floatValue: scala.Float = value.toFloat
+      def doubleValue: scala.Double = value.toDouble
       @native override def toString(): java.lang.String = "float"
 
       /* Tests */
@@ -280,6 +281,7 @@ package java {
         else 1
       }
       def doubleToRawLongBits(f: scala.Double): scala.Long = sys.error("unimplemented")
+      def doubleToLongBits(f: scala.Double): scala.Long = sys.error("unimplemented")
       @native def longBitsToDouble(bits: scala.Long): scala.Double
       val MAX_VALUE           = longBitsToDouble(0x7fefffffffffffffL)
       val MIN_VALUE           = longBitsToDouble(0x0000000000000001L)
@@ -297,12 +299,12 @@ package java {
     }
     class Double(value: scala.Double) extends Number {
       /* Conversions */
-      def byteValue(): scala.Byte = value.toByte
-      def shortValue(): scala.Short = value.toShort
-      def intValue(): scala.Int = value.toInt
-      def longValue(): scala.Long = value.toLong
-      def floatValue(): scala.Float = value.toFloat
-      def doubleValue(): scala.Double = value.toDouble
+      // def byteValue: scala.Byte = value.toByte
+      // def shortValue: scala.Short = value.toShort
+      def intValue: scala.Int = value.toInt
+      def longValue: scala.Long = value.toLong
+      def floatValue: scala.Float = value.toFloat
+      def doubleValue: scala.Double = value.toDouble
       @native override def toString(): java.lang.String = "double"
 
       /* Tests */
@@ -344,7 +346,7 @@ package java {
       final var v: T = _
       final var m: ThreadLocal.ThreadLocalMap = new ThreadLocal.ThreadLocalMap()
       protected def initialValue: T = i
-      def get: T = {
+      def get(): T = {
         if (hasValue) { set(initialValue) };
         v
       }
@@ -358,12 +360,32 @@ package java {
     }
     object String {
       @native def utf8bytes(s: String): Array[scala.Byte]
+      def valueOf(b: Boolean): String = b.toString
+      def valueOf(c: Char): String = c.toString
+      def valueOf(i: Int): String = i.toString
+      def valueOf(l: Long): String = l.toString
+      def valueOf(f: Float): String = f.toString
+      def valueOf(d: Double): String = d.toString
+      def valueOf(x: Any): String = x match {
+        case b: Boolean => valueOf(b)
+        case c: Char => valueOf(c)
+        case i: Int => valueOf(i)
+        case l: Long => valueOf(l)
+        case f: Float => valueOf(f)
+        case d: Double => valueOf(d)
+        case s: Array[Char] => valueOf(s)
+        case s: String => valueOf(s)
+        case o: Object => if (o eq null) "null" else o.toString
+      }
+      def format(formatString: String, args: Any*) = "formatted string"
+      def format(l: java.util.Locale, formatString: String, args: Any*) = "formatted string"
     }
   }
   package util {
     class NoSuchElementException(s: String) extends RuntimeException(s) {
       def this() = this(null)
     }
+    class Locale
   }
   package io {
     trait Serializable
@@ -452,6 +474,34 @@ package java {
       def format(l: Locale, format: String, args: Array[Object]): Unit = print("printf")
     }
   }
+  package math {
+    sealed trait RoundingMode
+    object RoundingMode {
+      case object CEILING extends RoundingMode
+      case object DOWN extends RoundingMode
+      case object FLOOR extends RoundingMode
+      case object HALF_DOWN extends RoundingMode
+      case object HALF_EVEN extends RoundingMode
+      case object HALF_UP extends RoundingMode
+      case object UNNECESSARY extends RoundingMode
+      case object UP extends RoundingMode
+      def valueOf(n: Int): RoundingMode = error("unimplemented")
+      def valueOf(name: String): RoundingMode = error("unimplemented")
+      def values: Array[RoundingMode] = error("unimplmented")
+    }
+    object MathContext {
+      val DECIMAL128: MathContext = null
+      val DECIMAL32: MathContext = null
+      val DECIMAL64: MathContext = null
+      val UNLIMITED: MathContext = null
+    }
+    class MathContext(setPrecision: Int, setRoundingMode: RoundingMode) {
+      def this(setPrecision: Int) = this(setPrecision, RoundingMode.HALF_UP)
+      def this(stringValue: String) = this((throw new IllegalArgumentException): Int)
+      def getPrecision = setPrecision
+      def getRoundingMode = setRoundingMode
+    }
+  }
 }
 
 package scala {
@@ -472,13 +522,13 @@ package scala {
       def boxToFloat(f: Float): java.lang.Float = java.lang.Float.valueOf(f)
       def boxToDouble(d: Double): java.lang.Double = java.lang.Double.valueOf(d)
       def unboxToBoolean(b: Object): Boolean = if (b eq null) false else b.asInstanceOf[java.lang.Boolean].booleanValue()
-      def unboxToChar(c: Object): Char = if (c eq null) 0 else c.asInstanceOf[java.lang.Character].charValue()
-      def unboxToByte(b: Object): Byte = if (b eq null) 0 else b.asInstanceOf[java.lang.Byte].byteValue()
-      def unboxToShort(s: Object): Short = if (s eq null) 0 else s.asInstanceOf[java.lang.Short].shortValue()
-      def unboxToInt(i: Object): Int = if (i eq null) 0 else i.asInstanceOf[java.lang.Integer].intValue()
-      def unboxToLong(l: Object): Long = if (l eq null) 0 else l.asInstanceOf[java.lang.Long].longValue()
-      def unboxToFloat(f: Object): Float = if (f eq null) 0 else f.asInstanceOf[java.lang.Float].floatValue()
-      def unboxToDouble(d: Object): Double = if (d eq null) 0 else d.asInstanceOf[java.lang.Double].doubleValue()
+      def unboxToChar(c: Object): Char = if (c eq null) 0 else c.asInstanceOf[java.lang.Character].charValue
+      def unboxToByte(b: Object): Byte = if (b eq null) 0 else b.asInstanceOf[java.lang.Byte].byteValue
+      def unboxToShort(s: Object): Short = if (s eq null) 0 else s.asInstanceOf[java.lang.Short].shortValue
+      def unboxToInt(i: Object): Int = if (i eq null) 0 else i.asInstanceOf[java.lang.Integer].intValue
+      def unboxToLong(l: Object): Long = if (l eq null) 0 else l.asInstanceOf[java.lang.Long].longValue
+      def unboxToFloat(f: Object): Float = if (f eq null) 0 else f.asInstanceOf[java.lang.Float].floatValue
+      def unboxToDouble(d: Object): Double = if (d eq null) 0 else d.asInstanceOf[java.lang.Double].doubleValue
       def equalsExternal(x: Object, y: Object): Boolean = if (x eq y) true else equals2(x,y)
       def equals2(x: Object, y: Object): Boolean = {
         x match {
@@ -539,10 +589,10 @@ package scala {
         val ycode = eqTypeCode(yn)
         val dcode = if (ycode > xcode) { ycode } else { xcode }
         dcode match {
-          case c if c == INT => xn.intValue() == yn.intValue()
-          case c if c == LONG => xn.longValue() == yn.longValue()
-          case c if c == FLOAT => xn.floatValue() == yn.floatValue()
-          case c if c == DOUBLE => xn.doubleValue() == yn.doubleValue()
+          case c if c == INT => xn.intValue == yn.intValue
+          case c if c == LONG => xn.longValue == yn.longValue
+          case c if c == FLOAT => xn.floatValue == yn.floatValue
+          case c if c == DOUBLE => xn.doubleValue == yn.doubleValue
           case _ => {
             if (yn.isInstanceOf[ScalaNumber] && (!xn.isInstanceOf[ScalaNumber])) {
               yn.equals(xn)
@@ -556,7 +606,7 @@ package scala {
       }
       def equalsCharObject(xc: java.lang.Character, y: Object): Boolean = {
         y match {
-          case yc:java.lang.Character => xc.charValue() == yc.charValue()
+          case yc:java.lang.Character => xc.charValue == yc.charValue
           case yn:java.lang.Number => equalsNumChar(yn, xc)
           case _ => {
             if (xc eq null)
@@ -568,12 +618,12 @@ package scala {
       }
       private def equalsNumChar(xn: java.lang.Number, yc: java.lang.Character): Boolean = {
         import Codes._
-        val ch = yc.charValue()
+        val ch = yc.charValue
         eqTypeCode(xn) match {
-          case c if c == INT => xn.intValue() == ch
-          case c if c == LONG => xn.longValue() == ch
-          case c if c == FLOAT => xn.floatValue() == ch
-          case c if c == DOUBLE => xn.doubleValue() == ch
+          case c if c == INT => xn.intValue == ch
+          case c if c == LONG => xn.longValue == ch
+          case c if c == FLOAT => xn.floatValue == ch
+          case c if c == DOUBLE => xn.doubleValue == ch
           case _ => {
             if (xn eq null)
               yc eq null
@@ -584,23 +634,23 @@ package scala {
       }
 
       def hashFromLong(n: java.lang.Long): Int = {
-        val iv = n.intValue()
-        if (iv == n.longValue()) iv
+        val iv = n.intValue
+        if (iv == n.longValue) iv
         else n.hashCode()
       }
       def hashFromDouble(n: java.lang.Double): Int = {
-        val iv = n.intValue()
-        val dv = n.doubleValue()
-        val lv = n.longValue()
+        val iv = n.intValue
+        val dv = n.doubleValue
+        val lv = n.longValue
 
         if (iv == dv) iv
         else if (lv == dv) java.lang.Long.valueOf(lv).hashCode()
         else n.hashCode()
       }
       def hashFromFloat(n: java.lang.Float): Int = {
-        val iv = n.intValue()
-        val fv = n.floatValue()
-        val lv = n.longValue()
+        val iv = n.intValue
+        val fv = n.floatValue
+        val lv = n.longValue
         if (iv == fv) iv
         else if (lv == fv) java.lang.Long.valueOf(lv).hashCode()
         else n.hashCode()
@@ -621,7 +671,7 @@ package scala {
       }
     }
   }
-  trait Serializable
+  //trait Serializable
   /*
   object Console {
     @native def print(s: String): Unit

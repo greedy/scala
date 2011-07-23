@@ -171,7 +171,7 @@ object Long extends AnyValCompanion {
    *  @throws     ClassCastException  if the argument is not a java.lang.Long
    *  @return     the Long resulting from calling longValue() on `x`
    */
-  def unbox(x: java.lang.Object): Long = x.asInstanceOf[java.lang.Long].longValue()
+  def unbox(x: java.lang.Object): Long = x.asInstanceOf[java.lang.Long].longValue
 
   /** The String representation of the scala.Long companion object.
    */

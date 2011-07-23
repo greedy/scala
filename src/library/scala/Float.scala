@@ -158,7 +158,7 @@ object Float extends AnyValCompanion {
    *  @throws     ClassCastException  if the argument is not a java.lang.Float
    *  @return     the Float resulting from calling floatValue() on `x`
    */
-  def unbox(x: java.lang.Object): Float = x.asInstanceOf[java.lang.Float].floatValue()
+  def unbox(x: java.lang.Object): Float = x.asInstanceOf[java.lang.Float].floatValue
 
   /** The String representation of the scala.Float companion object.
    */
