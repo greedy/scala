@@ -50,3 +50,6 @@ a.out.ll: a.out.bc
 force:
 	touch example.scala
 	$(MAKE) a.out
+
+clean:
+	rm -rf irfiles/* bin/*.bc bin/*.aot
