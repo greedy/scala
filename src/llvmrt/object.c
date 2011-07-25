@@ -172,3 +172,24 @@ struct klass class_java_Dlang_DClass = {
   0,
 };
 
+void *rt_boxedUnit_vtable[] = {
+  method_java_Dlang_DObject_Mclone_Rjava_Dlang_DObject,
+  method_java_Dlang_DObject_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean,
+  method_java_Dlang_DObject_Mfinalize_Rscala_DUnit,
+  method_java_Dlang_DObject_MhashCode_Rscala_DInt,
+  method_java_Dlang_DObject_MtoString_Rjava_Dlang_DString,
+};
+
+struct klass class_scala_Druntime_DBoxedUnit = {
+  { sizeof("scala.runtime.BoxedUnit")-1, "scala.runtime.BoxedUnit" },
+  sizeof(struct java_lang_Object),
+  &class_java_Dlang_DObject,
+  rt_boxedUnit_vtable,
+  NULL,
+  NULL,
+  0,
+};
+
+struct java_lang_Object rt_boxedUnit = {
+  &class_scala_Druntime_DBoxedUnit,
+};

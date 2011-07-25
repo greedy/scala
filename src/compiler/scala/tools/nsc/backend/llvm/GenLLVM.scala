@@ -343,11 +343,11 @@ abstract class GenLLVM extends SubComponent {
       /* Constants */
 
       lazy val rtBoxedUnit = new LMGlobalVariable(
-        ".rt.boxedUnit", classType(definitions.BoxedUnitClass),
+        "rt_boxedUnit", classType(definitions.BoxedUnitClass),
         Externally_visible, Default, true)
 
       lazy val rtBoxedUnitVtable = new LMGlobalVariable(
-        ".rt.boxedUnit.vtable", rtVtable,
+        "rt_boxedUnit_vtable", rtVtable,
         Externally_visible, Default, true)
 
       /* Exception Handling */
