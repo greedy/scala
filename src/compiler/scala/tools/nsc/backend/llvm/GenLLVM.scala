@@ -1122,8 +1122,6 @@ abstract class GenLLVM extends SubComponent {
               recordType(typeKindType(targettk))
               val obj = getrefptr(src)(_insns)
               if (targettk.isInterfaceType) {
-                srctk.toType.typeSymbol.info.baseClasses.filter(_.isTrait).indexOf(targettk.toType.typeSymbol) match {
-                  case -1 => {
                     val iface0 = nextvar(rtReference)
                     val vtbl = nextvar(rtVtable)
                     val iface1 = nextvar(rtReference)
@@ -1131,23 +1129,6 @@ abstract class GenLLVM extends SubComponent {
                     _insns.append(new call(vtbl, rtIfaceCast, Seq(obj, externClassP(targettk.toType.typeSymbol))))
                     _insns.append(new insertvalue(iface1, iface0, vtbl, Seq[LMConstant[LMInt]](1)))
                     iface1
-                  }
-                  case tgtidx => {
-                    val vtbl = nextvar(rtVtable)
-                    val vtblptr = nextvar(rtVtable.pointer)
-                    val clsptrptr = nextvar(rtClass.pointer.pointer)
-                    val clsptr = nextvar(rtClass.pointer)
-                    val iref0 = nextvar(rtReference)
-                    val iref1 = nextvar(rtReference)
-                    _insns.append(new getelementptr(clsptrptr, obj, Seq[LMConstant[LMInt]](0, 0)))
-                    _insns.append(new load(clsptr, clsptrptr))
-                    _insns.append(new getelementptr(vtblptr, clsptr, Seq[LMConstant[LMInt]](0, 7, tgtidx, 1)))
-                    _insns.append(new load(vtbl, vtblptr))
-                    _insns.append(new insertvalue(iref0, new CUndef(rtReference), obj, Seq[LMConstant[LMInt]](0)))
-                    _insns.append(new insertvalue(iref1, iref0, vtbl, Seq[LMConstant[LMInt]](1)))
-                    iref1
-                  }
-                }
               } else if (!targettk.isInterfaceType && !srctk.isInterfaceType) {
                 src
               } else {
