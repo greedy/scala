@@ -3,7 +3,7 @@
 
 #include "object.h"
 
-extern struct klass *arrayof(struct klass *klass);
+extern struct klass *arrayOf(struct klass *klass);
 
 extern struct klass bool_array;
 extern struct klass byte_array;

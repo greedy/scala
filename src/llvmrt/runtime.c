@@ -56,17 +56,32 @@ bool rt_isinstance(struct java_lang_Object *object, struct klass *classoriface)
   return res;
 }
 
-bool rt_isinstance_class(struct java_lang_Object *object, struct klass *klass)
+bool rt_issubclass(struct klass *super, struct klass *sub)
 {
-  struct klass *checkclass = object->klass;
-  while (checkclass != NULL) {
-    if (klass == checkclass) {
-      return true;
-    } else {
-      checkclass = checkclass->super;
+  if (super == sub) return true;
+  if (super->instsize == 0) {
+    /* array */
+    if (sub->instsize == 0) {
+      if ((super->elementklass != NULL) && (sub->elementklass != NULL)) {
+        return rt_issubclass(super->elementklass, sub->elementklass);
+      }
+    }
+  } else {
+    struct klass *checkclass = sub;
+    while (checkclass != NULL) {
+      if (super == checkclass) {
+        return true;
+      } else {
+        checkclass = checkclass->super;
+      }
     }
   }
   return false;
+}
+
+bool rt_isinstance_class(struct java_lang_Object *object, struct klass *klass)
+{
+  return rt_issubclass(klass, object->klass);
 }
 
 bool rt_isinstance_iface(struct java_lang_Object *object, struct klass *iface)

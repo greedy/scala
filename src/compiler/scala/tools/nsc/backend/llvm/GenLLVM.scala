@@ -209,6 +209,25 @@ abstract class GenLLVM extends SubComponent {
         Externally_visible, Default, Ccc,
         Seq.empty, Seq.empty, None, None, None)
 
+      def arrayClass(name: String) = new LMGlobalVariable(
+        name+"_array", rtClass,
+	Externally_visible, Default, true)
+
+      lazy val rtBoolArrayClass = arrayClass("bool")
+      lazy val rtByteArrayClass = arrayClass("byte")
+      lazy val rtCharArrayClass = arrayClass("char")
+      lazy val rtShortArrayClass = arrayClass("short")
+      lazy val rtIntArrayClass = arrayClass("int")
+      lazy val rtLongArrayClass = arrayClass("long")
+      lazy val rtFloatArrayClass = arrayClass("float")
+      lazy val rtDoubleArrayClass = arrayClass("double")
+
+      lazy val rtArrayOf = new LMFunction(
+      	rtClass.pointer, "arrayOf",
+	Seq(ArgSpec(new LocalVariable("klass", rtClass.pointer))), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
       lazy val rtAppendBool = sappendfn(definitions.BooleanClass)
       lazy val rtAppendByte = sappendfn(definitions.ByteClass)
       lazy val rtAppendShort = sappendfn(definitions.ShortClass)
@@ -450,6 +469,15 @@ abstract class GenLLVM extends SubComponent {
         rtUnboxChar.declare,
         rtLoadVtable.declare,
         rtMakeString.declare,
+        rtBoolArrayClass.declare,
+        rtByteArrayClass.declare,
+        rtCharArrayClass.declare,
+	rtShortArrayClass.declare,
+        rtIntArrayClass.declare,
+        rtLongArrayClass.declare,
+        rtFloatArrayClass.declare,
+        rtDoubleArrayClass.declare,
+	rtArrayOf.declare,
         rtAppendBool.declare,
         rtAppendByte.declare,
         rtAppendShort.declare,
@@ -1067,6 +1095,25 @@ abstract class GenLLVM extends SubComponent {
             _insns.append(new extractvalue(vtbl, src.asInstanceOf[LMValue[rtReference.type]], Seq[CInt](1)))
             vtbl.asInstanceOf[LMValue[LMPointer]]
           }
+	  def arrayClass(elemTpe: TypeKind)(implicit _insns: InstBuffer): LMValue[LMPointer] = {
+	    def makeArrayClass(klassP: LMValue[LMPointer]): LMValue[LMPointer] = {
+	      val arrayKlass = nextvar(rtClass.pointer)
+	      _insns.append(new call(arrayKlass, rtArrayOf, Seq(klassP)))
+	      arrayKlass
+	    }
+	    elemTpe match {
+	      case BOOL => new CGlobalAddress(rtBoolArrayClass)
+	      case BYTE => new CGlobalAddress(rtByteArrayClass)
+	      case SHORT => new CGlobalAddress(rtShortArrayClass)
+	      case CHAR => new CGlobalAddress(rtCharArrayClass)
+	      case INT => new CGlobalAddress(rtIntArrayClass)
+	      case LONG => new CGlobalAddress(rtLongArrayClass)
+	      case FLOAT => new CGlobalAddress(rtFloatArrayClass)
+	      case DOUBLE => new CGlobalAddress(rtDoubleArrayClass)
+	      case ARRAY(tpe) => makeArrayClass(arrayClass(tpe)(_insns))
+	      case REFERENCE(klass) => makeArrayClass(externClassP(klass))
+	    }
+	  }
           def cast(src: LMValue[_<:ConcreteType], srctk: TypeKind, targettk: TypeKind)(implicit _insns: InstBuffer): LMValue[_<:ConcreteType] = {
             _insns.append(new icomment("cast "+src.rep+" from "+srctk+" to "+targettk))
             if (srctk == targettk) {
@@ -1657,6 +1704,12 @@ abstract class GenLLVM extends SubComponent {
                 insns.append(new call(array, rtNewArray, Seq(LMConstant.byteconst(rtArrayKind(elem)), et, LMConstant.intconst(ndims)) ++ dims))
                 stack.push((getptrref(array), ArrayN(elem, ndims)))
               }
+	      case IS_INSTANCE(ARRAY(elemTpe)) => {
+	        val (ref,sym) = stack.pop()
+                val v = nextvar(LMInt.i1)
+		insns.append(new call(v, rtIsinstanceClass, Seq(getrefptr(ref), arrayClass(elemTpe))))
+		stack.push((v, BOOL))
+	      }
               case IS_INSTANCE(tpe) => {
                 val (ref,sym) = stack.pop()
                 val v = nextvar(LMInt.i1)

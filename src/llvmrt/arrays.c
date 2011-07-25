@@ -6,7 +6,15 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-struct klass *arrayof(struct klass *klass)
+static void *vtable_array[] = {
+  method_java_Dlang_DObject_Mclone_Rjava_Dlang_DObject,
+  method_java_Dlang_DObject_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean,
+  method_java_Dlang_DObject_Mfinalize_Rscala_DUnit,
+  method_java_Dlang_DObject_MhashCode_Rscala_DInt,
+  method_java_Dlang_DObject_MtoString_Rjava_Dlang_DString,
+};
+
+struct klass *arrayOf(struct klass *klass)
 {
   if (klass->arrayklass == NULL) {
     struct klass *ac = malloc(sizeof(struct klass));
@@ -14,8 +22,8 @@ struct klass *arrayof(struct klass *klass)
     ac->name.bytes[0] = '[';
     memcpy(&ac->name.bytes[1], klass->name.bytes, klass->name.len);
     ac->instsize = 0;
-    ac->super = NULL;
-    ac->vtable = NULL;
+    ac->super = &class_java_Dlang_DObject;
+    ac->vtable = vtable_array;
     ac->numiface = 0;
     ac->arrayklass = NULL;
     ac->elementklass = klass;
@@ -80,7 +88,7 @@ new_array(uint8_t k, struct klass *et, int32_t ndims, int32_t dim0, ...)
       eltsize = 8;
       break;
     case OBJECT:
-      aclass = arrayof(et);
+      aclass = arrayOf(et);
       eltsize = sizeof(struct reference);
       break;
   }
@@ -92,7 +100,7 @@ new_array(uint8_t k, struct klass *et, int32_t ndims, int32_t dim0, ...)
   for (int32_t n = 0; n < ndims - 1; n++) {
     int32_t dimN = va_arg(dims, int32_t);
     void **td;
-    aclass = arrayof(aclass);
+    aclass = arrayOf(aclass);
     a = calloc(1, sizeof(struct array) + dimN * sizeof(void*));
     a->super.klass = aclass;
     a->length = dimN;
