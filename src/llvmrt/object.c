@@ -80,16 +80,6 @@ method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject(
   return;
 }
 
-struct klass class_scala_DScalaObject = {
-  { sizeof("scala.ScalaObject")-1, "scala.ScalaObject" },
-  0,
-  NULL,
-  vtable_java_lang_Object,
-  NULL,
-  NULL,
-  0,
-};
-
 struct java_lang_Class {
   struct java_lang_Object super;
   struct klass *theklass;

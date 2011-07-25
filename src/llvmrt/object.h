@@ -48,6 +48,4 @@ extern void
 method_java_Dlang_DObject_M_Linit_G_Rjava_Dlang_DObject(
     struct java_lang_Object *self, vtable_t selfVtable);
 
-extern struct klass class_scala_DscalaObject;
-
 #endif
