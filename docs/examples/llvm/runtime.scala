@@ -51,6 +51,12 @@ package java {
     class NullPointerException(message: String) extends Exception(message) {
       def this() = this(null)
     }
+    class IllegalArgumentException(message: String) extends Exception(message) {
+      def this() = this(null)
+    }
+    trait Comparable[T] {
+      def compareTo(o: T): Int
+    }
     class Void private()
     object Void {
       val TYPE: Class[Void] = null
@@ -122,8 +128,8 @@ package java {
         }
         c
       }
-      def parseInt(s: String): scala.Int = sys.error("unimplemented")
-      def parseInt(s: String, radix: scala.Int): scala.Int = sys.error("unimplemented")
+      def parseInt(s: String): scala.Int = 10
+      def parseInt(s: String, radix: scala.Int): scala.Int = 10
       def reverseBytes(i: scala.Int): scala.Int = {
         val b0 = i & 0xff;
         val b1 = (i >> 8) & 0xff;
@@ -386,6 +392,9 @@ package java {
       def this() = this(null)
     }
     class Locale
+    trait Comparator[T] {
+      def compare(o1: T, o2: T): Int
+    }
   }
   package io {
     trait Serializable
@@ -497,7 +506,7 @@ package java {
     }
     class MathContext(setPrecision: Int, setRoundingMode: RoundingMode) {
       def this(setPrecision: Int) = this(setPrecision, RoundingMode.HALF_UP)
-      def this(stringValue: String) = this((throw new IllegalArgumentException): Int)
+      def this(stringValue: String) = this(0, RoundingMode.HALF_UP)
       def getPrecision = setPrecision
       def getRoundingMode = setRoundingMode
     }
