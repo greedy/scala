@@ -4,7 +4,7 @@ CPPFLAGS = `icu-config --cppflags`
 CFLAGS = -g $(WARNINGS) -std=c99 -fexceptions `llvm-config --cflags $(COMPONENTS)`
 CXXFLAGS = -g $(WARNINGS) -fexceptions `llvm-config --cxxflags $(COMPONENTS)`
 LDFLAGS = `icu-config --ldflags-searchpath --ldflags-icuio` `llvm-config --ldflags $(COMPONENTS)` `apr-1-config --link-ld --libs` -all_load
-LDLIBS = `icu-config --ldflags-libsonly --ldflags-icuio` `llvm-config --libs $(COMPONENTS)`
+LDLIBS = `icu-config --ldflags-libsonly --ldflags-icuio` `llvm-config --libs $(COMPONENTS)` -lm
 
 RTOBJECTS = runtime.bc object.bc boxes.bc arrays.bc strings.bc fp.bc io.bc
 

@@ -1,5 +1,10 @@
+import scala.ffi._
 package java {
   package lang {
+    object Math {
+      @foreign("sqrt")
+      def sqrt(d: scala.Double): scala.Double = error("foregin")
+    }
     class Error(message: String, cause: Throwable) extends Throwable(message, cause) {
       def this() = this(null, null)
       def this(message: String) = this(message, null)
