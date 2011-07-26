@@ -1746,6 +1746,16 @@ trait Symbols /* extends reflect.generic.Symbols*/ { self: SymbolTable =>
       if (hasMeaninglessName) owner.nameString else nameString
     )
 
+    /** A more detailed string representation, which includes flags,
+        ID#, etc., in order to disambiguate symbols whose toString
+        comes out the same. */
+    def detailedString =
+      format("%s %s 0x%x : %s",
+             accurateKindString,
+             sealedSortName,
+             flags,
+             getClass.getSimpleName)
+
     /** String representation of location.
      */
     def ownsString = {

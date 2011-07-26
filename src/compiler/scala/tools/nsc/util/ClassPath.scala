@@ -126,6 +126,9 @@ object ClassPath {
      */
     def isValidName(name: String): Boolean = true
 
+    def validClassFile(name: String) =
+      ClassPath.endsClass(name) && isValidName(name)
+
     /** From the representation to its identifier.
      */
     def toBinaryName(rep: T): String
@@ -261,7 +264,6 @@ abstract class ClassPath[T] {
 
   /** Filters for assessing validity of various entities.
    */
-  def validClassFile(name: String)  = endsClass(name) && context.isValidName(name)
   def validPackage(name: String)    = (name != "META-INF") && (name != "") && (name.charAt(0) != '.')
   def validSourceFile(name: String) = endsScala(name) || endsJava(name)
 
@@ -336,7 +338,7 @@ class DirectoryClassPath(val dir: AbstractFile, val context: ClassPathContext[Ab
     val classBuf   = immutable.Vector.newBuilder[ClassRep]
     val packageBuf = immutable.Vector.newBuilder[DirectoryClassPath]
     dir foreach { f =>
-      if (!f.isDirectory && validClassFile(f.name))
+      if (!f.isDirectory && context.validClassFile(f.name))
         classBuf += ClassRep(Some(f), None)
       else if (f.isDirectory && validPackage(f.name))
         packageBuf += new DirectoryClassPath(f, context)

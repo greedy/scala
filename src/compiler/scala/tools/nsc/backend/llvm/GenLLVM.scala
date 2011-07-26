@@ -1932,19 +1932,35 @@ abstract class GenLLVM extends SubComponent {
         fun.define(blocks)
       }
 
-      val sym = if(c.symbol.hasModuleFlag) c.symbol.sourceModule
-                else c.symbol
-
-      currentRun.symData.get(sym) match {
-        case Some(p) =>
-          val symOut = getSymFile(sym).bufferedOutput
-          symOut.write(p.bytes.take(p.writeIndex))
-          symOut.close
-        case None =>
-          printf("MISSING pickle for %s(%x)\n", c.symbol, c.symbol.flags)
-          printf("  MISSING owner is %s (%s)\n",
-                 c.symbol.owner, currentRun.symData.isDefinedAt(c.symbol.owner))
+      def debugSym(tag: String, sym: Symbol) {
+        printf("%s: %c %s\n", tag,
+               if(currentRun.symData.isDefinedAt(sym)) '+' else '-',
+               sym.detailedString)
       }
+
+      //debugSym("compiling", c.symbol)
+
+      val sym =
+        if(c.symbol.isModuleClass) {
+          if(c.symbol.linkedClassOfClass == NoSymbol)
+            c.symbol.companionSymbol
+          else
+            c.symbol.linkedClassOfClass
+        }
+        else c.symbol
+
+      //debugSym(" substituting", sym)
+
+      for(pickle <- (currentRun.symData.get(sym) orElse
+                     currentRun.symData.get(sym.companionSymbol)))
+        {
+          val symFile = getSymFile(sym)
+          val symOut = symFile.bufferedOutput
+          symOut.write(pickle.bytes.take(pickle.writeIndex))
+          symOut.close
+          currentRun.symData -= sym
+          currentRun.symData -= sym.companionSymbol
+        }
 
       val outfile = getFile(c.symbol, ".ll")
       val outstream = new OutputStreamWriter(outfile.bufferedOutput,"US-ASCII")
@@ -2086,7 +2102,7 @@ abstract class GenLLVM extends SubComponent {
     def getSymFile(sym: Symbol): AbstractFile = {
       val src = atPhase(currentRun.phaseNamed("llvm").prev)(sym.sourceFile)
       var dir = settings.outputDirs.outputDirFor(src)
-      for(arc <- sym.fullName.split("\\.").toList.init) {
+      for(arc <- sym.fullName.split("\\.").init) {
         dir = dir.subdirectoryNamed(arc)
       }
       dir.fileNamed(sym.encodedName + ".sym")

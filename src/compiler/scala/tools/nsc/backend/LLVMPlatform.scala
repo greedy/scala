@@ -6,11 +6,16 @@
 package scala.tools.nsc
 package backend
 
-import llvm.GenLLVM
+import llvm.{GenLLVM, LLVMPathResolver}
+import io.AbstractFile
+import scala.tools.util.JavaPathResolver
 
-trait LLVMPlatform extends JavaPlatform {
+trait LLVMPlatform extends Platform[AbstractFile] {
   import global._
   import definitions._
+
+  lazy val classPath  = new LLVMPathResolver(settings).result
+  def rootLoader = new loaders.LLVMPackageLoader(classPath)
 
   object genLLVM extends {
     val global: LLVMPlatform.this.global.type = LLVMPlatform.this.global
@@ -18,7 +23,16 @@ trait LLVMPlatform extends JavaPlatform {
     val runsRightAfter = None
   } with GenLLVM
 
-  override def platformPhases = List(genLLVM)
+  def platformPhases = List(genLLVM)
 
   override lazy val externalEquals          = getMember(BoxesRunTimeClass, "equalsExternal")
+
+  def isMaybeBoxed(sym: Symbol) = {
+    (sym == ObjectClass) ||
+    (sym == JavaSerializableClass) ||
+    (sym == ComparableClass) ||
+    (sym isNonBottomSubClass BoxedNumberClass) ||
+    (sym isNonBottomSubClass BoxedCharacterClass) ||
+    (sym isNonBottomSubClass BoxedBooleanClass)
+  }
 }

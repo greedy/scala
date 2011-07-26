@@ -264,11 +264,26 @@ abstract class SymbolLoaders {
 
     protected def doLoad(cls: classpath.AnyClassRep) = true
 
-    protected def newClassLoader(bin: AbstractFile) =
+    protected def newClassLoader(bin: AbstractFile): SymbolLoader =
       new ClassfileLoader(bin)
 
     protected def newPackageLoader(pkg: ClassPath[AbstractFile]) =
       new JavaPackageLoader(pkg)
+  }
+
+  class LLVMPackageLoader(classpath: ClassPath[AbstractFile])
+  extends JavaPackageLoader(classpath) {
+    override def newClassLoader(bin: AbstractFile) = {
+      if(bin.name.endsWith(".class"))
+        new ClassfileLoader(bin)
+      else {
+        assert(bin.name.endsWith(".sym"), bin.name)
+        new SymFileLoader(bin)
+      }
+    }
+
+    override def newPackageLoader(pkg: ClassPath[AbstractFile]) =
+      new LLVMPackageLoader(pkg)
   }
 
   class NamespaceLoader(classpath: ClassPath[MSILType]) extends PackageLoader(classpath) {
@@ -304,11 +319,26 @@ abstract class SymbolLoaders {
     protected def description = "class file "+ classfile.toString
 
     protected def doComplete(root: Symbol) {
+      //printf("Reading %s from %s\n", root.detailedString, classfile)
       val start = startTimer(classReadNanos)
       classfileParser.parse(classfile, root)
       stopTimer(classReadNanos, start)
     }
     override def sourcefile: Option[AbstractFile] = classfileParser.srcfile
+  }
+
+  private object unpickler extends scala.reflect.internal.pickling.UnPickler {
+    val global: SymbolLoaders.this.global.type = SymbolLoaders.this.global
+  }
+
+  class SymFileLoader(val file: AbstractFile) extends SymbolLoader {
+    protected def description = "sym file " + file.toString
+    protected def doComplete(root: Symbol) {
+      //printf("Reading %s from %s\n", root.detailedString, file)
+      val (cls, obj) = if(root.isModule) (root.companionSymbol, root)
+                       else (root, root.companionSymbol)
+      unpickler.unpickle(file.toByteArray, 0, cls, obj, file.name)
+    }
   }
 
   class MSILTypeLoader(typ: MSILType) extends SymbolLoader {
