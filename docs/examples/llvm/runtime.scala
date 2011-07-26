@@ -103,8 +103,8 @@ package java {
       val TYPE = null
       def valueOf(i: scala.Short): java.lang.Short = new Short(i)
       def parseShort(s: String): scala.Short = sys.error("unimplemented")
-      val MIN_VALUE: scala.Short = (1<<15) - 1
-      val MAX_VALUE: scala.Short = -(1<<15)
+      val MIN_VALUE: scala.Short = 32767
+      val MAX_VALUE: scala.Short = -32768
       def toString(s: scala.Short) = valueOf(s).toString
     }
     class Short(value: scala.Short) extends Number {
@@ -137,8 +137,8 @@ package java {
         val b3 = (i >> 24) & 0xff;
         (b0 << 24) | (b1 << 16) | (b2 << 8) | b3
       }
-      val MIN_VALUE: scala.Int = (1<<31) - 1
-      val MAX_VALUE: scala.Int = -(1<<31)
+      val MIN_VALUE: scala.Int = (1<<31)
+      val MAX_VALUE: scala.Int = (1<<31)-1
 
       def toBinaryString(i: scala.Int): java.lang.String = sys.error("unimplemented")
       def toHexString(i: scala.Int): java.lang.String = sys.error("unimplemented")
@@ -221,8 +221,8 @@ package java {
       val TYPE = null
       def valueOf(i: scala.Long) = new Long(i)
       def parseLong(s: String): scala.Long = sys.error("unimplemented")
-      val MIN_VALUE: scala.Long = (1L<<63) - 1
-      val MAX_VALUE: scala.Long = -(1L<<63)
+      val MIN_VALUE: scala.Long = (1L<<63)
+      val MAX_VALUE: scala.Long = (1L<<63)-1
 
       def toBinaryString(i: scala.Long): java.lang.String = sys.error("unimplemented")
       def toHexString(i: scala.Long): java.lang.String = sys.error("unimplemented")
