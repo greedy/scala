@@ -3,5 +3,7 @@
 ../../../src/library/scala/PartialFunction.scala
 ../../../src/library/scala/SpecializableCompanion.scala
 ../../../src/library/scala/collection/mutable/WrappedArray.scala
+../../../src/library/scala/ScalaObject.scala
+../../../src/library/scala/Serializable.scala
 Predef.scala
 LowPriorityImplicits.scala
