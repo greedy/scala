@@ -2,8 +2,52 @@ import scala.ffi._
 package java {
   package lang {
     object Math {
+      private def TODO = error("unimplemented")
       @foreign("sqrt")
       def sqrt(d: scala.Double): scala.Double = error("foregin")
+      def log10(x: scala.Double): scala.Double = TODO
+      def cbrt(x: scala.Double): scala.Double = TODO
+      def ulp(x: scala.Double): scala.Double = TODO
+      def ulp(x: scala.Float): scala.Float = TODO
+      def sinh(x: scala.Double): scala.Double = TODO
+      def cosh(x: scala.Double): scala.Double = TODO
+      def tanh(x: scala.Double): scala.Double = TODO
+      def hypot(x: scala.Double, y: scala.Double): scala.Double = TODO
+      def expm1(x: scala.Double): scala.Double = TODO
+      def log1p(x: scala.Double): scala.Double = TODO
+      final val E: scala.Double = 2.718281828459045
+      final val PI: scala.Double = 3.141592653589793
+      def random(): scala.Double = TODO
+      def sin(x: scala.Double): scala.Double = TODO
+      def cos(x: scala.Double): scala.Double = TODO
+      def tan(x: scala.Double): scala.Double = TODO
+      def asin(x: scala.Double): scala.Double = TODO
+      def acos(x: scala.Double): scala.Double = TODO
+      def atan(x: scala.Double): scala.Double = TODO
+      def toRadians(x: scala.Double): scala.Double = TODO
+      def toDegrees(x: scala.Double): scala.Double = TODO
+      def exp(x: scala.Double): scala.Double = TODO
+      def log(x: scala.Double): scala.Double = TODO
+      def IEEEremainder(x: scala.Double, y: scala.Double): scala.Double = TODO
+      def ceil(x: scala.Double): scala.Double = TODO
+      def floor(x: scala.Double): scala.Double = TODO
+      def rint(x: scala.Double): scala.Double = TODO
+      def atan2(y: scala.Double, x: scala.Double): scala.Double = TODO
+      def pow(x: scala.Double, y: scala.Double): scala.Double = TODO
+      def round(x: scala.Float): scala.Int = TODO
+      def round(x: scala.Double): scala.Long = TODO
+      def abs(x: scala.Int): scala.Int = TODO
+      def abs(x: scala.Long): scala.Long = TODO
+      def abs(x: scala.Float): scala.Float = TODO
+      def abs(x: scala.Double): scala.Double = TODO
+      def max(x: scala.Int, y: scala.Int): scala.Int = if (x > y) x else y
+      def max(x: scala.Long, y: scala.Long): scala.Long = if (x > y) x else y
+      def max(x: scala.Float, y: scala.Float): scala.Float = if (x > y) x else y
+      def max(x: scala.Double, y: scala.Double): scala.Double = if (x > y) x else y
+      def min(x: scala.Int, y: scala.Int): scala.Int = if (x < y) x else y
+      def min(x: scala.Long, y: scala.Long): scala.Long = if (x < y) x else y
+      def min(x: scala.Float, y: scala.Float): scala.Float = if (x < y) x else y
+      def min(x: scala.Double, y: scala.Double): scala.Double = if (x < y) x else y
     }
     class Error(message: String, cause: Throwable) extends Throwable(message, cause) {
       def this() = this(null, null)
