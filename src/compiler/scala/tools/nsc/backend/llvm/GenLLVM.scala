@@ -350,6 +350,31 @@ abstract class GenLLVM extends SubComponent {
         "rt_boxedUnit_vtable", rtVtable,
         Externally_visible, Default, true)
 
+      /* Memory Use Intrinsics */
+
+      lazy val llvmInvariantTag = new LMStructure(Seq.empty).pointer
+
+      lazy val llvmInvariantStart = new LMFunction(
+        llvmInvariantTag,
+        "llvm.invariant.start",
+        Seq(
+          ArgSpec(new LocalVariable("size", LMInt.i64)),
+          ArgSpec(new LocalVariable("ptr", LMInt.i8.pointer))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
+      lazy val llvmInvariantEnd = new LMFunction(
+        llvmInvariantTag,
+        "llvm.invariant.end",
+        Seq(
+          ArgSpec(new LocalVariable("start", llvmInvariantTag)),
+          ArgSpec(new LocalVariable("size", LMInt.i64)),
+          ArgSpec(new LocalVariable("ptr", LMInt.i8.pointer))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
       /* Exception Handling */
 
       lazy val scalaPersonality = new LMFunction(
@@ -501,7 +526,9 @@ abstract class GenLLVM extends SubComponent {
         unwindRaiseException.declare,
         createOurException.declare,
         rtAssertArrayBounds.declare,
-        rtAssertNotNull.declare
+        rtAssertNotNull.declare,
+        llvmInvariantStart.declare,
+        llvmInvariantEnd.declare
       )
     }
 
@@ -1092,7 +1119,11 @@ abstract class GenLLVM extends SubComponent {
           }
           def getrefvtbl(src: LMValue[SomeConcreteType])(implicit _insns: InstBuffer): LMValue[LMPointer] = {
             val vtbl = nextvar(rtVtable)
+            val vtblbp = nextvar(LMInt.i8.pointer)
+            val tag = nextvar(llvmInvariantTag)
             _insns.append(new extractvalue(vtbl, src.asInstanceOf[LMValue[rtReference.type]], Seq[CInt](1)))
+            _insns.append(new bitcast(vtblbp, vtbl))
+            _insns.append(new call(tag, llvmInvariantStart, Seq(new CInt(LMInt.i64, -1), vtblbp)))
             vtbl.asInstanceOf[LMValue[LMPointer]]
           }
 	  def arrayClass(elemTpe: TypeKind)(implicit _insns: InstBuffer): LMValue[LMPointer] = {
