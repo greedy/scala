@@ -1578,12 +1578,12 @@ abstract class GenICode extends SubComponent  {
         // when -optimise is on we call the @inline-version of equals, found in ScalaRunTime
         val equalsMethod =
           if (!settings.XO.value) {
+            if (forLLVM) {
+              ctx.bb.emit(LOAD_MODULE(BoxesRunTimeClass))
+            }
             def default = platform.externalEquals
             platform match {
               case x: JavaPlatform =>
-                if (forLLVM) {
-                  ctx.bb.emit(LOAD_MODULE(BoxesRunTimeClass))
-                }
                 import x._
                   if (l.tpe <:< BoxedNumberClass.tpe) {
                     if (r.tpe <:< BoxedNumberClass.tpe) externalEqualsNumNum
