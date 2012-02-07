@@ -264,11 +264,26 @@ abstract class SymbolLoaders {
 
     protected def doLoad(cls: classpath.AnyClassRep) = true
 
-    protected def newClassLoader(bin: AbstractFile) =
+    protected def newClassLoader(bin: AbstractFile): SymbolLoader =
       new ClassfileLoader(bin)
 
     protected def newPackageLoader(pkg: ClassPath[AbstractFile]) =
       new JavaPackageLoader(pkg)
+  }
+
+  class LLVMPackageLoader(classpath: ClassPath[AbstractFile])
+  extends JavaPackageLoader(classpath) {
+    override def newClassLoader(bin: AbstractFile) = {
+      if(bin.name.endsWith(".class"))
+        new ClassfileLoader(bin)
+      else {
+        assert(bin.name.endsWith(".sym"), bin.name)
+        new SymFileLoader(bin)
+      }
+    }
+
+    override def newPackageLoader(pkg: ClassPath[AbstractFile]) =
+      new LLVMPackageLoader(pkg)
   }
 
   class NamespaceLoader(classpath: ClassPath[MSILType]) extends PackageLoader(classpath) {
@@ -309,6 +324,23 @@ abstract class SymbolLoaders {
       stopTimer(classReadNanos, start)
     }
     override def sourcefile: Option[AbstractFile] = classfileParser.srcfile
+  }
+
+  private object unpickler extends scala.reflect.internal.pickling.UnPickler {
+    val global: SymbolLoaders.this.global.type = SymbolLoaders.this.global
+  }
+
+  class SymFileLoader(val file: AbstractFile) extends SymbolLoader {
+    protected def description = "sym file " + file.toString
+    protected def doComplete(root: Symbol) {
+      printf("LLVM READING %s into %s\n", file, root)
+      printf(" -- root.sourceModule is %s\n", root.sourceModule)
+      printf(" -- root.owner is %s\n", root.owner)
+      printf(" -- flags before %x\n", root.flags)
+      unpickler.unpickle(file.toByteArray, 0, root, root.sourceModule,
+                         file.name)
+      printf(" -- flags after %x\n", root.flags)
+    }
   }
 
   class MSILTypeLoader(typ: MSILType) extends SymbolLoader {

@@ -95,12 +95,6 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with 
     }
   }
 
-  /** Return the suffix of a class name */
-  def moduleSuffix(sym: Symbol) =
-    if (sym.hasModuleFlag && !sym.isMethod &&
-       !sym.isImplClass && !sym.isJavaDefined) "$"
-    else ""
-
   var pickledBytes = 0 // statistics
 
   /**

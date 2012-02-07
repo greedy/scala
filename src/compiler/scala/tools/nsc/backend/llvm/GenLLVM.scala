@@ -1890,18 +1890,29 @@ abstract class GenLLVM extends SubComponent {
         fun.define(blocks)
       }
 
-      val sym = if(c.symbol.hasModuleFlag) c.symbol.sourceModule
-                else c.symbol
+      def debugSym(tag: String, sym: Symbol) {
+        printf("%s: %c %s\n", tag,
+               if(currentRun.symData.isDefinedAt(sym)) '+' else '-',
+               sym.detailedString)
+      }
 
-      currentRun.symData.get(sym) match {
-        case Some(p) =>
-          val symOut = getSymFile(sym).bufferedOutput
-          symOut.write(p.bytes.take(p.writeIndex))
-          symOut.close
+      debugSym("LLVM compiling", c.symbol)
+
+      assert(c.symbol.isClass || c.symbol.isModuleClass, c.symbol)
+
+      val symSigOpt = currentRun.symData.get(c.symbol) match {
+        case Some(p) => Some(c.symbol, p)
         case None =>
-          printf("MISSING pickle for %s(%x)\n", c.symbol, c.symbol.flags)
-          printf("  MISSING owner is %s (%s)\n",
-                 c.symbol.owner, currentRun.symData.isDefinedAt(c.symbol.owner))
+          debugSym(" trying", c.symbol.companionModule)
+          currentRun.symData.get(c.symbol.companionModule).map(sig => (c.symbol.companionModule, sig))
+      }
+
+      for((sym,sig) <- symSigOpt) {
+          val symFile = getSymFile(sym)
+          printf(" writing: %s\n", symFile)
+          val symOut = symFile.bufferedOutput
+          symOut.write(sig.bytes.take(sig.writeIndex))
+          symOut.close
       }
 
       val outfile = getFile(c.symbol, ".ll")
@@ -2044,10 +2055,10 @@ abstract class GenLLVM extends SubComponent {
     def getSymFile(sym: Symbol): AbstractFile = {
       val src = atPhase(currentRun.phaseNamed("llvm").prev)(sym.sourceFile)
       var dir = settings.outputDirs.outputDirFor(src)
-      for(arc <- sym.fullName.split("\\.").toList.init) {
+      for(arc <- sym.fullName.split("\\.").init) {
         dir = dir.subdirectoryNamed(arc)
       }
-      dir.fileNamed(sym.encodedName + ".sym")
+      dir.fileNamed(sym.encodedName + sym.moduleSuffix + ".sym")
     }
 
     def getFile(sym: Symbol, suffix: String): AbstractFile = {
