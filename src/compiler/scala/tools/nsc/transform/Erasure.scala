@@ -70,9 +70,8 @@ abstract class Erasure extends AddInterfaces
   // type of getClass calls.  The returned type is:
   //
   //  1. If T is a value type, Class[T].
-  //  2. If T is anonymous or a refinement type, calculate the intersection
-  //     dominator of the parents T', and Class[_ <: T'].
-  //  3. If T is a phantom type (Any or AnyVal), Class[_].
+  //  2. If T is a phantom type (Any or AnyVal), Class[_].
+  //  3. If T is a local class, Class[_ <: |T|].
   //  4. Otherwise, Class[_ <: T].
   //
   // Note: AnyVal cannot be Class[_ <: AnyVal] because if the static type of the
@@ -81,20 +80,21 @@ abstract class Erasure extends AddInterfaces
   //
   // TODO: If T is final, return type could be Class[T].  Should it?
   def getClassReturnType(tp: Type): Type = {
-    def mkClass(targs: List[Type]) = typeRef(ClassClass.tpe.prefix, ClassClass, targs)
-    val tparams = ClassClass.typeParams
     val sym     = tp.typeSymbol
 
-    if (tparams.isEmpty) mkClass(Nil)   // call must be coming post-erasure
-    else if (isValueClass(sym)) mkClass(List(tp.widen))
-    else if (sym.isLocalClass) getClassReturnType(erasure.intersectionDominator(tp.parents))
+    if (phase.erasedTypes) ClassClass.tpe
+    else if (isValueClass(sym)) ClassType(tp.widen)
     else {
-      val eparams    = typeParamsToExistentials(ClassClass, tparams)
-      val upperBound = if (isPhantomClass(sym)) AnyClass.tpe else tp.widen
+      val eparams    = typeParamsToExistentials(ClassClass, ClassClass.typeParams)
+      val upperBound = (
+        if (isPhantomClass(sym)) AnyClass.tpe
+        else if (sym.isLocalClass) erasure.intersectionDominator(tp.parents) // erasure(tp)
+        else tp.widen
+      )
 
       existentialAbstraction(
         eparams,
-        mkClass(List(eparams.head setInfo TypeBounds.upper(upperBound) tpe))
+        ClassType(eparams.head setInfo TypeBounds.upper(upperBound) tpe)
       )
     }
   }
@@ -527,10 +527,15 @@ abstract class Erasure extends AddInterfaces
   }
 
   val deconstMap = new TypeMap {
+    // For some reason classOf[Foo] creates ConstantType(Constant(tpe)) with an actual Type for tpe,
+    // which is later translated to a Class. Unfortunately that means we have bugs like the erasure
+    // of Class[Foo] and classOf[Bar] not being seen as equivalent, leading to duplicate method
+    // generation and failing bytecode. See ticket #4753.
     def apply(tp: Type): Type = tp match {
-      case PolyType(_, _) => mapOver(tp)
-      case MethodType(_, _) => mapOver(tp) // nullarymethod was eliminated during uncurry
-      case _ => tp.deconst
+      case PolyType(_, _)                  => mapOver(tp)
+      case MethodType(_, _)                => mapOver(tp)     // nullarymethod was eliminated during uncurry
+      case ConstantType(Constant(_: Type)) => ClassClass.tpe  // all classOfs erase to Class
+      case _                               => tp.deconst
     }
   }
   // Methods on Any/Object which we rewrite here while we still know what
@@ -1040,12 +1045,12 @@ abstract class Erasure extends AddInterfaces
               case s @ (ShortClass | ByteClass | CharClass) => numericConversion(qual, s)
               case BooleanClass                             => If(qual, LIT(true.##), LIT(false.##))
               case _                                        =>
-                Apply(gen.mkAttributedRef(scalaRuntimeHash), List(qual))
+                global.typer.typed(gen.mkRuntimeCall(nme.hash_, List(qual)))
             }
           }
           // Rewrite 5.getClass to ScalaRunTime.anyValClass(5)
           else if (isValueClass(qual.tpe.typeSymbol))
-            Apply(gen.mkAttributedRef(scalaRuntimeAnyValClass), List(qual))
+            global.typer.typed(gen.mkRuntimeCall(nme.anyValClass, List(qual)))
           else
             tree
 
@@ -1102,7 +1107,7 @@ abstract class Erasure extends AddInterfaces
           }
           else {
             def doDynamic(fn: Tree, qual: Tree): Tree = {
-              if (fn.symbol.owner.isRefinementClass && fn.symbol.allOverriddenSymbols.isEmpty)
+              if (fn.symbol.owner.isRefinementClass && !fn.symbol.isOverridingSymbol)
                 ApplyDynamic(qual, args) setSymbol fn.symbol setPos tree.pos
               else tree
             }
@@ -1118,9 +1123,9 @@ abstract class Erasure extends AddInterfaces
           val owner = tree.symbol.owner
           // println("preXform: "+ (tree, tree.symbol, tree.symbol.owner, tree.symbol.owner.isRefinementClass))
           if (owner.isRefinementClass) {
-            val overridden = tree.symbol.allOverriddenSymbols
-            assert(!overridden.isEmpty, tree.symbol)
-            tree.symbol = overridden.head
+            val overridden = tree.symbol.nextOverriddenSymbol
+            assert(overridden != NoSymbol, tree.symbol)
+            tree.symbol = overridden
           }
           def isAccessible(sym: Symbol) = localTyper.context.isAccessible(sym, sym.owner.thisType)
           if (!isAccessible(owner) && qual.tpe != null) {

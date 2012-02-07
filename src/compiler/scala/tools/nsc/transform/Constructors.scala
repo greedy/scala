@@ -215,7 +215,7 @@ abstract class Constructors extends Transform with ast.TreeDSL {
       //   the symbol is an outer accessor of a final class which does not override another outer accessor. )
       def maybeOmittable(sym: Symbol) = sym.owner == clazz && (
         sym.isParamAccessor && sym.isPrivateLocal ||
-        sym.isOuterAccessor && sym.owner.isFinal && sym.allOverriddenSymbols.isEmpty &&
+        sym.isOuterAccessor && sym.owner.isFinal && !sym.isOverridingSymbol &&
         !(clazz isSubClass DelayedInitClass)
       )
 
@@ -585,11 +585,8 @@ abstract class Constructors extends Transform with ast.TreeDSL {
       defBuf ++= auxConstructorBuf
 
       // Unlink all fields that can be dropped from class scope
-      for (sym <- clazz.info.decls.toList)
-        if (!mustbeKept(sym)) {
-          // println("dropping "+sym+sym.locationString)
-          clazz.info.decls unlink sym
-        }
+      for (sym <- clazz.info.decls ; if !mustbeKept(sym))
+        clazz.info.decls unlink sym
 
       // Eliminate all field definitions that can be dropped from template
       treeCopy.Template(impl, impl.parents, impl.self,

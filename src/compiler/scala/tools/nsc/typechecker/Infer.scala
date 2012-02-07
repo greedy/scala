@@ -425,17 +425,18 @@ trait Infer {
     private def isPlausiblySubType(tp1: Type, tp2: Type) = !isImpossibleSubType(tp1, tp2)
     private def isImpossibleSubType(tp1: Type, tp2: Type) = tp1.normalize.widen match {
       case tr1 @ TypeRef(_, sym1, _) =>
-        tp2.normalize.widen match {
+        // We can only rule out a subtype relationship if the left hand
+        // side is a class, else we may not know enough.
+        sym1.isClass && (tp2.normalize.widen match {
           case TypeRef(_, sym2, _) =>
-             sym1.isClass &&
              sym2.isClass &&
             !(sym1 isSubClass sym2) &&
             !(sym1 isNumericSubClass sym2)
-          // XXX - disabled for preventing scalaz from building.
-          // case RefinedType(_, decls) =>
-          //   decls.nonEmpty && tp1.member(decls.head.name) == NoSymbol
+          case RefinedType(parents, decls) =>
+            decls.nonEmpty &&
+            tr1.member(decls.head.name) == NoSymbol
           case _ => false
-        }
+        })
       case _ => false
     }
 
@@ -1214,7 +1215,7 @@ trait Infer {
      *
      *  @param fn          fn: the function that needs to be instantiated.
      *  @param undetparams the parameters that need to be determined
-     *  @param args        the actional argumments in the call.
+     *  @param args        the actual arguments supplied in the call.
      *  @param pt          the expected type of the function application
      *  @return            The type parameters that remain uninstantiated,
      *                     and that thus have not been substituted.
@@ -1234,7 +1235,7 @@ trait Infer {
         try {
           val pt      = if (pt0.typeSymbol == UnitClass) WildcardType else pt0
           val formals = formalTypes(params0 map (_.tpe), args.length)
-          val argtpes = actualTypes(args map (_.tpe.deconst), formals.length)
+          val argtpes = actualTypes(args map (x => elimAnonymousClass(x.tpe.deconst)), formals.length)
           val restpe  = fn.tpe.resultType(argtpes)
 
           val AdjustedTypeArgs.AllArgsAndUndets(okparams, okargs, allargs, leftUndet) =
