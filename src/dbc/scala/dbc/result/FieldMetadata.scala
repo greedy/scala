@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -15,7 +15,7 @@ package result
 /** The class <code>FieldMetadata</cocde> provides informations attached to
  *  a field about its content and its relationship to the originating database.
  */
-abstract class FieldMetadata {
+@deprecated(DbcIsDeprecated, "2.9.0") abstract class FieldMetadata {
 
   /** The name of the field. */
   def name: String

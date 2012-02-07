@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -14,8 +14,7 @@ package immutable
 import generic._
 import mutable.{Builder, StringBuilder, LazyBuilder, ListBuffer}
 import scala.annotation.tailrec
-
-
+import Stream.cons
 
 /** The class `Stream` implements lazy lists where elements
  *  are only evaluated when they are needed. Here is an example:
@@ -78,7 +77,7 @@ self =>
    *  @return       The stream containing elements of this stream and the traversable object.
    */
   def append[B >: A](rest: => TraversableOnce[B]): Stream[B] =
-    if (isEmpty) rest.toStream else new Stream.Cons(head, tail append rest)
+    if (isEmpty) rest.toStream else cons(head, tail append rest)
 
   /** Forces evaluation of the whole stream and returns it. */
   def force: Stream[A] = {
@@ -139,13 +138,17 @@ self =>
    *  then StreamBuilder will be chosen for the implicit.
    *  we recognize that fact and optimize to get more laziness.
    */
-  override def ++[B >: A, That](that: TraversableOnce[B])(implicit bf: CanBuildFrom[Stream[A], B, That]): That =
+  override def ++[B >: A, That](that: GenTraversableOnce[B])(implicit bf: CanBuildFrom[Stream[A], B, That]): That =
     // we assume there is no other builder factory on streams and therefore know that That = Stream[A]
     if (isStreamBuilder(bf)) asThat(
       if (isEmpty) that.toStream
-      else new Stream.Cons(head, asStream[A](tail ++ that))
+      else cons(head, asStream[A](tail ++ that))
     )
     else super.++(that)(bf)
+
+  override def +:[B >: A, That](elem: B)(implicit bf: CanBuildFrom[Stream[A], B, That]): That =
+    if (isStreamBuilder(bf)) asThat(cons(elem, this))
+    else super.+:(elem)(bf)
 
   /**
    * Create a new stream which contains all intermediate results of applying the operator
@@ -155,7 +158,7 @@ self =>
   override final def scanLeft[B, That](z: B)(op: (B, A) => B)(implicit bf: CanBuildFrom[Stream[A], B, That]): That =
     if (isStreamBuilder(bf)) asThat(
       if (isEmpty) Stream(z)
-      else new Stream.Cons(z, asStream[B](tail.scanLeft(op(z, head))(op)))
+      else cons(z, asStream[B](tail.scanLeft(op(z, head))(op)))
     )
     else super.scanLeft(z)(op)(bf)
 
@@ -169,9 +172,25 @@ self =>
   override final def map[B, That](f: A => B)(implicit bf: CanBuildFrom[Stream[A], B, That]): That = {
     if (isStreamBuilder(bf)) asThat(
       if (isEmpty) Stream.Empty
-      else new Stream.Cons(f(head), asStream[B](tail map f))
+      else cons(f(head), asStream[B](tail map f))
     )
     else super.map(f)(bf)
+  }
+
+  override final def collect[B, That](pf: PartialFunction[A, B])(implicit bf: CanBuildFrom[Stream[A], B, That]): That = {
+    if (!isStreamBuilder(bf)) super.collect(pf)(bf)
+    else {
+      // this implementation avoids:
+      // 1) stackoverflows (could be achieved with tailrec, too)
+      // 2) out of memory errors for big streams (`this` reference can be eliminated from the stack)
+      var rest: Stream[A] = this
+      while (rest.nonEmpty && !pf.isDefinedAt(rest.head)) rest = rest.tail
+
+      //  without the call to the companion object, a thunk is created for the tail of the new stream,
+      //  and the closure of the thunk will reference `this`
+      if (rest.isEmpty) Stream.Empty.asInstanceOf[That]
+      else Stream.collectedTail(rest, pf, bf).asInstanceOf[That]
+    }
   }
 
   /** Applies the given function `f` to each element of
@@ -182,7 +201,7 @@ self =>
    *  @return  <code>f(a<sub>0</sub>) ::: ... ::: f(a<sub>n</sub>)</code> if
    *           this stream is <code>[a<sub>0</sub>, ..., a<sub>n</sub>]</code>.
    */
-  override final def flatMap[B, That](f: A => TraversableOnce[B])(implicit bf: CanBuildFrom[Stream[A], B, That]): That =
+  override final def flatMap[B, That](f: A => GenTraversableOnce[B])(implicit bf: CanBuildFrom[Stream[A], B, That]): That =
     // we assume there is no other builder factory on streams and therefore know that That = Stream[B]
     // optimisations are not for speed, but for functionality
     // see tickets #153, #498, #2147, and corresponding tests in run/ (as well as run/stream_flatmap_odds.scala)
@@ -230,13 +249,13 @@ self =>
       def tailMap = asStream[B](tail withFilter p map f)
       if (isStreamBuilder(bf)) asThat(
         if (isEmpty) Stream.Empty
-        else if (p(head)) new Stream.Cons(f(head), tailMap)
+        else if (p(head)) cons(f(head), tailMap)
         else tailMap
       )
       else super.map(f)(bf)
     }
 
-    override def flatMap[B, That](f: A => TraversableOnce[B])(implicit bf: CanBuildFrom[Stream[A], B, That]): That = {
+    override def flatMap[B, That](f: A => GenTraversableOnce[B])(implicit bf: CanBuildFrom[Stream[A], B, That]): That = {
       def tailFlatMap = asStream[B](tail withFilter p flatMap f)
       if (isStreamBuilder(bf)) asThat(
         if (isEmpty) Stream.Empty
@@ -254,33 +273,8 @@ self =>
       new StreamWithFilter(x => p(x) && q(x))
   }
 
-  /** See #3273 and test case run/bug3273 for motivation. */
-  final class StreamIterator extends Iterator[A] {
-    // A call-by-need cell.
-    class LazyCell(st: => Stream[A]) {
-      lazy val v = st
-    }
-
-    private var these = new LazyCell(self)
-    def hasNext: Boolean = these.v.nonEmpty
-    def next: A =
-      if (isEmpty) Iterator.empty.next
-      else {
-        val cur    = these.v
-        val result = cur.head
-        these = new LazyCell(cur.tail)
-        result
-      }
-    override def toStream = {
-      val result = these.v
-      these = new LazyCell(Stream.empty)
-      result
-    }
-    override def toList   = toStream.toList
-  }
-
   /** A lazier Iterator than LinearSeqLike's. */
-  override def iterator: Iterator[A] = new StreamIterator
+  override def iterator: Iterator[A] = new StreamIterator(self)
 
   /** Apply the given function <code>f</code> to each element of this linear sequence
    *  (while respecting the order of the elements).
@@ -308,6 +302,22 @@ self =>
     else tail.foldLeft(op(z, head))(op)
   }
 
+  /** Stream specialization of reduceLeft which allows GC to collect
+   *  along the way.
+   */
+  override final def reduceLeft[B >: A](f: (B, A) => B): B = {
+    if (this.isEmpty) throw new UnsupportedOperationException("empty.reduceLeft")
+    else {
+      var reducedRes: B = this.head
+      var left = this.tail
+      while (!left.isEmpty) {
+        reducedRes = f(reducedRes, left.head)
+        left = left.tail
+      }
+      reducedRes
+    }
+  }
+
   /** Returns all the elements of this stream that satisfy the
    *  predicate <code>p</code>. The order of the elements is preserved.
    *
@@ -326,11 +336,11 @@ self =>
    *              <code>Stream(a<sub>0</sub>, ..., a<sub>m</sub>)
    *              zip Stream(b<sub>0</sub>, ..., b<sub>n</sub>)</code> is invoked.
    */
-  override final def zip[A1 >: A, B, That](that: Iterable[B])(implicit bf: CanBuildFrom[Stream[A], (A1, B), That]): That =
+  override final def zip[A1 >: A, B, That](that: collection.GenIterable[B])(implicit bf: CanBuildFrom[Stream[A], (A1, B), That]): That =
     // we assume there is no other builder factory on streams and therefore know that That = Stream[(A1, B)]
     if (isStreamBuilder(bf)) asThat(
       if (this.isEmpty || that.isEmpty) Stream.Empty
-      else new Stream.Cons((this.head, that.head), asStream[(A1, B)](this.tail zip that.tail))
+      else cons((this.head, that.head), asStream[(A1, B)](this.tail zip that.tail))
     )
     else super.zip(that)(bf)
 
@@ -361,22 +371,15 @@ self =>
     b
   }
 
+  override def mkString(sep: String): String = mkString("", sep, "")
+  override def mkString: String = mkString("")
   override def mkString(start: String, sep: String, end: String): String = {
     this.force
     super.mkString(start, sep, end)
   }
-
-  override def mkString(sep: String): String = {
-    this.force
-    super.mkString(sep)
-  }
-
-  override def mkString: String = {
-    this.force
-    super.mkString
-  }
-
   override def toString = super.mkString(stringPrefix + "(", ", ", ")")
+
+  override def splitAt(n: Int): (Stream[A], Stream[A]) = (take(n), drop(n))
 
   /** Returns the <code>n</code> first elements of this stream, or else the whole
    *  stream, if it has less than <code>n</code> elements.
@@ -385,27 +388,24 @@ self =>
    *  @return the <code>n</code> first elements of this stream.
    */
   override def take(n: Int): Stream[A] =
-    if (n <= 0 || isEmpty) Stream.Empty
-    else new Stream.Cons(head, if (n == 1) Stream.empty else tail take (n-1))
+    if (n <= 0 || isEmpty) Stream.empty
+    else if (n == 1) cons(head, Stream.empty)
+    else cons(head, tail take n-1)
 
-  override def splitAt(n: Int): (Stream[A], Stream[A]) = (take(n), drop(n))
+  @tailrec final override def drop(n: Int): Stream[A] =
+    if (n <= 0 || isEmpty) this
+    else tail drop n-1
 
-  /** A substream starting at index `from`
-   *  and extending up to (but not including) index `until`.
-   *
-   *  @note This is equivalent to (but possibly more efficient than)
-   *  c.drop(from).take(to - from)
+  /** A substream starting at index `from` and extending up to (but not including)
+   *  index `until`.
    *
    *  @param start   The index of the first element of the returned subsequence
    *  @param end     The index of the element following the returned subsequence
-   *  @throws IndexOutOfBoundsException if <code>from &lt; 0</code>
-   *          or <code>length &lt; from + len<code>
-   *  @note  Might return different results for different runs, unless this iterable is ordered
    */
-  override def slice(start: Int, end: Int): Stream[A] = {
-    var len = end
-    if (start > 0) len -= start
-    drop(start) take len
+  override def slice(from: Int, until: Int): Stream[A] = {
+    val lo = from max 0
+    if (until <= lo || isEmpty) Stream.empty
+    else this drop lo take (until - lo)
   }
 
   /** The stream without its last element.
@@ -414,7 +414,7 @@ self =>
   override def init: Stream[A] =
     if (isEmpty) super.init
     else if (tail.isEmpty) Stream.Empty
-    else new Stream.Cons(head, tail.init)
+    else cons(head, tail.init)
 
   /** Returns the rightmost <code>n</code> elements from this iterable.
    *  @param n the number of elements to take
@@ -437,7 +437,7 @@ self =>
    *  @param p the test predicate.
    */
   override def takeWhile(p: A => Boolean): Stream[A] =
-    if (!isEmpty && p(head)) new Stream.Cons(head, tail takeWhile p)
+    if (!isEmpty && p(head)) cons(head, tail takeWhile p)
     else Stream.Empty
 
   /** Returns the longest suffix of this iterable whose first element
@@ -456,7 +456,7 @@ self =>
    */
   override def distinct: Stream[A] =
     if (isEmpty) this
-    else new Stream.Cons(head, tail.filter(head !=).distinct)
+    else cons(head, tail.filter(head !=).distinct)
 
   /** Returns a new sequence of given length containing the elements of this sequence followed by zero
    *  or more occurrences of given elements.
@@ -464,7 +464,7 @@ self =>
   override def padTo[B >: A, That](len: Int, elem: B)(implicit bf: CanBuildFrom[Stream[A], B, That]): That = {
     def loop(len: Int, these: Stream[A]): Stream[B] =
       if (these.isEmpty) Stream.fill(len)(elem)
-      else new Stream.Cons(these.head, loop(len - 1, these.tail))
+      else cons(these.head, loop(len - 1, these.tail))
 
     if (isStreamBuilder(bf)) asThat(loop(len, this))
     else super.padTo(len, elem)(bf)
@@ -487,7 +487,7 @@ self =>
   override def flatten[B](implicit asTraversable: A => /*<:<!!!*/ TraversableOnce[B]): Stream[B] = {
     def flatten1(t: Traversable[B]): Stream[B] =
       if (!t.isEmpty)
-        new Stream.Cons(t.head, flatten1(t.tail))
+        cons(t.head, flatten1(t.tail))
       else
         tail.flatten
 
@@ -502,10 +502,35 @@ self =>
     override def apply(idx: Int) = self.apply(idx)
   }
 
-  /** Defines the prefix of this object's <code>toString</code> representation as ``Stream''.
+  /** Defines the prefix of this object's `toString` representation as `Stream`.
    */
   override def stringPrefix = "Stream"
 
+}
+
+/** See #3273 and test case run/bug3273 for motivation. */
+final class StreamIterator[+A](self: Stream[A]) extends Iterator[A] {
+  // A call-by-need cell.
+  class LazyCell(st: => Stream[A]) {
+    lazy val v = st
+  }
+
+  private var these = new LazyCell(self)
+  def hasNext: Boolean = these.v.nonEmpty
+  def next: A =
+    if (isEmpty) Iterator.empty.next
+    else {
+      val cur    = these.v
+      val result = cur.head
+      these = new LazyCell(cur.tail)
+      result
+    }
+  override def toStream = {
+    val result = these.v
+    these = new LazyCell(Stream.empty)
+    result
+  }
+  override def toList   = toStream.toList
 }
 
 /**
@@ -561,7 +586,7 @@ object Stream extends SeqFactory[Stream] {
    *  to streams.
    */
   class ConsWrapper[A](tl: => Stream[A]) {
-    def #::(hd: A): Stream[A] = new Stream.Cons(hd, tl)
+    def #::(hd: A): Stream[A] = cons(hd, tl)
     def #:::(prefix: Stream[A]): Stream[A] = prefix append tl
   }
 
@@ -579,7 +604,8 @@ object Stream extends SeqFactory[Stream] {
       else Some((xs.head, xs.tail))
   }
 
-  @deprecated("use #:: instead") lazy val lazy_:: = #::
+  @deprecated("use #:: instead", "2.8.0")
+  lazy val lazy_:: = #::
 
   /** An alternative way of building and matching Streams using Stream.cons(hd, tl).
    */
@@ -618,7 +644,7 @@ object Stream extends SeqFactory[Stream] {
    *  @param f     the function that's repeatedly applied
    *  @return      the stream returning the infinite sequence of values `start, f(start), f(f(start)), ...`
    */
-  def iterate[A](start: A)(f: A => A): Stream[A] = new Cons(start, iterate(f(start))(f))
+  def iterate[A](start: A)(f: A => A): Stream[A] = cons(start, iterate(f(start))(f))
 
   override def iterate[A](start: A, len: Int)(f: A => A): Stream[A] =
     iterate(start)(f) take len
@@ -632,7 +658,7 @@ object Stream extends SeqFactory[Stream] {
    * @return the stream starting at value <code>start</code>.
    */
   def from(start: Int, step: Int): Stream[Int] =
-    new Cons(start, from(start+step, step))
+    cons(start, from(start+step, step))
 
   /**
    * Create an infinite stream starting at <code>start</code>
@@ -650,14 +676,14 @@ object Stream extends SeqFactory[Stream] {
    * @param elem the element composing the resulting stream
    * @return the stream containing an infinite number of elem
    */
-  def continually[A](elem: => A): Stream[A] = new Cons(elem, continually(elem))
+  def continually[A](elem: => A): Stream[A] = cons(elem, continually(elem))
 
   override def fill[A](n: Int)(elem: => A): Stream[A] =
-    if (n <= 0) Empty else new Cons(elem, fill(n-1)(elem))
+    if (n <= 0) Empty else cons(elem, fill(n-1)(elem))
 
   override def tabulate[A](n: Int)(f: Int => A): Stream[A] = {
     def loop(i: Int): Stream[A] =
-      if (i >= n) Empty else new Cons(f(i), loop(i+1))
+      if (i >= n) Empty else cons(f(i), loop(i+1))
     loop(0)
   }
 
@@ -666,27 +692,31 @@ object Stream extends SeqFactory[Stream] {
     import num._
 
     if (if (step < zero) start <= end else end <= start) Empty
-    else new Cons(start, range(start + step, end, step))
+    else cons(start, range(start + step, end, step))
   }
 
   private[immutable] def filteredTail[A](stream: Stream[A], p: A => Boolean) = {
-    new Stream.Cons(stream.head, stream.tail filter p)
+    cons(stream.head, stream.tail filter p)
+  }
+
+  private[immutable] def collectedTail[A, B, That](stream: Stream[A], pf: PartialFunction[A, B], bf: CanBuildFrom[Stream[A], B, That]) = {
+    cons(pf(stream.head), stream.tail.collect(pf)(bf).asInstanceOf[Stream[B]])
   }
 
   /** A stream containing all elements of a given iterator, in the order they are produced.
    *  @param it   The iterator producing the stream's elements
    */
-  @deprecated("use it.toStream instead")
+  @deprecated("use it.toStream instead", "2.8.0")
   def fromIterator[A](it: Iterator[A]): Stream[A] = it.toStream
 
   /** The concatenation of a sequence of streams
    */
-  @deprecated("use xs.flatten instead")
+  @deprecated("use xs.flatten instead", "2.8.0")
   def concat[A](xs: Iterable[Stream[A]]): Stream[A] = concat(xs.iterator)
 
   /** The concatenation of all streams returned by an iterator
    */
-  @deprecated("use xs.toStream.flatten instead")
+  @deprecated("use xs.toStream.flatten instead", "2.8.0")
   def concat[A](xs: Iterator[Stream[A]]): Stream[A] = xs.toStream.flatten //(conforms[Stream[A], scala.collection.Traversable[A]])
 
   /**
@@ -700,7 +730,7 @@ object Stream extends SeqFactory[Stream] {
    * @param step the increment function of the stream, must be monotonically increasing or decreasing
    * @return the stream starting at value <code>start</code>.
    */
-  @deprecated("use `iterate' instead.")
+  @deprecated("use `iterate` instead.", "2.8.0")
   def range(start: Int, end: Int, step: Int => Int): Stream[Int] =
     iterate(start, end - start)(step)
 
@@ -710,7 +740,7 @@ object Stream extends SeqFactory[Stream] {
    * @param elem the element composing the resulting stream
    * @return the stream containing an infinite number of elem
    */
-  @deprecated("use `continually' instead")
+  @deprecated("use `continually` instead", "2.8.0")
   def const[A](elem: A): Stream[A] = cons(elem, const(elem))
 
   /** Create a stream containing several copies of an element.
@@ -719,7 +749,7 @@ object Stream extends SeqFactory[Stream] {
    *  @param elem the element composing the resulting stream
    *  @return     the stream composed of n elements all equal to elem
    */
-  @deprecated("use fill(n, elem) instead")
+  @deprecated("use fill(n, elem) instead", "2.8.0")
   def make[A](n: Int, elem: A): Stream[A] = fill(n)(elem)
 }
 

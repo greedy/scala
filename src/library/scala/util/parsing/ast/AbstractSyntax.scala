@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2006-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -19,7 +19,7 @@ trait AbstractSyntax {
    */
   trait Element extends Positional
 
-  /** The base class for elements in the AST that represent names {@see Binders}.
+  /** The base class for elements in the AST that represent names [[scala.util.parsing.ast.Binders]].
    */
   trait NameElement extends Element {
     def name: String

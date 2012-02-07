@@ -1,4 +1,4 @@
-/* NSC -- new Scala compiler -- Copyright 2007-2010 LAMP/EPFL */
+/* NSC -- new Scala compiler -- Copyright 2007-2011 LAMP/EPFL */
 
 package scala.tools.nsc
 package doc
@@ -21,7 +21,7 @@ import util.{NoPosition, Position}
 trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
 
   val global: Global
-  import global.reporter
+  import global.{ reporter, definitions }
 
   protected val commentCache = mutable.HashMap.empty[(global.Symbol, TemplateImpl), Comment]
 
@@ -44,14 +44,15 @@ trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
   /** A comment is usualy created by the parser, however for some special cases we have to give
     * some inTpl comments (parent class for example) to the comment of the symbol
     * This function manages some of those cases : Param accessor and Primary constructor */
-  def defineComment(sym: global.Symbol, inTpl: => DocTemplateImpl):Option[Comment] =
+  def defineComment(sym: global.Symbol, inTpl: => DocTemplateImpl):Option[Comment] = {
+
     //param accessor case
     // We just need the @param argument, we put it into the body
     if( sym.isParamAccessor &&
         inTpl.comment.isDefined &&
         inTpl.comment.get.valueParams.isDefinedAt(sym.encodedName)) {
       val comContent = Some(inTpl.comment.get.valueParams(sym.encodedName))
-      Some(createComment(body0=comContent))
+      Some(createComment(body0 = comContent))
     }
 
     // Primary constructor case
@@ -74,6 +75,7 @@ trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
                             ))
       else None
     }
+
     //other comment cases
     // parse function will make the comment
     else {
@@ -85,40 +87,41 @@ trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
       else None
     }
 
-  /* Creates comments with necessary arguments */
-  def createComment(body0:        Option[Body]     = None,
-                    authors0:     List[Body]       = List.empty,
-                    see0:         List[Body]       = List.empty,
-                    result0:      Option[Body]     = None,
-                    throws0:      Map[String,Body] = Map.empty,
-                    valueParams0: Map[String,Body] = Map.empty,
-                    typeParams0:  Map[String,Body] = Map.empty,
-                    version0:     Option[Body]     = None,
-                    since0:       Option[Body]     = None,
-                    todo0:        List[Body]       = List.empty,
-                    deprecated0:  Option[Body]     = None,
-                    note0:        List[Body]       = List.empty,
-                    example0:     List[Body]       = List.empty,
-                    constructor0: Option[Body]     = None,
-                    source0:      Option[String]   = None
-                    ):Comment =
-    new Comment{
-      val body        = if(body0 isDefined) body0.get else Body(Seq.empty)
-      val authors     = authors0
-      val see         = see0
-      val result      = result0
-      val throws      = throws0
-      val valueParams = valueParams0
-      val typeParams  = typeParams0
-      val version     = version0
-      val since       = since0
-      val todo        = todo0
-      val deprecated  = deprecated0
-      val note        = note0
-      val example     = example0
-      val constructor = constructor0
-      val source      = source0
+  }
 
+  /* Creates comments with necessary arguments */
+  def createComment (
+    body0:        Option[Body]     = None,
+    authors0:     List[Body]       = List.empty,
+    see0:         List[Body]       = List.empty,
+    result0:      Option[Body]     = None,
+    throws0:      Map[String,Body] = Map.empty,
+    valueParams0: Map[String,Body] = Map.empty,
+    typeParams0:  Map[String,Body] = Map.empty,
+    version0:     Option[Body]     = None,
+    since0:       Option[Body]     = None,
+    todo0:        List[Body]       = List.empty,
+    deprecated0:  Option[Body]     = None,
+    note0:        List[Body]       = List.empty,
+    example0:     List[Body]       = List.empty,
+    constructor0: Option[Body]     = None,
+    source0:      Option[String]   = None
+  ) : Comment = new Comment{
+    val body        = if(body0 isDefined) body0.get else Body(Seq.empty)
+    val authors     = authors0
+    val see         = see0
+    val result      = result0
+    val throws      = throws0
+    val valueParams = valueParams0
+    val typeParams  = typeParams0
+    val version     = version0
+    val since       = since0
+    val todo        = todo0
+    val deprecated  = deprecated0
+    val note        = note0
+    val example     = example0
+    val constructor = constructor0
+    val source      = source0
   }
 
   protected val endOfText = '\u0003'
@@ -169,7 +172,7 @@ trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
 
   /** Safe HTML tags that can be kept. */
   protected val SafeTags =
-    new Regex("""((<code( [^>]*)?>.*</code>)|(</?(abbr|acronym|address|area|a|bdo|big|blockquote|br|button|b|caption|cite|col|colgroup|dd|del|dfn|em|fieldset|form|hr|img|input|ins|i|kbd|label|legend|link|map|object|optgroup|option|param|pre|q|samp|select|small|span|strong|sub|sup|table|tbody|td|textarea|tfoot|th|thead|tr|tt|var)( [^>]*)?/?>))""")
+    new Regex("""((&\w+;)|(&#\d+;)|(</?(abbr|acronym|address|area|a|bdo|big|blockquote|br|button|b|caption|cite|code|col|colgroup|dd|del|dfn|em|fieldset|form|hr|img|input|ins|i|kbd|label|legend|link|map|object|optgroup|option|param|pre|q|samp|select|small|span|strong|sub|sup|table|tbody|td|textarea|tfoot|th|thead|tr|tt|var)( [^>]*)?/?>))""")
 
   protected val safeTagMarker = '\u000E'
 
@@ -184,11 +187,11 @@ trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
 
   /** The start of a scaladoc code block */
   protected val CodeBlockStart =
-    new Regex("""(.*)\{\{\{(.*)""")
+    new Regex("""(.*)((?:\{\{\{)|(?:\u000E<pre(?: [^>]*)?>\u000E))(.*)""")
 
   /** The end of a scaladoc code block */
   protected val CodeBlockEnd =
-    new Regex("""(.*)\}\}\}(.*)""")
+    new Regex("""(.*)((?:\}\}\})|(?:\u000E</pre>\u000E))(.*)""")
 
   /** A key used for a tag map. The key is built from the name of the tag and from the linked symbol if the tag has one.
     * Equality on tag keys is structural. */
@@ -235,107 +238,129 @@ trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
       *                    are part of the previous tag or, if none exists, of the body.
       * @param remaining   The lines that must still recursively be parsed.
       * @param inCodeBlock Whether the next line is part of a code block (in which no tags must be read). */
-    def parse0(docBody: String, tags: Map[TagKey, List[String]], lastTagKey: Option[TagKey], remaining: List[String], inCodeBlock: Boolean): Comment = {
-      remaining match {
+    def parse0 (
+      docBody: String,
+      tags: Map[TagKey, List[String]],
+      lastTagKey: Option[TagKey],
+      remaining: List[String],
+      inCodeBlock: Boolean
+    ): Comment = remaining match {
 
-        case CodeBlockStart(before, after) :: ls if (!inCodeBlock) =>
-          if (before.trim != "")
-            parse0(docBody, tags, lastTagKey, before :: ("{{{" + after) :: ls, false)
-          else if (after.trim != "")
-            parse0(docBody, tags, lastTagKey, "{{{" :: after :: ls, true)
-          else
-            parse0(docBody + endOfLine + "{{{", tags, lastTagKey, ls, true)
-
-        case CodeBlockEnd(before, after) :: ls =>
-          if (before.trim != "")
-            parse0(docBody, tags, lastTagKey, before :: ("}}}" + after) :: ls, true)
-          else if (after.trim != "")
-            parse0(docBody, tags, lastTagKey, "}}}" :: after :: ls, false)
-          else
-            parse0(docBody + endOfLine + "}}}", tags, lastTagKey, ls, false)
-
-        case SymbolTag(name, sym, body) :: ls if (!inCodeBlock) =>
-          val key = SymbolTagKey(name, sym)
-          val value = body :: tags.getOrElse(key, Nil)
-          parse0(docBody, tags + (key -> value), Some(key), ls, inCodeBlock)
-
-        case SimpleTag(name, body) :: ls if (!inCodeBlock) =>
-          val key = SimpleTagKey(name)
-          val value = body :: tags.getOrElse(key, Nil)
-          parse0(docBody, tags + (key -> value), Some(key), ls, inCodeBlock)
-
-        case line :: ls if (lastTagKey.isDefined) =>
-          val key = lastTagKey.get
-          val value =
-            ((tags get key): @unchecked) match {
-              case Some(b :: bs) => (b + endOfLine + line) :: bs
-              case None => oops("lastTagKey set when no tag exists for key")
-            }
-          parse0(docBody, tags + (key -> value), lastTagKey, ls, inCodeBlock)
-
-        case line :: ls =>
-          val newBody = if (docBody == "") line else docBody + endOfLine + line
-          parse0(newBody, tags, lastTagKey, ls, inCodeBlock)
-
-        case Nil =>
-
-          val bodyTags: mutable.Map[TagKey, List[Body]] =
-            mutable.Map(tags mapValues (_ map (parseWiki(_, pos))) toSeq: _*)
-
-          def oneTag(key: SimpleTagKey): Option[Body] =
-            ((bodyTags remove key): @unchecked) match {
-              case Some(r :: rs) =>
-                if (!rs.isEmpty) reporter.warning(pos, "Only one '@" + key.name + "' tag is allowed")
-                Some(r)
-              case None => None
-            }
-
-          def allTags(key: SimpleTagKey): List[Body] =
-            (bodyTags remove key) getOrElse Nil
-
-          def allSymsOneTag(key: TagKey): Map[String, Body] = {
-            val keys: Seq[SymbolTagKey] =
-              bodyTags.keys.toSeq flatMap {
-                case stk: SymbolTagKey if (stk.name == key.name) => Some(stk)
-                case stk: SimpleTagKey if (stk.name == key.name) =>
-                  reporter.warning(pos, "Tag '@" + stk.name + "' must be followed by a symbol name")
-                  None
-                case _ => None
+      case CodeBlockStart(before, marker, after) :: ls if (!inCodeBlock) =>
+        if (before.trim != "")
+          parse0(docBody, tags, lastTagKey, before :: (marker + after) :: ls, false)
+        else if (after.trim != "")
+          parse0(docBody, tags, lastTagKey, marker :: after :: ls, true)
+        else lastTagKey match {
+          case Some(key) =>
+            val value =
+              ((tags get key): @unchecked) match {
+                case Some(b :: bs) => (b + endOfLine + marker) :: bs
+                case None => oops("lastTagKey set when no tag exists for key")
               }
-            val pairs: Seq[(String, Body)] =
-              for (key <- keys) yield {
-                val bs = (bodyTags remove key).get
-                if (bs.length > 1)
-                  reporter.warning(pos, "Only one '@" + key.name + "' tag for symbol " + key.symbol + " is allowed")
-                (key.symbol, bs.head)
+            parse0(docBody, tags + (key -> value), lastTagKey, ls, true)
+          case None =>
+            parse0(docBody + endOfLine + marker, tags, lastTagKey, ls, true)
+        }
+
+      case CodeBlockEnd(before, marker, after) :: ls =>
+        if (before.trim != "")
+          parse0(docBody, tags, lastTagKey, before :: (marker + after) :: ls, true)
+        else if (after.trim != "")
+          parse0(docBody, tags, lastTagKey, marker :: after :: ls, false)
+        else lastTagKey match {
+          case Some(key) =>
+            val value =
+              ((tags get key): @unchecked) match {
+                case Some(b :: bs) => (b + endOfLine + "}}}") :: bs
+                case None => oops("lastTagKey set when no tag exists for key")
               }
-            Map.empty[String, Body] ++ pairs
+            parse0(docBody, tags + (key -> value), lastTagKey, ls, false)
+          case None =>
+            parse0(docBody + endOfLine + marker, tags, lastTagKey, ls, false)
+        }
+
+      case SymbolTag(name, sym, body) :: ls if (!inCodeBlock) =>
+        val key = SymbolTagKey(name, sym)
+        val value = body :: tags.getOrElse(key, Nil)
+        parse0(docBody, tags + (key -> value), Some(key), ls, inCodeBlock)
+
+      case SimpleTag(name, body) :: ls if (!inCodeBlock) =>
+        val key = SimpleTagKey(name)
+        val value = body :: tags.getOrElse(key, Nil)
+        parse0(docBody, tags + (key -> value), Some(key), ls, inCodeBlock)
+
+      case line :: ls if (lastTagKey.isDefined) =>
+        val key = lastTagKey.get
+        val value =
+          ((tags get key): @unchecked) match {
+            case Some(b :: bs) => (b + endOfLine + line) :: bs
+            case None => oops("lastTagKey set when no tag exists for key")
+          }
+        parse0(docBody, tags + (key -> value), lastTagKey, ls, inCodeBlock)
+
+      case line :: ls =>
+        val newBody = if (docBody == "") line else docBody + endOfLine + line
+        parse0(newBody, tags, lastTagKey, ls, inCodeBlock)
+
+      case Nil =>
+
+        val bodyTags: mutable.Map[TagKey, List[Body]] =
+          mutable.Map(tags mapValues {tag => tag map (parseWiki(_, pos))} toSeq: _*)
+
+        def oneTag(key: SimpleTagKey): Option[Body] =
+          ((bodyTags remove key): @unchecked) match {
+            case Some(r :: rs) =>
+              if (!rs.isEmpty) reporter.warning(pos, "Only one '@" + key.name + "' tag is allowed")
+              Some(r)
+            case None => None
           }
 
-          val com = createComment (
-            body0        = Some(parseWiki(docBody, pos)),
-            authors0     = allTags(SimpleTagKey("author")),
-            see0         = allTags(SimpleTagKey("see")),
-            result0      = oneTag(SimpleTagKey("return")),
-            throws0      = allSymsOneTag(SimpleTagKey("throws")),
-            valueParams0 = allSymsOneTag(SimpleTagKey("param")),
-            typeParams0  = allSymsOneTag(SimpleTagKey("tparam")),
-            version0     = oneTag(SimpleTagKey("version")),
-            since0       = oneTag(SimpleTagKey("since")),
-            todo0        = allTags(SimpleTagKey("todo")),
-            deprecated0  = oneTag(SimpleTagKey("deprecated")),
-            note0        = allTags(SimpleTagKey("note")),
-            example0     = allTags(SimpleTagKey("example")),
-            constructor0 = oneTag(SimpleTagKey("constructor")),
-            source0      = Some(clean(src).mkString("\n"))
-          )
+        def allTags(key: SimpleTagKey): List[Body] =
+          (bodyTags remove key) getOrElse Nil
 
-          for ((key, _) <- bodyTags)
-            reporter.warning(pos, "Tag '@" + key.name + "' is not recognised")
+        def allSymsOneTag(key: TagKey): Map[String, Body] = {
+          val keys: Seq[SymbolTagKey] =
+            bodyTags.keys.toSeq flatMap {
+              case stk: SymbolTagKey if (stk.name == key.name) => Some(stk)
+              case stk: SimpleTagKey if (stk.name == key.name) =>
+                reporter.warning(pos, "Tag '@" + stk.name + "' must be followed by a symbol name")
+                None
+              case _ => None
+            }
+          val pairs: Seq[(String, Body)] =
+            for (key <- keys) yield {
+              val bs = (bodyTags remove key).get
+              if (bs.length > 1)
+                reporter.warning(pos, "Only one '@" + key.name + "' tag for symbol " + key.symbol + " is allowed")
+              (key.symbol, bs.head)
+            }
+          Map.empty[String, Body] ++ pairs
+        }
 
-          com
+        val com = createComment (
+          body0        = Some(parseWiki(docBody, pos)),
+          authors0     = allTags(SimpleTagKey("author")),
+          see0         = allTags(SimpleTagKey("see")),
+          result0      = oneTag(SimpleTagKey("return")),
+          throws0      = allSymsOneTag(SimpleTagKey("throws")),
+          valueParams0 = allSymsOneTag(SimpleTagKey("param")),
+          typeParams0  = allSymsOneTag(SimpleTagKey("tparam")),
+          version0     = oneTag(SimpleTagKey("version")),
+          since0       = oneTag(SimpleTagKey("since")),
+          todo0        = allTags(SimpleTagKey("todo")),
+          deprecated0  = oneTag(SimpleTagKey("deprecated")),
+          note0        = allTags(SimpleTagKey("note")),
+          example0     = allTags(SimpleTagKey("example")),
+          constructor0 = oneTag(SimpleTagKey("constructor")),
+          source0      = Some(clean(src).mkString("\n"))
+        )
 
-      }
+        for ((key, _) <- bodyTags)
+          reporter.warning(pos, "Tag '@" + key.name + "' is not recognised")
+
+        com
+
     }
 
     parse0("", Map.empty, None, clean(comment), false)
@@ -347,8 +372,9 @@ trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
     *  - Removed start-of-line star and one whitespace afterwards (if present).
     *  - Removed all end-of-line whitespace.
     *  - Only `endOfLine` is used to mark line endings. */
-  def parseWiki(string: String, pos: Position): Body =
+  def parseWiki(string: String, pos: Position): Body = {
     new WikiParser(string.toArray, pos).document()
+  }
 
   /** TODO
     *
@@ -489,10 +515,50 @@ trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
 
     /* INLINES */
 
+    val OPEN_TAG = "^<([A-Za-z]+)( [^>]*)?(/?)>$".r
+    val CLOSE_TAG = "^</([A-Za-z]+)>$".r
+    private def readHTMLFrom(begin: HtmlTag): String = {
+      val list = mutable.ListBuffer.empty[String]
+      val stack = mutable.ListBuffer.empty[String]
+
+      begin.close match {
+        case Some(HtmlTag(CLOSE_TAG(s))) =>
+          stack += s
+        case _ =>
+          return ""
+      }
+
+      do {
+        readUntil { char == safeTagMarker || char == endOfText }
+        val str = getRead()
+        nextChar()
+
+        list += str
+
+        str match {
+          case OPEN_TAG(s, _, standalone) => {
+            if (standalone != "/") {
+              stack += s
+            }
+          }
+          case CLOSE_TAG(s) => {
+            if (s == stack.last) {
+              stack.remove(stack.length-1)
+            }
+          }
+          case _ => ;
+        }
+      } while (stack.length > 0 && char != endOfText);
+
+      return list.mkString("")
+    }
     def inline(isInlineEnd: => Boolean): Inline = {
 
       def inline0(): Inline = {
-        if (char == safeTagMarker) htmlTag()
+        if (char == safeTagMarker) {
+          val tag = htmlTag()
+          HtmlTag(tag.data + readHTMLFrom(tag))
+        }
         else if (check("'''")) bold()
         else if (check("''")) italic()
         else if (check("`"))  monospace()
@@ -519,10 +585,10 @@ trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
 
           val current = inline0()
           (iss.last, current) match {
-            case (Text(t1), Text(t2)) =>
+            case (Text(t1), Text(t2)) if skipEndOfLine =>
               iss.update(iss.length - 1, Text(t1 + endOfLine + t2))
-            case (_, Text(t)) if skipEndOfLine =>
-              iss += Text(endOfLine + t)
+            case (i1, i2) if skipEndOfLine =>
+              iss ++= List(Text(endOfLine.toString), i2)
             case _ => iss += current
           }
         }
@@ -537,7 +603,7 @@ trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
 
     }
 
-    def htmlTag(): Inline = {
+    def htmlTag(): HtmlTag = {
       jump(safeTagMarker)
       readUntil(safeTagMarker)
       if (char != endOfText) jump(safeTagMarker)
@@ -576,8 +642,11 @@ trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
     def superscript(): Inline = {
       jump("^")
       val i = inline(check("^"))
-      jump("^")
-      Superscript(i)
+      if (jump("^")) {
+        Superscript(i)
+      } else {
+        Chain(Seq(Text("^"), i))
+      }
     }
 
     def subscript(): Inline = {
@@ -605,7 +674,7 @@ trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
     }
 
     def link(): Inline = {
-      val SchemeUri = new Regex("""([^:]+:.*)""")
+      val SchemeUri = """([^:]+:.*)""".r
       jump("[[")
       readUntil { check("]]") || check(" ") }
       val target = getRead()
@@ -616,18 +685,20 @@ trait CommentFactory { thisFactory: ModelFactory with CommentFactory =>
         })
         else None
       jump("]]")
+
       (target, title) match {
-        case (SchemeUri(uri), Some(title)) =>
-          Link(uri, title)
-        case (SchemeUri(uri), None) =>
-          Link(uri, Text(uri))
-        case (qualName, None) =>
-          entityLink(qualName)
-        case (qualName, Some(text)) =>
-          reportError(pos, "entity link to " + qualName + " cannot have a custom title'" + text + "'")
+        case (SchemeUri(uri), optTitle) =>
+          Link(uri, optTitle getOrElse Text(uri))
+        case (qualName, optTitle) =>
+          optTitle foreach (text => reportError(pos, "entity link to " + qualName + " cannot have a custom title'" + text + "'"))
+          // XXX rather than warning here we should allow unqualified names
+          // to refer to members of the same package.  The "package exists"
+          // exclusion is because [[scala]] is used in some scaladoc.
+          if (!qualName.contains(".") && !definitions.packageExists(qualName))
+            reportError(pos, "entity link to " + qualName + " should be a fully qualified name")
+
           entityLink(qualName)
       }
-
     }
 
     /* UTILITY */

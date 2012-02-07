@@ -1,5 +1,5 @@
 /* NEST (New Scala Test)
- * Copyright 2007-2010 LAMP/EPFL
+ * Copyright 2007-2011 LAMP/EPFL
  * @author Philipp Haller
  */
 
@@ -10,7 +10,6 @@ package nest
 
 object NestRunner {
   def main(args: Array[String]) {
-    val argstr = args.mkString(" ")
-    (new ReflectiveRunner).main(argstr)
+    new ReflectiveRunner main (args mkString " ")
   }
 }

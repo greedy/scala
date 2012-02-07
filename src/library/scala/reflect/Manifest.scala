@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2007-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2007-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -10,19 +10,37 @@ package scala.reflect
 
 import scala.collection.mutable.{ ArrayBuilder, WrappedArray }
 
-/** <p>
-  *   A <code>Manifest[T]</code> is an opaque descriptor for type <code>T</code>.
-  *   Currently, its only use is to give access to the erasure of the type as a
-  *   <code>Class</code> instance.
-  * </p>
-  * <p>
-  *   <b>BE AWARE</b>: The different type-relation operators are all forwarded
-  *   to the erased type as an approximation of the final semantics where
-  *   these operators should be on the unerased type.
-  * </p>
-  */
+/** A Manifest[T] is an opaque descriptor for type T.  Its
+ *  supported use is to give access to the erasure of the type
+ *  as a Class instance, as is necessary for the creation of native
+ *  Arrays if the class is not known at compile time.
+ *
+ *  The type-relation operators <:< and =:= should be considered
+ *  approximations only, as there are numerous aspects of type conformance
+ *  which are not yet adequately represented in manifests.
+ *
+ *  Example usages:
+{{{
+  def arr[T] = new Array[T](0)                          // does not compile
+  def arr[T](implicit m: Manifest[T]) = new Array[T](0) // compiles
+  def arr[T: Manifest] = new Array[T](0)                // shorthand for the preceding
+
+  // Methods manifest, classManifest, and optManifest are in [[scala.Predef]].
+  def isApproxSubType[T: Manifest, U: Manifest] = manifest[T] <:< manifest[U]
+  isApproxSubType[List[String], List[AnyRef]] // true
+  isApproxSubType[List[String], List[Int]]    // false
+
+  def methods[T: ClassManifest] = classManifest[T].erasure.getMethods
+  def retType[T: ClassManifest](name: String) =
+    methods[T] find (_.getName == name) map (_.getGenericReturnType)
+
+  retType[Map[_, _]]("values")  // Some(scala.collection.Iterable<B>)
+}}}
+ *
+ */
+@annotation.implicitNotFound(msg = "No Manifest available for ${T}.")
 trait Manifest[T] extends ClassManifest[T] with Equals {
-  override def typeArguments: List[Manifest[_]] = List()
+  override def typeArguments: List[Manifest[_]] = Nil
 
   override def arrayManifest: Manifest[Array[T]] =
     Manifest.classType[Array[T]](arrayClass[T](erasure))
@@ -31,9 +49,12 @@ trait Manifest[T] extends ClassManifest[T] with Equals {
     case _: Manifest[_]   => true
     case _                => false
   }
+  /** Note: testing for erasure here is important, as it is many times
+   *  faster than <:< and rules out most comparisons.
+   */
   override def equals(that: Any): Boolean = that match {
-    case m: Manifest[_] if m canEqual this  => (this <:< m) && (m <:< this)
-    case _                                  => false
+    case m: Manifest[_] => (m canEqual this) && (this.erasure == m.erasure) && (this <:< m) && (m <:< this)
+    case _              => false
   }
   override def hashCode = this.erasure.##
 }
@@ -49,16 +70,10 @@ trait AnyValManifest[T] extends Manifest[T] with Equals {
   override def hashCode = System.identityHashCode(this)
 }
 
-/** <ps>
-  *   This object is used by the compiler and <b>should not be used in client
-  *   code</b>. The object <code>Manifest</code> defines factory methods for
-  *   manifests.
-  * </p>
-  * <p>
-  *   <b>BE AWARE</b>: The factory for refinement types is missing and
-  *   will be implemented in a later version of this class.
-  * </p>
-  */
+/** The object Manifest defines factory methods for manifests.
+ *  It is intended for use by the compiler and should not be used
+ *  in client code.
+ */
 object Manifest {
   private def ObjectClass = classOf[java.lang.Object]
 
@@ -189,11 +204,11 @@ object Manifest {
     override lazy val toString = value.toString + ".type"
   }
 
-  /** Manifest for the singleton type `value.type'. */
+  /** Manifest for the singleton type `value.type`. */
   def singleType[T <: AnyRef](value: AnyRef): Manifest[T] =
     new SingletonTypeManifest[T](value)
 
-  /** Manifest for the class type `clazz[args]', where `clazz' is
+  /** Manifest for the class type `clazz[args]`, where `clazz` is
     * a top-level or static class.
     * @note This no-prefix, no-arguments case is separate because we
     *       it's called from ScalaRunTime.boxArray itself. If we
@@ -203,18 +218,18 @@ object Manifest {
   def classType[T](clazz: Predef.Class[_]): Manifest[T] =
     new ClassTypeManifest[T](None, clazz, Nil)
 
-  /** Manifest for the class type `clazz', where `clazz' is
+  /** Manifest for the class type `clazz`, where `clazz` is
     * a top-level or static class and args are its type arguments. */
   def classType[T](clazz: Predef.Class[T], arg1: Manifest[_], args: Manifest[_]*): Manifest[T] =
     new ClassTypeManifest[T](None, clazz, arg1 :: args.toList)
 
-  /** Manifest for the class type `clazz[args]', where `clazz' is
+  /** Manifest for the class type `clazz[args]`, where `clazz` is
     * a class with non-package prefix type `prefix` and type arguments `args`.
     */
   def classType[T](prefix: Manifest[_], clazz: Predef.Class[_], args: Manifest[_]*): Manifest[T] =
     new ClassTypeManifest[T](Some(prefix), clazz, args.toList)
 
-  /** Manifest for the class type `clazz[args]', where `clazz' is
+  /** Manifest for the class type `clazz[args]`, where `clazz` is
     * a top-level or static class. */
   private class ClassTypeManifest[T](prefix: Option[Manifest[_]],
                                      val erasure: Predef.Class[_],
@@ -228,7 +243,7 @@ object Manifest {
   def arrayType[T](arg: Manifest[_]): Manifest[Array[T]] =
     arg.asInstanceOf[Manifest[T]].arrayManifest
 
-  /** Manifest for the abstract type `prefix # name'. `upperBound' is not
+  /** Manifest for the abstract type `prefix # name'. `upperBound` is not
     * strictly necessary as it could be obtained by reflection. It was
     * added so that erasure can be calculated without reflection. */
   def abstractType[T](prefix: Manifest[_], name: String, clazz: Predef.Class[_], args: Manifest[_]*): Manifest[T] =
@@ -238,7 +253,7 @@ object Manifest {
       override def toString = prefix.toString+"#"+name+argString
     }
 
-  /** Manifest for the unknown type `_ >: L <: U' in an existential.
+  /** Manifest for the unknown type `_ >: L <: U` in an existential.
     */
   def wildcardType[T](lowerBound: Manifest[_], upperBound: Manifest[_]): Manifest[T] =
     new Manifest[T] {

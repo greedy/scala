@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2002-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2002-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -35,7 +35,7 @@ import parallel.mutable.ParArray
  *  @define mayNotTerminateInf
  *  @define willNotTerminateInf
  */
-abstract class ArrayOps[T] extends ArrayLike[T, Array[T]] with Parallelizable[ParArray[T]] {
+abstract class ArrayOps[T] extends ArrayLike[T, Array[T]] with CustomParallelizable[T, ParArray[T]] {
 
   private def rowBuilder[U]: Builder[U, Array[U]] =
     Array.newBuilder(
@@ -43,8 +43,7 @@ abstract class ArrayOps[T] extends ArrayLike[T, Array[T]] with Parallelizable[Pa
         repr.getClass.getComponentType.getComponentType.asInstanceOf[Predef.Class[U]]))
 
   override def copyToArray[U >: T](xs: Array[U], start: Int, len: Int) {
-    var l = len
-    if (repr.length < l) l = repr.length
+    var l = math.min(len, repr.length)
     if (xs.length - start < l) l = xs.length - start max 0
     Array.copy(repr, 0, xs, start, l)
   }
@@ -55,7 +54,7 @@ abstract class ArrayOps[T] extends ArrayLike[T, Array[T]] with Parallelizable[Pa
     else
       super.toArray[U]
 
-  def par = ParArray.handoff(repr)
+  override def par = ParArray.handoff(repr)
 
   /** Flattens a two-dimensional array by concatenating all its rows
    *  into a single array.
@@ -93,6 +92,9 @@ abstract class ArrayOps[T] extends ArrayLike[T, Array[T]] with Parallelizable[Pa
     for (b <- bs) bb += b.result
     bb.result
   }
+
+  def seq = this.iterator
+
 }
 
 /**

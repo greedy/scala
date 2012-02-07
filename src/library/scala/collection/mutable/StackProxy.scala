@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -58,7 +58,8 @@ trait StackProxy[A] extends Stack[A] with Proxy {
    *
    *  @param  iter        an iterable object
    */
-  @deprecated("use pushAll") override def ++=(xs: TraversableOnce[A]): this.type = { self ++= xs ; this }
+  @deprecated("use pushAll", "2.8.0")
+  override def ++=(xs: TraversableOnce[A]): this.type = { self ++= xs ; this }
 
 
   override def push(elem1: A, elem2: A, elems: A*): this.type = {

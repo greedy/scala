@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2006-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -41,9 +41,8 @@ object JSON extends Parser {
    *
    * @param input the given JSON string.
    * @return      an optional list of of elements.
-   *
-   * @deprecated Use parseFull or parseRaw as needed.
    */
+  @deprecated("Use parseFull or parseRaw as needed.", "2.8.0")
   def parse(input: String): Option[List[Any]] = parseRaw(input).map(unRaw).flatMap({
     case l : List[_] => Some(l)
     case _ => None

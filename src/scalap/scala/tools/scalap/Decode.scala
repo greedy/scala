@@ -1,6 +1,6 @@
 /*     ___ ____ ___   __   ___   ___
 **    / _// __// _ | / /  / _ | / _ \  Scala classfile decoder
-**  __\ \/ /__/ __ |/ /__/ __ |/ ___/  (c) 2003-2010, LAMP/EPFL
+**  __\ \/ /__/ __ |/ /__/ __ |/ ___/  (c) 2003-2011, LAMP/EPFL
 ** /____/\___/_/ |_/____/_/ |_/_/      http://scala-lang.org/
 **
 */
@@ -33,7 +33,7 @@ object Decode {
    */
   def scalaSigBytes(name: String): Option[Array[Byte]] = scalaSigBytes(name, getSystemLoader())
   def scalaSigBytes(name: String, classLoader: ScalaClassLoader): Option[Array[Byte]] = {
-    val bytes = classLoader.findBytesForClassName(name)
+    val bytes = classLoader.classBytes(name)
     val reader = new ByteArrayReader(bytes)
     val cf = new Classfile(reader)
     cf.scalaSigAttribute map (_.data)
@@ -43,7 +43,7 @@ object Decode {
    */
   def scalaSigAnnotationBytes(name: String): Option[Array[Byte]] = scalaSigAnnotationBytes(name, getSystemLoader())
   def scalaSigAnnotationBytes(name: String, classLoader: ScalaClassLoader): Option[Array[Byte]] = {
-    val bytes     = classLoader.findBytesForClassName(name)
+    val bytes     = classLoader.classBytes(name)
     val byteCode  = ByteCode(bytes)
     val classFile = ClassFileParser.parse(byteCode)
     import classFile._

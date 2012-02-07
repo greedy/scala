@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -17,17 +17,16 @@ class CompilerCommand(arguments: List[String], val settings: Settings) {
   /** file extensions of files that the compiler can process */
   lazy val fileEndings = Properties.fileEndings
 
+  private val processArgumentsResult =
+    if (shouldProcessArguments) processArguments
+    else (true, Nil)
+  def ok    = processArgumentsResult._1
+  def files = processArgumentsResult._2
+
   /** The name of the command */
   def cmdName = "scalac"
 
-  private val helpSyntaxColumnWidth: Int =
-    (settings.visibleSettings map (_.helpSyntax.length)) max
-
-  private def format(s: String): String =
-    if (s.length >= helpSyntaxColumnWidth) s
-    else s + (" " * (helpSyntaxColumnWidth - s.length))
-
-  private val explainAdvanced = "\n" + """
+  private def explainAdvanced = "\n" + """
     |-- Notes on option parsing --
     |Boolean settings are always false unless set.
     |Where multiple values are accepted, they should be comma-separated.
@@ -38,31 +37,51 @@ class CompilerCommand(arguments: List[String], val settings: Settings) {
     |  example: -Xprint:expl,24-26 prints phases explicitouter, closelim, dce, jvm.
     |  example: -Xprint:-4 prints only the phases up to typer.
     |
-  """.stripMargin.trim + "\n\n"
+  """.stripMargin.trim + "\n"
+
+  def shortUsage = "Usage: %s <options> <source files>" format cmdName
+  def createUsagePreface(shouldExplain: Boolean) =
+    if (shouldExplain) shortUsage + "\n" + explainAdvanced else ""
 
   /** Creates a help message for a subset of options based on cond */
+  def createUsageMsg(cond: Setting => Boolean): String = {
+    val baseList            = (settings.visibleSettings filter cond).toList sortBy (_.name)
+    val width               = baseList map (_.helpSyntax.length) max
+    def format(s: String)   = ("%-" + width + "s") format s
+    def helpStr(s: Setting) = {
+      val str    = format(s.helpSyntax) + "  " + s.helpDescription
+      val suffix = s.deprecationMessage match {
+        case Some(msg) => "\n" + format("") + "      deprecated: " + msg
+        case _         => ""
+      }
+      str + suffix
+    }
+    val debugs      = baseList filter (_.isForDebug)
+    val deprecateds = baseList filter (_.isDeprecated)
+    val theRest     = baseList filterNot (debugs.toSet ++ deprecateds)
+
+    def sstring(msg: String, xs: List[Setting]) =
+      if (xs.isEmpty) None else Some(msg :: xs.map(helpStr) mkString "\n  ")
+
+    List(
+      sstring("", theRest),
+      sstring("\nAdditional debug settings:", debugs),
+      sstring("\nDeprecated settings:", deprecateds)
+    ).flatten mkString "\n"
+  }
+
   def createUsageMsg(label: String, shouldExplain: Boolean, cond: Setting => Boolean): String = {
-    def helpStr(s: Setting) = format(s.helpSyntax) + "  " + s.helpDescription
+    val prefix = List(
+      Some(shortUsage),
+      Some(explainAdvanced) filter (_ => shouldExplain),
+      Some(label + " options include:")
+    ).flatten mkString "\n"
 
-    val usage         = "Usage: %s <options> <source files>\n" format cmdName
-    val explain       = if (shouldExplain) explainAdvanced else ""
-    val prefix        = label + " options include:\n  "
-
-    // Separating out any debugging options from others for easier reading
-    val (debug, rest) = (settings.visibleSettings filter cond).toList sortBy (_.name) partition (_.isForDebug)
-
-    (rest map helpStr).mkString(usage + explain + prefix, "\n  ", "\n") + (
-      if (debug.isEmpty) ""
-      else (debug map helpStr).mkString("\nAdditional debug settings:\n  ", "\n  ", "\n")
-    )
+    prefix + createUsageMsg(cond)
   }
 
   /** Messages explaining usage and options */
-  def usageMsg    =
-    if (cmdName == "fsc")
-      createUsageMsg("where possible standard", false, st => st.isStandard || st.name == "-shutdown")
-    else
-      createUsageMsg("where possible standard", false, _.isStandard)
+  def usageMsg    = createUsageMsg("where possible standard", false, _.isStandard)
   def xusageMsg   = createUsageMsg("Possible advanced", true, _.isAdvanced)
   def yusageMsg   = createUsageMsg("Possible private", true, _.isPrivate)
 
@@ -79,7 +98,9 @@ class CompilerCommand(arguments: List[String], val settings: Settings) {
     else if (Xhelp.value)         xusageMsg
     else if (Yhelp.value)         yusageMsg
     else if (showPlugins.value)   global.pluginDescriptions
-    else if (showPhases.value)    global.phaseDescriptions
+    else if (showPhases.value)    global.phaseDescriptions + (
+      if (debug.value) "\n" + global.phaseFlagDescriptions else ""
+    )
     else                          ""
   }
 
@@ -108,8 +129,4 @@ class CompilerCommand(arguments: List[String], val settings: Settings) {
 
     settings.processArguments(expandedArguments, true)
   }
-
-  val (ok, files) =
-    if (shouldProcessArguments) processArguments
-    else (true, Nil)
 }

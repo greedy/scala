@@ -1,3 +1,12 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
+
 package scala.collection.parallel
 
 
@@ -13,10 +22,7 @@ import annotation.unchecked.uncheckedVariance
 
 
 /** A trait that declares task execution capabilities used
- *  by parallel collections. Parallel collections inherit a subtrait
- *  of this trait.
- *
- *  One implementation trait of `TaskExecution` is `ForkJoinTaskExecution`.
+ *  by parallel collections.
  */
 trait Tasks {
 
@@ -38,7 +44,7 @@ trait Tasks {
     def leaf(result: Option[R])
 
     /** A result that can be accessed once the task is completed. */
-    @volatile var result: R
+    var result: R
 
     /** Decides whether or not this task should be split further. */
     def shouldSplitFurther: Boolean
@@ -51,7 +57,7 @@ trait Tasks {
 
     // exception handling mechanism
     @volatile var throwable: Throwable = null
-    def forwardThrowable = if (throwable != null) throw throwable
+    def forwardThrowable() = if (throwable != null) throw throwable
 
     // tries to do the leaf computation, storing the possible exception
     private[parallel] def tryLeaf(lastres: Option[R]) {
@@ -95,7 +101,7 @@ trait Tasks {
     }
 
     // override in concrete task implementations to signal abort to other tasks
-    private[parallel] def signalAbort {}
+    private[parallel] def signalAbort() {}
   }
 
   trait TaskImpl[R, +Tp] {
@@ -104,11 +110,11 @@ trait Tasks {
 
     def split: Seq[TaskImpl[R, Tp]]
     /** Code that gets called after the task gets started - it may spawn other tasks instead of calling `leaf`. */
-    def compute
+    def compute()
     /** Start task. */
-    def start
+    def start()
     /** Wait for task to finish. */
-    def sync
+    def sync()
     /** Try to cancel the task.
      *  @return     `true` if cancellation is successful.
      */
@@ -120,7 +126,7 @@ trait Tasks {
      *
      *  This method may be overridden.
      */
-    def release {}
+    def release() {}
   }
 
   protected def newTaskImpl[R, Tp](b: Task[R, Tp]): TaskImpl[R, Tp]
@@ -155,10 +161,10 @@ trait AdaptiveWorkStealingTasks extends Tasks {
 
     def split: Seq[TaskImpl[R, Tp]]
 
-    def compute = if (body.shouldSplitFurther) internal else body.tryLeaf(None)
+    def compute() = if (body.shouldSplitFurther) internal else body.tryLeaf(None)
 
-    def internal = {
-      var last = spawnSubtasks
+    def internal() = {
+      var last = spawnSubtasks()
 
       last.body.tryLeaf(None)
       body.result = last.body.result
@@ -181,7 +187,7 @@ trait AdaptiveWorkStealingTasks extends Tasks {
       }
     }
 
-    def spawnSubtasks = {
+    def spawnSubtasks() = {
       var last: TaskImpl[R, Tp] = null
       var head: TaskImpl[R, Tp] = this
       do {
@@ -197,7 +203,7 @@ trait AdaptiveWorkStealingTasks extends Tasks {
       head
     }
 
-    def printChain = {
+    def printChain() = {
       var curr = this
       var chain = "chain: "
       while (curr != null) {
@@ -214,6 +220,7 @@ trait AdaptiveWorkStealingTasks extends Tasks {
 }
 
 
+/** An implementation of tasks objects based on the Java thread pooling API. */
 trait ThreadPoolTasks extends Tasks {
   import java.util.concurrent._
 
@@ -224,7 +231,7 @@ trait ThreadPoolTasks extends Tasks {
     @volatile var owned = false
     @volatile var completed = false
 
-    def start = synchronized {
+    def start() = synchronized {
       // debuglog("Starting " + body)
       // utb: future = executor.submit(this)
       executor.synchronized {
@@ -232,12 +239,15 @@ trait ThreadPoolTasks extends Tasks {
         executor.submit(this)
       }
     }
-    def sync = synchronized {
+    def sync() = synchronized {
       // debuglog("Syncing on " + body)
       // utb: future.get()
       executor.synchronized {
         val coresize = executor.getCorePoolSize
-        if (coresize < totaltasks) executor.setCorePoolSize(coresize + 1)
+        if (coresize < totaltasks) {
+          executor.setCorePoolSize(coresize + 1)
+          //assert(executor.getCorePoolSize == (coresize + 1))
+        }
       }
       if (!completed) this.wait
     }
@@ -269,7 +279,9 @@ trait ThreadPoolTasks extends Tasks {
     }
     override def release = synchronized {
       completed = true
-      decrTasks
+      executor.synchronized {
+        decrTasks
+      }
       this.notifyAll
     }
   }
@@ -281,11 +293,11 @@ trait ThreadPoolTasks extends Tasks {
   def queue = executor.getQueue.asInstanceOf[LinkedBlockingQueue[Runnable]]
   @volatile var totaltasks = 0
 
-  private def incrTasks = synchronized {
+  private def incrTasks() = synchronized {
     totaltasks += 1
   }
 
-  private def decrTasks = synchronized {
+  private def decrTasks() = synchronized {
     totaltasks -= 1
   }
 
@@ -322,6 +334,8 @@ object ThreadPoolTasks {
 
   val numCores = Runtime.getRuntime.availableProcessors
 
+  val tcount = new atomic.AtomicLong(0L)
+
   val defaultThreadPool = new ThreadPoolExecutor(
     numCores,
     Int.MaxValue,
@@ -330,6 +344,7 @@ object ThreadPoolTasks {
     new ThreadFactory {
       def newThread(r: Runnable) = {
         val t = new Thread(r)
+        t.setName("pc-thread-" + tcount.incrementAndGet)
         t.setDaemon(true)
         t
       }
@@ -337,6 +352,70 @@ object ThreadPoolTasks {
     new ThreadPoolExecutor.CallerRunsPolicy
   )
 }
+
+
+/** An implementation of tasks objects based on the Java thread pooling API and synchronization using futures. */
+trait FutureThreadPoolTasks extends Tasks {
+  import java.util.concurrent._
+
+  trait TaskImpl[R, +Tp] extends Runnable with super.TaskImpl[R, Tp] {
+    @volatile var future: Future[_] = null
+
+    def start() = {
+      executor.synchronized {
+        future = executor.submit(this)
+      }
+    }
+    def sync() = future.get
+    def tryCancel = false
+    def run = {
+      compute
+    }
+  }
+
+  protected def newTaskImpl[R, Tp](b: Task[R, Tp]): TaskImpl[R, Tp]
+
+  var environment: AnyRef = FutureThreadPoolTasks.defaultThreadPool
+  def executor = environment.asInstanceOf[ThreadPoolExecutor]
+
+  def execute[R, Tp](task: Task[R, Tp]): () => R = {
+    val t = newTaskImpl(task)
+
+    // debuglog("-----------> Executing without wait: " + task)
+    t.start
+
+    () => {
+      t.sync
+      t.body.forwardThrowable
+      t.body.result
+    }
+  }
+
+  def executeAndWaitResult[R, Tp](task: Task[R, Tp]): R = {
+    val t = newTaskImpl(task)
+
+    // debuglog("-----------> Executing with wait: " + task)
+    t.start
+
+    t.sync
+    t.body.forwardThrowable
+    t.body.result
+  }
+
+  def parallelismLevel = FutureThreadPoolTasks.numCores
+
+}
+
+object FutureThreadPoolTasks {
+  import java.util.concurrent._
+
+  val numCores = Runtime.getRuntime.availableProcessors
+
+  val tcount = new atomic.AtomicLong(0L)
+
+  val defaultThreadPool = Executors.newCachedThreadPool()
+}
+
 
 
 /**
@@ -356,8 +435,8 @@ trait HavingForkJoinPool {
 trait ForkJoinTasks extends Tasks with HavingForkJoinPool {
 
   trait TaskImpl[R, +Tp] extends RecursiveAction with super.TaskImpl[R, Tp] {
-    def start = fork
-    def sync = join
+    def start() = fork
+    def sync() = join
     def tryCancel = tryUnfork
   }
 
@@ -417,9 +496,9 @@ trait ForkJoinTasks extends Tasks with HavingForkJoinPool {
 
 
 object ForkJoinTasks {
-  val defaultForkJoinPool: ForkJoinPool = new ForkJoinPool
-  defaultForkJoinPool.setParallelism(Runtime.getRuntime.availableProcessors)
-  defaultForkJoinPool.setMaximumPoolSize(Runtime.getRuntime.availableProcessors)
+  val defaultForkJoinPool: ForkJoinPool = new ForkJoinPool() // scala.parallel.forkjoinpool
+  // defaultForkJoinPool.setParallelism(Runtime.getRuntime.availableProcessors)
+  // defaultForkJoinPool.setMaximumPoolSize(Runtime.getRuntime.availableProcessors)
 }
 
 

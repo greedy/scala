@@ -95,7 +95,7 @@ public class PEFile {
     /** Ecma 335, 25.2.1 MS-DOS header:
      *
      *  "The PE format starts with an MS-DOS stub of exactly the following 128 bytes to
-     *  be placed at the front of the module."
+     *   be placed at the front of the module."
      *
      *  We are only checking for MZ (Mark Zbikowski)
      */
@@ -107,13 +107,13 @@ public class PEFile {
     /** Ecma 335, 25.2.1 MS-DOS header:
      *
      *  "At offset 0x3c in the DOS header is a 4-byte unsigned integer offset, lfanew,
-         *  to the PE signature (shall be "PE\0\0"), immediately followed by the PE file header.
+     *   to the PE signature (shall be "PE\0\0"), immediately followed by the PE file header."
      */
 
 	seek(0x3c);
 	PE_SIGNATURE_OFFSET = readInt();
 	seek(PE_SIGNATURE_OFFSET);
-
+    // start of PE signature (a signature that is just 4 bytes long)
 	fileFormatCheck(readByte() != 0x50, "Invalid PE file format: " + filename); // 'P'
 	fileFormatCheck(readByte() != 0x45, "Invalid PE file format: " + filename); // 'E'
     fileFormatCheck(readByte() != 0x00, "Invalid PE file format: " + filename); //  0
@@ -125,26 +125,19 @@ public class PEFile {
 	PE_HEADER_OFFSET = COFF_HEADER_OFFSET + 20;
 
 	seek(COFF_HEADER_OFFSET);
-	skip(2);
-    /** Ecma 335, 25.2.2: "Number of sections; indicates size of the Section Table" */
-	numOfSections = readShort();
-	//trace("Number of sections = " + numOfSections);
 
-    /** Ecma 335, 25.2.2: "Time and date the file was created in seconds since
-     *  January 1st 1970 00:00:00 or 0."
-     */
+    /* start of PE file header, Sec. 25.2.2 in Partition II  */
+	skip(2); // Machine (always 0x14c)
+    numOfSections = readShort(); // Number of sections; indicates size of the Section Table
 	Date timeStamp = new Date(readInt() * 1000L);
-	//trace("Time stamp = " + timeStamp);
-
-	skip(2 * INT_SIZE);
+	skip(2 * INT_SIZE); // skip Pointer to Symbol Table (always 0) and Number of Symbols (always 0)
 	optHeaderSize = readShort();
 	int characteristics = readShort();
 	isDLL = (characteristics & 0x2000) != 0;
-	//trace("Characteristics = " + Integer.toHexString(characteristics));
 
 	seek(PE_HEADER_OFFSET + 208); // p.157, Partition II
 
- 	CLI_RVA = readInt();
+ 	CLI_RVA = readInt();    // called "Data Directory Table" in Ch. 4 of Expert IL book
 	CLI_Length = readInt();
 	//trace("CLI_RVA = 0x" + Table.int2hex(CLI_RVA));
 	//trace("CLI_Length = 0x" + Table.int2hex(CLI_Length));
@@ -873,10 +866,11 @@ public class PEFile {
 	    return type;
     } // decodeType0()
 
-	public Type decodeFieldType() {
-	    skipByte(FIELD);
-	    skipCustomMods();
-	    return decodeType();
+	public PECustomMod decodeFieldType() {
+	    skipByte(FIELD); // 0x06
+	    CustomModifier[] cmods = getCustomMods();
+        Type fieldType = decodeType();
+	    return new PECustomMod(fieldType, cmods);
 	}
 
 	/** decodes the return type of a method signature (22.2.11). */
@@ -908,10 +902,10 @@ public class PEFile {
 	}
 
 	public void skipCustomMods() {
-	    while (getByte() == ELEMENT_TYPE_CMOD_OPT
-		   || getByte() == ELEMENT_TYPE_CMOD_REQD)
+	    while (getByte() == ELEMENT_TYPE_CMOD_OPT /* 0x20 */
+		   || getByte() == ELEMENT_TYPE_CMOD_REQD /* 0x1f */ )
 		{
-            boolean isREQD = (getByte() == ELEMENT_TYPE_CMOD_REQD);
+            boolean isREQD = (getByte() == ELEMENT_TYPE_CMOD_REQD); // 0x1f
                     // skip the tag 23.2.7
                     readByte();
                     // skip the TypeDefOrRefEncoded (23.2.8)
@@ -923,7 +917,22 @@ public class PEFile {
 	}
 	}
 
-	//######################################################################
+    /**
+     * @see CustomModifier
+     */
+	public CustomModifier[] getCustomMods() {
+      java.util.List/*<CustomModifier>*/ cmods = new java.util.LinkedList();
+      while (getByte() == ELEMENT_TYPE_CMOD_OPT || getByte() == ELEMENT_TYPE_CMOD_REQD) {
+        boolean isReqd = (getByte() == ELEMENT_TYPE_CMOD_REQD);
+        readByte(); // tag 23.2.7
+        Type t = pemodule.getTypeDefOrRef(decodeInt()); // TypeDefOrRefEncoded (23.2.8)
+        cmods.add(new CustomModifier(isReqd, t));
+      }
+      CustomModifier[] res = (CustomModifier[])cmods.toArray(new CustomModifier[0]);
+      return res;
+	}
+
+    //######################################################################
 
     }  // class Sig
 

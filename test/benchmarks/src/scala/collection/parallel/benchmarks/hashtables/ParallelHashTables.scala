@@ -57,6 +57,21 @@ trait ParHashTableBenches[K, V] extends StandardParIterableBenches[(K, V), ParHa
     }
   }
 
+  object FlatMap2 extends IterableBenchCompanion {
+    override def defaultSize = 5000
+    def benchName = "flatmap2";
+    def apply(sz: Int, p: Int, w: String) = new FlatMap2(sz, p, w)
+  }
+
+  class FlatMap2(val size: Int, val parallelism: Int, val runWhat: String)
+  extends IterableBench {
+    def comparisonMap = collection.Map()
+    override def repetitionsPerRun = 25
+    def runseq = this.seqcoll.flatMap(operators.flatmapper)
+    def runpar = this.parcoll.flatMap(operators.flatmapper)
+    def companion = FlatMap2
+  }
+
   object HeavyMap extends IterableBenchCompanion {
     override def defaultSize = 5000
     override def comparisons = List()
@@ -105,7 +120,7 @@ trait ParHashTableBenches[K, V] extends StandardParIterableBenches[(K, V), ParHa
   extends IterableBench {
     def comparisonMap = collection.Map()
     def runseq = this.seqcoll.foreach(operators.foreachFun)
-    def runpar = this.parcoll.foreach(operators.foreachFun)
+    def runpar = this.parcoll.pforeach(operators.foreachFun)
     def companion = Foreach
   }
 
@@ -131,7 +146,7 @@ object RefParHashTableBenches extends ParHashTableBenches[Dummy, Dummy] {
     val array = new Array[Int](size)
     def comparisonMap = collection.Map()
     def runseq = for (p <- this.seqcoll) array(p._1.in) += 1
-    def runpar = for (p <- this.parcoll) array(p._1.in) += 1
+    def runpar = this.parcoll.pforeach { p => array(p._1.in) += 1 }
     def companion = ForeachSet
 
     override def onEnd {
@@ -176,6 +191,9 @@ object RefParHashTableBenches extends ParHashTableBenches[Dummy, Dummy] {
       val a = p._1
       a.num = a.in % 2
       (a, p._2)
+    }
+    val flatmapper = (p: DPair) => {
+      for (i <- 0 until 20) yield p
     }
     override val mapper2 = (p: DPair) => {
       val a = 1 //heavy(p._1.in)

@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -36,7 +36,7 @@ trait MultiMap[A, B] extends Map[A, Set[B]] {
    */
   protected def makeSet: Set[B] = new HashSet[B]
 
-  @deprecated("use addBinding instead")
+  @deprecated("use addBinding instead", "2.8.0")
   def add(key: A, value: B): this.type = addBinding(key, value)
 
   /** Assigns the specified `value` to a specified `key`, replacing

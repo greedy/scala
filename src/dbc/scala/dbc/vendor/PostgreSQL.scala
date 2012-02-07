@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -14,7 +14,7 @@ package vendor;
 
 import compat.Platform
 
-abstract class PostgreSQL extends Vendor {
+@deprecated(DbcIsDeprecated, "2.9.0") abstract class PostgreSQL extends Vendor {
 
   def uri:java.net.URI;
   def user:String;

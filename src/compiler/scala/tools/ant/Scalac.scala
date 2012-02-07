@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala Ant Tasks                      **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -615,7 +615,7 @@ class Scalac extends ScalaMatchingTask with ScalacShared {
 
         file
       }
-      val res = execWithArgFiles(java, List(writeSettings.getCanonicalPath))
+      val res = execWithArgFiles(java, List(writeSettings.getAbsolutePath))
       if (failonerror && res != 0)
         buildError("Compilation failed because of an internal compiler error;"+
               " see the error output for details.")

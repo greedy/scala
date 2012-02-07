@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -26,6 +26,7 @@ import generic._
  * @since 1
  */
 trait Map[A, +B] extends Iterable[(A, B)]
+//                    with GenMap[A, B]
                     with scala.collection.Map[A, B]
                     with MapLike[A, B, Map[A, B]] { self =>
 
@@ -33,10 +34,25 @@ trait Map[A, +B] extends Iterable[(A, B)]
   override def toMap[T, U](implicit ev: (A, B) <:< (T, U)): immutable.Map[T, U] =
     self.asInstanceOf[immutable.Map[T, U]]
 
-  /** The same map with a given default function */
+  override def seq: Map[A, B] = this
+
+  /** The same map with a given default function.
+   *  Note: `get`, `contains`, `iterator`, `keys`, etc are not affected by `withDefault`.
+   *
+   *  Invoking transformer methods (e.g. `map`) will not preserve the default value.
+   *
+   *  @param d     the function mapping keys to values, used for non-present keys
+   *  @return      a wrapper of the map with a default value
+   */
   def withDefault[B1 >: B](d: A => B1): immutable.Map[A, B1] = new Map.WithDefault[A, B1](this, d)
 
-  /** The same map with a given default value */
+  /** The same map with a given default value.
+   *
+   *  Invoking transformer methods (e.g. `map`) will not preserve the default value.
+   *
+   *  @param d     the function mapping keys to values, used for non-present keys
+   *  @return      a wrapper of the map with a default value
+   */
   def withDefaultValue[B1 >: B](d: B1): immutable.Map[A, B1] = new Map.WithDefault[A, B1](this, x => d)
 
   /** Add a key/value pair to this map.
@@ -77,7 +93,7 @@ object Map extends ImmutableMapFactory[Map] {
     def - (key: Any): Map[Any, Nothing] = this
   }
 
-  @deprecated("use `Map.empty' instead")
+  @deprecated("use `Map.empty` instead", "2.8.0")
   class EmptyMap[A,B] extends Map[A,B] with Serializable {
     override def size: Int = 0
     def get(key: A): Option[B] = None

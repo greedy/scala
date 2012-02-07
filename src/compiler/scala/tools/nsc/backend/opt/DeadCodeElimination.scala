@@ -1,5 +1,5 @@
 /* NSC -- new scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Iulian Dragos
  */
 
@@ -131,7 +131,7 @@ abstract class DeadCodeElimination extends SubComponent {
     /** Mark useful instructions. Instructions in the worklist are each inspected and their
      *  dependencies are marked useful too, and added to the worklist.
      */
-    def mark {
+    def mark() {
 //      log("Starting with worklist: " + worklist)
       while (!worklist.isEmpty) {
         val (bb, idx) = worklist.iterator.next
@@ -271,7 +271,7 @@ abstract class DeadCodeElimination extends SubComponent {
 
     /** Is 'sym' a side-effecting method? TODO: proper analysis.  */
     private def isSideEffecting(sym: Symbol): Boolean = {
-      !((sym.isGetter && !sym.isLazy)
+      !((sym.isGetter && sym.isFinal && !sym.isLazy)
        || (sym.isConstructor
            && !(sym.owner == method.symbol.owner && method.symbol.isConstructor) // a call to another constructor
            && sym.owner.owner == definitions.RuntimePackage.moduleClass)

@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -74,7 +74,7 @@ abstract class Liveness {
       Pair(genSet, killSet)
     }
 
-    override def run {
+    override def run() {
       backwardAnalysis(blockTransfer)
       if (settings.debug.value) {
         linearizer.linearize(method).foreach(b => if (b != method.code.startBlock)
@@ -88,7 +88,7 @@ abstract class Liveness {
 
     /** Abstract interpretation for one instruction. Very important:
      *  liveness is a backward DFA, so this method should be used to compute
-     *  liveness *before* the given instruction `i'.
+     *  liveness *before* the given instruction `i`.
      */
     def interpret(out: lattice.Elem, i: Instruction): lattice.Elem = {
       var in = out

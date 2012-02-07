@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Paul Phillips
  */
 
@@ -64,16 +64,16 @@ trait CompletionAware {
    *  to other CompletionAware objects.
    */
   def completionsFor(parsed: Parsed): List[String] = {
-    import parsed._
-
+    import parsed.{ buffer, verbosity }
     val comps = completions(verbosity) filter (_ startsWith buffer)
+    val exact = comps contains buffer
+
     val results =
-      if (isEmpty) comps
-      else if (isUnqualified && !isLastDelimiter) {
-        if (verbosity > 0 && (comps contains buffer)) alternativesFor(buffer)
+      if (parsed.isEmpty) comps
+      else if (parsed.isUnqualified && !parsed.isLastDelimiter)
+        if (verbosity > 0 && exact) alternativesFor(buffer)
         else comps
-      }
-      else follow(bufferHead) map (_ completionsFor bufferTail) getOrElse Nil
+      else follow(parsed.bufferHead) map (_ completionsFor parsed.bufferTail) getOrElse Nil
 
     results filterNot filterNotFunction map mapFunction sortWith (sortFunction _)
   }
@@ -91,6 +91,16 @@ trait CompletionAware {
 
 object CompletionAware {
   val Empty = new CompletionAware { def completions(verbosity: Int) = Nil }
+
+  /** Artificial object demonstrating completion */
+  // lazy val replVars = CompletionAware(
+  //   Map[String, CompletionAware](
+  //     "ids" -> CompletionAware(() => unqualifiedIds, completionAware _),
+  //     "synthVars" -> CompletionAware(() => allBoundNames filter isSynthVarName map (_.toString)),
+  //     "types" -> CompletionAware(() => allSeenTypes map (_.toString)),
+  //     "implicits" -> CompletionAware(() => allImplicits map (_.toString))
+  //   )
+  // )
 
   // class Forwarder(underlying: CompletionAware) extends CompletionAware {
   //   override def completions() = underlying.completions()

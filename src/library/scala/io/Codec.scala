@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -10,6 +10,7 @@
 package scala.io
 
 import java.nio.charset.{ Charset, CharsetDecoder, CharsetEncoder, CharacterCodingException, CodingErrorAction => Action }
+import annotation.migration
 
 // Some notes about encodings for use in refining this implementation.
 //
@@ -96,7 +97,8 @@ object Codec extends LowPriorityCodecImplicits {
     new Codec(decoder.charset()) { override def decoder = _decoder }
   }
 
-  def toUTF8(bytes: Array[Byte]): Array[Char] = {
+  @migration(2, 9, "This method was previously misnamed `toUTF8`. Converts from Array[Byte] to Array[Char].")
+  def fromUTF8(bytes: Array[Byte]): Array[Char] = {
     val bbuffer = java.nio.ByteBuffer wrap bytes
     val cbuffer = UTF8 decode bbuffer
     val chars = new Array[Char](cbuffer.remaining())
@@ -105,7 +107,8 @@ object Codec extends LowPriorityCodecImplicits {
     chars
   }
 
-  def fromUTF8(cs: CharSequence): Array[Byte] = {
+  @migration(2, 9, "This method was previously misnamed `fromUTF8`. Converts from character sequence to Array[Byte].")
+  def toUTF8(cs: CharSequence): Array[Byte] = {
     val cbuffer = java.nio.CharBuffer wrap cs
     val bbuffer = UTF8 encode cbuffer
     val bytes = new Array[Byte](bbuffer.remaining())

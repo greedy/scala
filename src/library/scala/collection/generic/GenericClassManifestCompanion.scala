@@ -1,22 +1,17 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
 \*                                                                      */
-
-
 
 package scala.collection
 package generic
 
 import mutable.Builder
 
-
-
-
-/** This class represents companions of classes which require classmanifests
+/** This class represents companions of classes which require ClassManifests
  *  for their element types.
  *
  *  @author Aleksandar Prokopec
@@ -34,4 +29,3 @@ abstract class GenericClassManifestCompanion[+CC[X] <: Traversable[X]] {
     b.result
   }
 }
-

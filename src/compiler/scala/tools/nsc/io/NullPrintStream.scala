@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Paul Phillips
  */
 
@@ -22,4 +22,16 @@ object NullPrintStream extends NullPrintStream {
         body
       }
     }
+
+  def sinkingSystemOutAndErr[T](body: => T): T = {
+    val savedOut = System.out
+    val savedErr = System.err
+    System setOut NullPrintStream
+    System setErr NullPrintStream
+    try body
+    finally {
+      System setOut savedOut
+      System setErr savedErr
+    }
+  }
 }

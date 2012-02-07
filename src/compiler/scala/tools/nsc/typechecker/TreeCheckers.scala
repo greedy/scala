@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -122,7 +122,7 @@ abstract class TreeCheckers extends Analyzer {
   def assertFn(cond: Boolean, msg: => Any) =
     if (!cond) errorFn(msg)
 
-  def checkTrees {
+  def checkTrees() {
     if (settings.verbose.value)
       Console.println("[consistency check at the beginning of phase " + phase + "]")
 
@@ -261,12 +261,12 @@ abstract class TreeCheckers extends Analyzer {
               if (sym.ownerChain contains currentOwner) ()
               else fail(sym + " owner chain does not contain currentOwner " + currentOwner)
             case _ =>
-              def cond(s: Symbol) = s.isTerm && !s.isMethod && s != sym.owner
+              def cond(s: Symbol) = !s.isTerm || s.isMethod || s == sym.owner
 
               if (sym.owner != currentOwner) {
-                val found = currentOwner.ownerChain find (x => !cond(x)) getOrElse fail("DefTree can't find owner: ")
-                if (sym.owner != found)
-                  fail("Expected owner %s, found %s: ".format(found, sym.owner))
+                val expected = currentOwner.ownerChain find (x => cond(x)) getOrElse fail("DefTree can't find owner: ")
+                if (sym.owner != expected)
+                  fail("Expected owner %s (out of %s), found %s: ".format(expected, currentOwner.ownerChain, sym.owner))
               }
           }
         }

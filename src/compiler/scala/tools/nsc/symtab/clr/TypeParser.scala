@@ -1,5 +1,5 @@
 /* NSC -- new scala compiler
- * Copyright 2004-2010 LAMP/EPFL
+ * Copyright 2004-2011 LAMP/EPFL
  */
 
 
@@ -12,7 +12,7 @@ import java.io.IOException
 import ch.epfl.lamp.compiler.msil.{Type => MSILType, Attribute => MSILAttribute, _}
 
 import scala.collection.mutable.{HashMap, HashSet}
-import classfile.UnPickler
+import scala.reflect.internal.pickling.UnPickler
 import ch.epfl.lamp.compiler.msil.Type.TMVarUsage
 
 /**
@@ -69,7 +69,7 @@ abstract class TypeParser {
     override def complete(sym: Symbol) { throw new AssertionError("cyclic type dereferencing") }
   }
 
-  /* the names `classTParams' and `newTParams' stem from the forJVM version (ClassfileParser.sigToType())
+  /* the names `classTParams` and `newTParams` stem from the forJVM version (ClassfileParser.sigToType())
   *  but there are differences that should be kept in mind.
   *  forMSIL, a nested class knows nothing about any type-params in the nesting class,
   *  therefore newTParams is redundant (other than for recording lexical order),
@@ -83,7 +83,7 @@ abstract class TypeParser {
     for (cnstrnt <- tvarCILDef.Constraints) {
       ts += getCLRType(cnstrnt) // TODO we're definitely not at or after erasure, no need to call objToAny, right?
     }
-    TypeBounds(definitions.NothingClass.tpe, intersectionType(ts.toList, clazz))
+    TypeBounds.upper(intersectionType(ts.toList, clazz))
     // TODO variance???
   }
 
@@ -92,7 +92,12 @@ abstract class TypeParser {
     val flags = Flags.JAVA | Flags.STATIC | Flags.IMPLICIT; // todo: static? shouldn't be final instead?
     val viewMethodType = (msym: Symbol) => JavaMethodType(msym.newSyntheticValueParams(List(fromTpe)), toTpe)
     val vmsym = createMethod(nme.view_ + viewSuffix, flags, viewMethodType, null, true);
-    if (addToboxMethodMap) definitions.boxMethod(clazz) = vmsym
+    // !!! this used to mutate a mutable map in definitions, but that map became
+    // immutable and this kept "working" with a no-op.  So now it's commented out
+    // since I retired the deprecated code which allowed for that bug.
+    //
+    // if (addToboxMethodMap) definitions.boxMethod(clazz) = vmsym
+
     if (isAddressOf) clrTypes.addressOfViews += vmsym
     vmsym
   }
@@ -309,8 +314,8 @@ abstract class TypeParser {
 	    val flags = translateAttributes(getter);
 	    val owner: Symbol = if (getter.IsStatic) statics else clazz;
 	    val methodSym = owner.newMethod(NoPosition, name).setFlag(flags)
-            val mtype: Type = if (gparamsLength == 0) PolyType(List(), propType) // .NET properties can't be polymorphic
-                              else methodType(getter, getter.ReturnType)(methodSym)
+      val mtype: Type = if (gparamsLength == 0) NullaryMethodType(propType) // .NET properties can't be polymorphic
+                        else methodType(getter, getter.ReturnType)(methodSym)
         methodSym.setInfo(mtype);
 	    methodSym.setFlag(Flags.ACCESSOR);
 	    (if (getter.IsStatic) staticDefs else instanceDefs).enter(methodSym)

@@ -1,5 +1,5 @@
 /* NEST (New Scala Test)
- * Copyright 2007-2010 LAMP/EPFL
+ * Copyright 2007-2011 LAMP/EPFL
  * @author  Paul Phillips
  */
 
@@ -48,7 +48,7 @@ object DemoSpec extends DemoSpec with Property {
   type ThisCommandLine = SpecCommandLine
   def creator(args: List[String]) =
     new SpecCommandLine(args) {
-      override def errorFn(msg: String) = { println("Error: " + msg) ; system.exit(0) }
+      override def errorFn(msg: String) = { println("Error: " + msg) ; sys.exit(0) }
     }
 }
 

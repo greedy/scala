@@ -1,3 +1,12 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
+
 package scala.collection.parallel
 package mutable
 
@@ -8,9 +17,22 @@ import collection.generic._
 import collection.mutable.DefaultEntry
 import collection.mutable.HashEntry
 import collection.mutable.HashTable
+import collection.mutable.UnrolledBuffer
 
 
 
+/** A parallel hash map.
+ *
+ *  `ParHashMap` is a parallel map which internally keeps elements within a hash table.
+ *  It uses chaining to resolve collisions.
+ *
+ *  @tparam T        type of the elements in the parallel hash map
+ *
+ *  @define Coll ParHashMap
+ *  @define coll parallel hash map
+ *
+ *  @author Aleksandar Prokopec
+ */
 @SerialVersionUID(1L)
 class ParHashMap[K, V] private[collection] (contents: HashTable.Contents[K, DefaultEntry[K, V]])
 extends ParMap[K, V]
@@ -32,11 +54,13 @@ self =>
 
   protected[this] override def newCombiner = ParHashMapCombiner[K, V]
 
-  def seq = new collection.mutable.HashMap[K, V](hashTableContents)
+  override def seq = new collection.mutable.HashMap[K, V](hashTableContents)
 
-  def parallelIterator = new ParHashMapIterator(1, table.length, size, table(0).asInstanceOf[DefaultEntry[K, V]]) with SCPI
+  def splitter = new ParHashMapIterator(1, table.length, size, table(0).asInstanceOf[DefaultEntry[K, V]]) with SCPI
 
   override def size = tableSize
+
+  override def clear() = clearTable()
 
   def get(key: K): Option[V] = {
     val e = findEntry(key)
@@ -44,15 +68,15 @@ self =>
     else Some(e.value)
   }
 
-  override def put(key: K, value: V): Option[V] = {
+  def put(key: K, value: V): Option[V] = {
     val e = findEntry(key)
     if (e == null) { addEntry(new Entry(key, value)); None }
     else { val v = e.value; e.value = value; Some(v) }
   }
 
-  override def update(key: K, value: V): Unit = put(key, value)
+  def update(key: K, value: V): Unit = put(key, value)
 
-  override def remove(key: K): Option[V] = {
+  def remove(key: K): Option[V] = {
     val e = removeEntry(key)
     if (e ne null) Some(e.value)
     else None
@@ -117,6 +141,10 @@ self =>
 }
 
 
+/** $factoryInfo
+ *  @define Coll mutable.ParHashMap
+ *  @define coll parallel hash map
+ */
 object ParHashMap extends ParMapFactory[ParHashMap] {
   var iters = 0
 
@@ -132,8 +160,8 @@ private[mutable] abstract class ParHashMapCombiner[K, V](private val tableLoadFa
 extends collection.parallel.BucketCombiner[(K, V), ParHashMap[K, V], DefaultEntry[K, V], ParHashMapCombiner[K, V]](ParHashMapCombiner.numblocks)
    with collection.mutable.HashTable.HashUtils[K]
 {
-self: EnvironmentPassingCombiner[(K, V), ParHashMap[K, V]] =>
-  import tasksupport._
+//self: EnvironmentPassingCombiner[(K, V), ParHashMap[K, V]] =>
+  import collection.parallel.tasksupport._
   private var mask = ParHashMapCombiner.discriminantmask
   private var nonmasklen = ParHashMapCombiner.nonmasklength
 
@@ -287,7 +315,7 @@ private[parallel] object ParHashMapCombiner {
   private[mutable] val discriminantmask = ((1 << discriminantbits) - 1);
   private[mutable] val nonmasklength = 32 - discriminantbits
 
-  def apply[K, V] = new ParHashMapCombiner[K, V](HashTable.defaultLoadFactor) with EnvironmentPassingCombiner[(K, V), ParHashMap[K, V]]
+  def apply[K, V] = new ParHashMapCombiner[K, V](HashTable.defaultLoadFactor) {} // was: with EnvironmentPassingCombiner[(K, V), ParHashMap[K, V]]
 }
 
 

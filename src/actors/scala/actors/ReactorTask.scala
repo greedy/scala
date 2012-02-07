@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -14,10 +14,7 @@ import java.util.concurrent.Callable
 
 import scala.concurrent.forkjoin.RecursiveAction
 
-/** <p>
- *    The class <code>ReactorTask</code>.
- *  </p>
- *
+/**
  *  @author Philipp Haller
  */
 private[actors] class ReactorTask[Msg >: Null](var reactor: Reactor[Msg],

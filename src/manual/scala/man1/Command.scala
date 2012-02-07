@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Stephane Micheloud
  */
 
@@ -46,7 +46,7 @@ trait Command {
 
   def bugs = Section("REPORTING BUGS",
 
-    "Report bugs to " & Mono("http://lampsvn.epfl.ch/trac/scala") & ".")
+    "Report bugs to " & Mono("https://issues.scala-lang.org/") & ".")
 
   //private val df = new java.text.SimpleDateFormat("MMM d, yyyy")
   //private val rightNow = new java.util.Date()

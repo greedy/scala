@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2002-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2002-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -34,7 +34,7 @@ abstract class ScalaBeanInfo(clazz: java.lang.Class[_],
 
   // override def getAdditionalBeanInfo() = Array(Introspector getBeanInfo clazz.getSuperclass)
 
-  private def init {
+  private def init() {
     var i = 0;
     while (i < props.length) {
       pd(i/3) = new PropertyDescriptor(props(i), clazz, props(i+1), props(i+2))

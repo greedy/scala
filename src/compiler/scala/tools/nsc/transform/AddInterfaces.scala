@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Martin Odersky
  */
 
@@ -48,8 +48,8 @@ abstract class AddInterfaces extends InfoTransform {
   private val implMethodMap = new mutable.HashMap[Symbol, Symbol]
 
   override def newPhase(prev: scala.tools.nsc.Phase): StdPhase = {
-    implClassMap.clear
-    implMethodMap.clear
+    implClassMap.clear()
+    implMethodMap.clear()
     super.newPhase(prev)
   }
 
@@ -58,8 +58,12 @@ abstract class AddInterfaces extends InfoTransform {
   private def isInterfaceMember(sym: Symbol): Boolean = {
     sym.isType ||
     { sym.info; // to set lateMETHOD flag if necessary
-      sym.isMethod && !sym.isLabel && !(sym hasFlag (PRIVATE | BRIDGE)) &&
-      !sym.isConstructor && !sym.isImplOnly
+      sym.isMethod &&
+      !sym.isLabel &&
+      !sym.isPrivate &&
+      (!(sym hasFlag BRIDGE) || sym.hasBridgeAnnotation) && // count @_$bridge$_ annotated classes as interface members
+      !sym.isConstructor &&
+      !sym.isImplOnly
     }
   }
 
@@ -252,7 +256,7 @@ abstract class AddInterfaces extends InfoTransform {
 
   /** Add mixin constructor definition
    *    def $init$(): Unit = ()
-   *  to `stats' unless there is already one.
+   *  to `stats` unless there is already one.
    */
   private def addMixinConstructorDef(clazz: Symbol, stats: List[Tree]): List[Tree] =
     if (treeInfo.firstConstructor(stats) != EmptyTree) stats
@@ -292,7 +296,7 @@ abstract class AddInterfaces extends InfoTransform {
     }
     (tree: @unchecked) match {
       case Block(stats, expr) =>
-        // needs `hasSymbol' check because `supercall' could be a block (named / default args)
+        // needs `hasSymbol` check because `supercall` could be a block (named / default args)
         val (presuper, supercall :: rest) = stats span (t => t.hasSymbolWhich(_ hasFlag PRESUPER))
         //assert(supercall.symbol.isClassConstructor, supercall)
         treeCopy.Block(tree, presuper ::: (supercall :: mixinConstructorCalls ::: rest), expr)

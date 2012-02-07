@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2002-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2002-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -67,7 +67,7 @@ object Platform {
   def currentTime: Long = System.currentTimeMillis()
 
   @inline
-  def collectGarbage: Unit = System.gc()
+  def collectGarbage(): Unit = System.gc()
 
   /** The name of the default character set encoding as a string */
   @inline

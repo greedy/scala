@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2007-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2007-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -78,9 +78,9 @@ import scala.ref._
 private[swing] trait SingleRefCollection[+A <: AnyRef] extends Iterable[A] { self =>
 
   trait Ref[+A <: AnyRef] extends Reference[A] {
-    override def hashCode() = {
-      val v = get
-      if (v == None) 0 else v.get.##
+    override def hashCode() = get match {
+      case Some(x)  => x.##
+      case _        => 0
     }
     override def equals(that: Any) = that match {
       case that: ReferenceWrapper[_] =>
@@ -111,7 +111,7 @@ private[swing] trait SingleRefCollection[+A <: AnyRef] extends Iterable[A] { sel
     private val elems = self.underlying.iterator
     private var hd: A = _
     private var ahead: Boolean = false
-    private def skip: Unit =
+    private def skip(): Unit =
       while (!ahead && elems.hasNext) {
         // make sure we have a reference to the next element,
         // otherwise it might be garbage collected

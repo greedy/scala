@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2002-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2002-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -12,7 +12,7 @@ import scala.collection.{ mutable, immutable, generic }
 import immutable.StringOps
 import mutable.ArrayOps
 import generic.CanBuildFrom
-import annotation.elidable
+import annotation.{ elidable, implicitNotFound }
 import annotation.elidable.ASSERTION
 
 /** The <code>Predef</code> object provides definitions that are
@@ -38,6 +38,7 @@ object Predef extends LowPriorityImplicits {
   type Set[A]     = immutable.Set[A]
   val Map         = immutable.Map
   val Set         = immutable.Set
+  val AnyRef      = new SpecializableCompanion {}   // a dummy used by the specialization annotation
 
   // Manifest types, companions, and incantations for summoning
   type ClassManifest[T] = scala.reflect.ClassManifest[T]
@@ -56,18 +57,21 @@ object Predef extends LowPriorityImplicits {
   def implicitly[T](implicit e: T) = e    // for summoning implicit values from the nether world
   @inline def locally[T](x: T): T  = x    // to communicate intent and avoid unmoored statements
 
+  // Apparently needed for the xml library
+  val $scope = scala.xml.TopScope
+
   // Deprecated
 
-  @deprecated("Use system.error(message) instead")
-  def error(message: String): Nothing = system.error(message)
+  @deprecated("Use sys.error(message) instead", "2.9.0")
+  def error(message: String): Nothing = sys.error(message)
 
-  @deprecated("Use system.exit() instead")
-  def exit(): Nothing = system.exit()
+  @deprecated("Use sys.exit() instead", "2.9.0")
+  def exit(): Nothing = sys.exit()
 
-  @deprecated("Use system.exit(status) instead")
-  def exit(status: Int): Nothing = system.exit(status)
+  @deprecated("Use sys.exit(status) instead", "2.9.0")
+  def exit(status: Int): Nothing = sys.exit(status)
 
-  @deprecated("Use formatString.format(args: _*) or arg.formatted(formatString) instead")
+  @deprecated("Use formatString.format(args: _*) or arg.formatted(formatString) instead", "2.9.0")
   def format(text: String, xs: Any*) = augmentString(text).format(xs: _*)
 
   // errors and asserts -------------------------------------------------
@@ -93,8 +97,8 @@ object Predef extends LowPriorityImplicits {
    *  @param p   the expression to test
    *  @param msg a String to include in the failure message
    */
-  @elidable(ASSERTION)
-  def assert(assertion: Boolean, message: => Any) {
+  @elidable(ASSERTION) @inline
+  final def assert(assertion: Boolean, message: => Any) {
     if (!assertion)
       throw new java.lang.AssertionError("assertion failed: "+ message)
   }
@@ -124,8 +128,8 @@ object Predef extends LowPriorityImplicits {
    *  @param p   the expression to test
    *  @param msg a String to include in the failure message
    */
-  @elidable(ASSERTION)
-  def assume(assumption: Boolean, message: => Any) {
+  @elidable(ASSERTION) @inline
+  final def assume(assumption: Boolean, message: => Any) {
     if (!assumption)
       throw new java.lang.AssertionError("assumption failed: "+ message)
   }
@@ -148,16 +152,16 @@ object Predef extends LowPriorityImplicits {
    *  @param p   the expression to test
    *  @param msg a String to include in the failure message
    */
-  def require(requirement: Boolean, message: => Any) {
+  @inline final def require(requirement: Boolean, message: => Any) {
     if (!requirement)
       throw new IllegalArgumentException("requirement failed: "+ message)
   }
 
   final class Ensuring[A](val x: A) {
     def ensuring(cond: Boolean): A = { assert(cond); x }
-    def ensuring(cond: Boolean, msg: Any): A = { assert(cond, msg); x }
+    def ensuring(cond: Boolean, msg: => Any): A = { assert(cond, msg); x }
     def ensuring(cond: A => Boolean): A = { assert(cond(x)); x }
-    def ensuring(cond: A => Boolean, msg: Any): A = { assert(cond(x), msg); x }
+    def ensuring(cond: A => Boolean, msg: => Any): A = { assert(cond(x), msg); x }
   }
   implicit def any2Ensuring[A](x: A): Ensuring[A] = new Ensuring(x)
 
@@ -311,7 +315,7 @@ object Predef extends LowPriorityImplicits {
   implicit def stringCanBuildFrom: CanBuildFrom[String, Char, String] =
     new CanBuildFrom[String, Char, String] {
       def apply(from: String) = apply()
-      def apply() = StringBuilder.newBuilder
+      def apply() = mutable.StringBuilder.newBuilder
     }
 
   implicit def seqToCharSequence(xs: collection.IndexedSeq[Char]): CharSequence = new CharSequence {
@@ -337,10 +341,12 @@ object Predef extends LowPriorityImplicits {
    * @note we need a new type constructor `<:<` and evidence `conforms`, as
    * reusing `Function2` and `identity` leads to ambiguities in case of type errors (any2stringadd is inferred)
    * to constrain any abstract type T that's in scope in a method's argument list (not just the method's own type parameters)
-   * simply add an implicit argument of type `T <:< U`, where U is the required upper bound (for lower-bounds, use: `U <: T`)
+   * simply add an implicit argument of type `T <:< U`, where U is the required upper bound (for lower-bounds, use: `L <:< T`,
+   * where L is the required lower bound).
    * in part contributed by Jason Zaugg
    */
-  sealed abstract class <:<[-From, +To] extends (From => To)
+  @implicitNotFound(msg = "Cannot prove that ${From} <:< ${To}.")
+  sealed abstract class <:<[-From, +To] extends (From => To) with Serializable
   implicit def conforms[A]: A <:< A = new (A <:< A) { def apply(x: A) = x }
   // not in the <:< companion object because it is also intended to subsume identity (which is no longer implicit)
 
@@ -348,14 +354,15 @@ object Predef extends LowPriorityImplicits {
    *
    * @see <:< for expressing subtyping constraints
    */
-  sealed abstract class =:=[From, To] extends (From => To)
+  @implicitNotFound(msg = "Cannot prove that ${From} =:= ${To}.")
+  sealed abstract class =:=[From, To] extends (From => To) with Serializable
   object =:= {
     implicit def tpEquals[A]: A =:= A = new (A =:= A) {def apply(x: A) = x}
   }
 
   // less useful due to #2781
-  @deprecated("Use From => To instead")
-  sealed abstract class <%<[-From, +To] extends (From => To)
+  @deprecated("Use From => To instead", "2.9.0")
+  sealed abstract class <%<[-From, +To] extends (From => To) with Serializable
   object <%< {
     implicit def conformsOrViewsAs[A <% B, B]: A <%< B = new (A <%< B) {def apply(x: A) = x}
   }

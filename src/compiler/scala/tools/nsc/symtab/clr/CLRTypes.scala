@@ -1,5 +1,5 @@
 /* NSC -- new scala compiler
- * Copyright 2004-2010 LAMP/EPFL
+ * Copyright 2004-2011 LAMP/EPFL
  */
 
 
@@ -66,13 +66,18 @@ abstract class CLRTypes {
 
   def isAddressOf(msym : Symbol) = addressOfViews.contains(msym)
 
-  def isNonEnumValuetype(clssym : Symbol) = {
-    val msilTOpt = types.get(clssym)
+  def isNonEnumValuetype(cls: Symbol) = {
+    val msilTOpt = types.get(cls)
     val res = msilTOpt.isDefined && {
       val msilT = msilTOpt.get
       msilT.IsValueType && !msilT.IsEnum
     }
     res
+  }
+
+  def isValueType(cls: Symbol): Boolean = {
+    val opt = types.get(cls)
+    opt.isDefined && opt.get.IsValueType
   }
 
   def init() = try { // initialize

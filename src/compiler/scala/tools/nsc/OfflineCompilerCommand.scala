@@ -1,26 +1,46 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
 package scala.tools.nsc
 
+import settings.FscSettings
+import io.Directory
+import Properties.isWin
+
 /** A compiler command for the offline compiler.
  *
  * @author Martin Odersky and Lex Spoon
  */
-class OfflineCompilerCommand(
-  arguments: List[String],
-  settings: Settings)
-extends CompilerCommand(arguments, settings) {
-  override val cmdName = "fsc"
-  import settings._
+class OfflineCompilerCommand(arguments: List[String], settings: FscSettings) extends CompilerCommand(arguments, settings) {
+  import settings.currentDir
+  def extraFscArgs = List(currentDir.name, currentDir.value)
 
-  disable(prompt)
-  disable(resident)
+  locally {
+    // if -current-dir is unset, we're on the client and need to obtain it.
+    if (currentDir.isDefault) {
+      // Prefer env variable PWD to system property user.dir because the former
+      // deals better with paths not rooted at / (filesystem mounts.)
+      // ... except on windows, because under cygwin PWD involves "/cygdrive"
+      // instead of whatever it's supposed to be doing.
+      val baseDirectory = {
+        val pwd = System.getenv("PWD")
+        if (pwd != null && !isWin) Directory(pwd)
+        else Directory.Current getOrElse Directory("/")
+      }
+      currentDir.value = baseDirectory.path
+    }
+    else {
+      // Otherwise we're on the server and will use it to absolutize the paths.
+      settings.absolutize(currentDir.value)
+    }
+  }
 
-  BooleanSetting("-reset",    "Reset compile server caches")
-  BooleanSetting("-shutdown", "Shutdown compile server")
-  StringSetting ("-server",   "hostname:portnumber", "Specify compile server socket", "")
-  BooleanSetting("-J<flag>",  "Pass <flag> directly to runtime system")
+  override def cmdName = "fsc"
+  override def usageMsg = (
+    createUsageMsg("where possible fsc", false, x => x.isStandard && settings.isFscSpecific(x.name)) +
+    "\n\nStandard scalac options also available:" +
+    createUsageMsg(x => x.isStandard && !settings.isFscSpecific(x.name))
+  )
 }

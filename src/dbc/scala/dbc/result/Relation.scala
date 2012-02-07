@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -14,7 +14,7 @@ package result
 
 /** An ISO-9075:2003 (SQL) table. This is equivalent to a relation in the
  * relational model. */
-abstract class Relation extends AnyRef with Iterable[Tuple] {
+@deprecated(DbcIsDeprecated, "2.9.0") abstract class Relation extends AnyRef with Iterable[Tuple] {
 
   /** The statement that generated this relation. */
   def statement: scala.dbc.statement.Relation
@@ -75,7 +75,7 @@ abstract class Relation extends AnyRef with Iterable[Tuple] {
         resultNext = result.next()
         newTuple
       }
-      else system.error("next on empty iterator")
+      else sys.error("next on empty iterator")
     }
   }
 

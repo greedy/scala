@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -13,7 +13,7 @@ package statement;
 
 
 /** A statement that changes the status of the database. */
-case class Transaction [ResultType] (
+@deprecated(DbcIsDeprecated, "2.9.0") case class Transaction [ResultType] (
   transactionBody: (scala.dbc.Database=>ResultType),
   accessMode: Option[AccessMode],
   isolationLevel: Option[IsolationLevel]

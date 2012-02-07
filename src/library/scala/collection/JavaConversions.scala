@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2006-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://www.scala-lang.org/           **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -73,7 +73,7 @@ object JavaConversions {
     case _ => IteratorWrapper(i)
   }
 
-  @deprecated("use asJavaIterator instead")
+  @deprecated("use asJavaIterator instead", "2.8.1")
   def asIterator[A](i : Iterator[A]): ju.Iterator[A] = asJavaIterator[A](i)
 
   /**
@@ -94,7 +94,7 @@ object JavaConversions {
     case _ => IteratorWrapper(i)
   }
 
-  @deprecated("use asJavaEnmeration instead")
+  @deprecated("use asJavaEnmeration instead", "2.8.1")
   def asEnumeration[A](i : Iterator[A]): ju.Enumeration[A] = asJavaEnumeration[A](i)
 
   /**
@@ -115,7 +115,7 @@ object JavaConversions {
     case _ => IterableWrapper(i)
   }
 
-  @deprecated("use asJavaIterable instead")
+  @deprecated("use asJavaIterable instead", "2.8.1")
   def asIterable[A](i : Iterable[A]): jl.Iterable[A] = asJavaIterable[A](i)
 
   /**
@@ -134,7 +134,7 @@ object JavaConversions {
     case _ => new IterableWrapper(i)
   }
 
-  @deprecated("use asJavaCollection instead")
+  @deprecated("use asJavaCollection instead", "2.8.1")
   def asCollection[A](i : Iterable[A]): ju.Collection[A] = asJavaCollection[A](i)
 
   /**
@@ -154,9 +154,9 @@ object JavaConversions {
     case JListWrapper(wrapped) => wrapped
     case _ => new MutableBufferWrapper(b)
   }
-  @deprecated("use bufferAsJavaList instead")
+  @deprecated("use bufferAsJavaList instead", "2.9.0")
   def asJavaList[A](b : mutable.Buffer[A]): ju.List[A] = bufferAsJavaList[A](b)
-  @deprecated("use bufferAsJavaList instead")
+  @deprecated("use bufferAsJavaList instead", "2.8.1")
   def asList[A](b : mutable.Buffer[A]): ju.List[A] = bufferAsJavaList[A](b)
 
   /**
@@ -176,9 +176,9 @@ object JavaConversions {
     case JListWrapper(wrapped) => wrapped
     case _ => new MutableSeqWrapper(b)
   }
-  @deprecated("use mutableSeqAsJavaList instead")
+  @deprecated("use mutableSeqAsJavaList instead", "2.9.0")
   def asJavaList[A](b : mutable.Seq[A]): ju.List[A] = mutableSeqAsJavaList[A](b)
-  @deprecated("use mutableSeqAsJavaList instead")
+  @deprecated("use mutableSeqAsJavaList instead", "2.8.1")
   def asList[A](b : mutable.Seq[A]): ju.List[A] = mutableSeqAsJavaList[A](b)
 
   /**
@@ -199,9 +199,9 @@ object JavaConversions {
     case _ => new SeqWrapper(b)
   }
 
-  @deprecated("use seqAsJavaList instead")
+  @deprecated("use seqAsJavaList instead", "2.9.0")
   def asJavaList[A](b : Seq[A]): ju.List[A] = seqAsJavaList[A](b)
-  @deprecated("use seqAsJavaList instead")
+  @deprecated("use seqAsJavaList instead", "2.8.1")
   def asList[A](b : Seq[A]): ju.List[A] = seqAsJavaList[A](b)
 
   /**
@@ -222,9 +222,9 @@ object JavaConversions {
     case _ => new MutableSetWrapper(s)
   }
 
-  @deprecated("use mutableSetAsJavaSet instead")
+  @deprecated("use mutableSetAsJavaSet instead", "2.9.0")
   def asJavaSet[A](s : mutable.Set[A]): ju.Set[A] = mutableSetAsJavaSet[A](s)
-  @deprecated("use mutableSetAsJavaSet instead")
+  @deprecated("use mutableSetAsJavaSet instead", "2.8.1")
   def asSet[A](s : mutable.Set[A]): ju.Set[A] = mutableSetAsJavaSet[A](s)
 
   /**
@@ -245,9 +245,9 @@ object JavaConversions {
     case _ => new SetWrapper(s)
   }
 
-  @deprecated("use setAsJavaSet instead")
+  @deprecated("use setAsJavaSet instead", "2.9.0")
   def asJavaSet[A](s: Set[A]): ju.Set[A] = setAsJavaSet[A](s)
-  @deprecated("use setAsJavaSet instead")
+  @deprecated("use setAsJavaSet instead", "2.8.1")
   def asSet[A](s : Set[A]): ju.Set[A] = setAsJavaSet[A](s)
 
   /**
@@ -269,9 +269,9 @@ object JavaConversions {
     case _ => new MutableMapWrapper(m)
   }
 
-  @deprecated("use mutableMapAsJavaMap instead")
+  @deprecated("use mutableMapAsJavaMap instead", "2.9.0")
   def asJavaMap[A, B](m : mutable.Map[A, B]): ju.Map[A, B] = mutableMapAsJavaMap[A, B](m)
-  @deprecated("use mutableMapAsJavaMap instead")
+  @deprecated("use mutableMapAsJavaMap instead", "2.8.1")
   def asMap[A, B](m : mutable.Map[A, B]): ju.Map[A, B] = mutableMapAsJavaMap[A, B](m)
 
   /**
@@ -293,7 +293,7 @@ object JavaConversions {
     case _ => new DictionaryWrapper(m)
   }
 
-  @deprecated("use asJavaDictionary instead")
+  @deprecated("use asJavaDictionary instead", "2.8.1")
   def asDictionary[A, B](m : mutable.Map[A, B]): ju.Dictionary[A, B] = asJavaDictionary[A, B](m)
 
   /**
@@ -315,9 +315,9 @@ object JavaConversions {
     case _ => new MapWrapper(m)
   }
 
-  @deprecated("use mapAsJavaMap instead")
+  @deprecated("use mapAsJavaMap instead", "2.9.0")
   def asJavaMap[A, B](m : Map[A, B]): ju.Map[A, B] = mapAsJavaMap[A, B](m)
-  @deprecated("use mapAsJavaMap instead")
+  @deprecated("use mapAsJavaMap instead", "2.8.1")
   def asMap[A, B](m : Map[A, B]): ju.Map[A, B] = mapAsJavaMap[A, B](m)
 
   /**
@@ -338,7 +338,7 @@ object JavaConversions {
     case _ => new ConcurrentMapWrapper(m)
   }
 
-  @deprecated("use asJavaConcurrentMap instead")
+  @deprecated("use asJavaConcurrentMap instead", "2.8.1")
   def asConcurrentMap[A, B](m: mutable.ConcurrentMap[A, B]): juc.ConcurrentMap[A, B] = asJavaConcurrentMap[A, B](m)
 
   // Java => Scala
@@ -361,7 +361,7 @@ object JavaConversions {
     case _ => JIteratorWrapper(i)
   }
 
-  @deprecated("use asScalaIterator instead")
+  @deprecated("use asScalaIterator instead", "2.8.1")
   def asIterator[A](i : ju.Iterator[A]): Iterator[A] = asScalaIterator[A](i)
 
   /**
@@ -382,7 +382,7 @@ object JavaConversions {
     case _ => JEnumerationWrapper(i)
   }
 
-  @deprecated("use enumerationAsScalaIterator instead")
+  @deprecated("use enumerationAsScalaIterator instead", "2.8.1")
   def asIterator[A](i : ju.Enumeration[A]): Iterator[A] = enumerationAsScalaIterator[A](i)
 
   /**
@@ -403,9 +403,9 @@ object JavaConversions {
     case _ => JIterableWrapper(i)
   }
 
-  @deprecated("use iterableAsScalaIterable instead")
+  @deprecated("use iterableAsScalaIterable instead", "2.9.0")
   def asScalaIterable[A](i : jl.Iterable[A]): Iterable[A] = iterableAsScalaIterable[A](i)
-  @deprecated("use iterableAsScalaIterable instead")
+  @deprecated("use iterableAsScalaIterable instead", "2.8.1")
   def asIterable[A](i : jl.Iterable[A]): Iterable[A] = iterableAsScalaIterable[A](i)
 
   /**
@@ -422,9 +422,9 @@ object JavaConversions {
     case IterableWrapper(wrapped) => wrapped
     case _ => JCollectionWrapper(i)
   }
-  @deprecated("use collectionAsScalaIterable instead")
+  @deprecated("use collectionAsScalaIterable instead", "2.9.0")
   def asScalaIterable[A](i : ju.Collection[A]): Iterable[A] = collectionAsScalaIterable[A](i)
-  @deprecated("use collectionAsScalaIterable instead")
+  @deprecated("use collectionAsScalaIterable instead", "2.8.1")
   def asIterable[A](i : ju.Collection[A]): Iterable[A] = collectionAsScalaIterable[A](i)
 
   /**
@@ -445,7 +445,7 @@ object JavaConversions {
     case _ =>new JListWrapper(l)
   }
 
-  @deprecated("use asScalaBuffer instead")
+  @deprecated("use asScalaBuffer instead", "2.8.1")
   def asBuffer[A](l : ju.List[A]): mutable.Buffer[A] = asScalaBuffer[A](l)
 
   /**
@@ -466,7 +466,7 @@ object JavaConversions {
     case _ =>new JSetWrapper(s)
   }
 
-  @deprecated("use asScalaSet instead")
+  @deprecated("use asScalaSet instead", "2.8.1")
   def asSet[A](s : ju.Set[A]): mutable.Set[A] = asScalaSet[A](s)
 
   /**
@@ -488,9 +488,9 @@ object JavaConversions {
     case _ => new JMapWrapper(m)
   }
 
-  @deprecated("use mapAsScalaMap instead")
+  @deprecated("use mapAsScalaMap instead", "2.9.0")
   def asScalaMap[A, B](m : ju.Map[A, B]): mutable.Map[A, B] = mapAsScalaMap[A, B](m)
-  @deprecated("use mapAsScalaMap instead")
+  @deprecated("use mapAsScalaMap instead", "2.8.1")
   def asMap[A, B](m : ju.Map[A, B]): mutable.Map[A, B] = mapAsScalaMap[A, B](m)
 
   /**
@@ -504,14 +504,14 @@ object JavaConversions {
    * Scala ConcurrentMap will be returned.
    *
    * @param m The ConcurrentMap to be converted.
-   * @return A Scala mutable ConcurrrentMap view of the argument.
+   * @return A Scala mutable ConcurrentMap view of the argument.
    */
   implicit def asScalaConcurrentMap[A, B](m: juc.ConcurrentMap[A, B]): mutable.ConcurrentMap[A, B] = m match {
     case cmw: ConcurrentMapWrapper[a, b] => cmw.underlying
     case _ => new JConcurrentMapWrapper(m)
   }
 
-  @deprecated("use asScalaConcurrentMap instead")
+  @deprecated("use asScalaConcurrentMap instead", "2.8.1")
   def asConcurrentMap[A, B](m: juc.ConcurrentMap[A, B]): mutable.ConcurrentMap[A, B] = asScalaConcurrentMap[A, B](m)
 
   /**
@@ -528,7 +528,7 @@ object JavaConversions {
     case _ => new JDictionaryWrapper(p)
   }
 
-  @deprecated("use dictionaryAsScalaMap instead")
+  @deprecated("use dictionaryAsScalaMap instead", "2.8.1")
   def asMap[A, B](p: ju.Dictionary[A, B]): mutable.Map[A, B] = dictionaryAsScalaMap[A, B](p)
 
   /**
@@ -544,9 +544,9 @@ object JavaConversions {
     case _ => new JPropertiesWrapper(p)
   }
 
-  @deprecated("use propertiesAsScalaMap instead")
+  @deprecated("use propertiesAsScalaMap instead", "2.9.0")
   def asScalaMap(p: ju.Properties): mutable.Map[String, String] = propertiesAsScalaMap(p)
-  @deprecated("use propertiesAsScalaMap instead")
+  @deprecated("use propertiesAsScalaMap instead", "2.8.1")
   def asMap(p: ju.Properties): mutable.Map[String, String] = propertiesAsScalaMap(p)
 
   // Private implementations (shared by JavaConverters) ...
@@ -560,10 +560,10 @@ object JavaConversions {
 
   case class IteratorWrapper[A](underlying : Iterator[A]) extends ju.Iterator[A] with ju.Enumeration[A] {
     def hasNext = underlying.hasNext
-    def next = underlying.next
+    def next() = underlying.next
     def hasMoreElements = underlying.hasNext
-    def nextElement = underlying.next
-    def remove = throw new UnsupportedOperationException
+    def nextElement() = underlying.next
+    def remove() = throw new UnsupportedOperationException
   }
 
   class ToIteratorWrapper[A](underlying : Iterator[A]) {
@@ -572,12 +572,12 @@ object JavaConversions {
 
   case class JIteratorWrapper[A](underlying : ju.Iterator[A]) extends Iterator[A] {
     def hasNext = underlying.hasNext
-    def next = underlying.next
+    def next() = underlying.next
   }
 
   case class JEnumerationWrapper[A](underlying : ju.Enumeration[A]) extends Iterator[A] {
     def hasNext = underlying.hasMoreElements
-    def next = underlying.nextElement
+    def next() = underlying.nextElement
   }
 
   case class IterableWrapper[A](underlying : Iterable[A])
@@ -620,7 +620,7 @@ object JavaConversions {
     def update(i : Int, elem : A) = underlying.set(i, elem)
     def +=:(elem : A) = { underlying.subList(0, 0).add(elem) ; this }
     def +=(elem : A): this.type = { underlying.add(elem); this }
-    def insertAll(i : Int, elems : Traversable[A]) = { val ins = underlying.subList(0, i) ;  elems.foreach(ins.add(_)) }
+    def insertAll(i : Int, elems : Traversable[A]) = { val ins = underlying.subList(0, i) ;  elems.seq.foreach(ins.add(_)) }
     def remove(i : Int) = underlying.remove(i)
     def clear = underlying.clear
     def result = this
@@ -696,7 +696,7 @@ object JavaConversions {
 
         def hasNext = ui.hasNext
 
-        def next = {
+        def next() = {
           val (k, v) = ui.next
           prev = Some(k)
           new ju.Map.Entry[A, B] {
@@ -711,7 +711,7 @@ object JavaConversions {
           }
         }
 
-        def remove = prev match {
+        def remove() = prev match {
           case Some(k) =>
             underlying match {
               case mm: mutable.Map[a, _] =>
@@ -781,7 +781,7 @@ object JavaConversions {
     def iterator = new Iterator[(A, B)] {
       val ui = underlying.entrySet.iterator
       def hasNext = ui.hasNext
-      def next = { val e = ui.next ; (e.getKey, e.getValue) }
+      def next() = { val e = ui.next ; (e.getKey, e.getValue) }
     }
 
     override def clear() = underlying.clear()
@@ -930,7 +930,7 @@ object JavaConversions {
     def iterator = new Iterator[(String, String)] {
       val ui = underlying.entrySet.iterator
       def hasNext = ui.hasNext
-      def next = { val e = ui.next ; (e.getKey.asInstanceOf[String], e.getValue.asInstanceOf[String]) }
+      def next() = { val e = ui.next ; (e.getKey.asInstanceOf[String], e.getValue.asInstanceOf[String]) }
     }
 
     override def clear() = underlying.clear()

@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -67,8 +67,8 @@ abstract class TreeBuilder {
   }
 
   /** Traverse pattern and collect all variable names with their types in buffer
-   *  The variables keep their positions; whereas the pattern is converted to be synthetic
-   *  for all nodes that contain a variable position.
+   *  The variables keep their positions; whereas the pattern is converted to be
+   *  synthetic for all nodes that contain a variable position.
    */
   class GetVarTraverser extends Traverser {
     val buf = new ListBuffer[(Name, Tree, Position)]
@@ -149,7 +149,8 @@ abstract class TreeBuilder {
     case _ => t
   }
 
-  def makeAnnotated(t: Tree, annot: Tree): Tree = atPos(annot.pos union t.pos)(Annotated(annot, t))
+  def makeAnnotated(t: Tree, annot: Tree): Tree =
+    atPos(annot.pos union t.pos)(Annotated(annot, t))
 
   def makeSelfDef(name: TermName, tpt: Tree): ValDef =
     ValDef(Modifiers(PRIVATE), name, tpt, EmptyTree)
@@ -252,7 +253,7 @@ abstract class TreeBuilder {
     LabelDef(lname, Nil, rhs)
   }
 
-  /** Create block of statements `stats'  */
+  /** Create block of statements `stats`  */
   def makeBlock(stats: List[Tree]): Tree =
     if (stats.isEmpty) Literal(())
     else if (!stats.last.isTerm) Block(stats, Literal(()))
@@ -261,7 +262,7 @@ abstract class TreeBuilder {
 
   /** Create tree for for-comprehension generator <val pat0 <- rhs0> */
   def makeGenerator(pos: Position, pat: Tree, valeq: Boolean, rhs: Tree): Enumerator = {
-    val pat1 = patvarTransformer.transform(pat);
+    val pat1 = patvarTransformer.transform(pat)
     val rhs1 =
       if (valeq) rhs
       else matchVarPattern(pat1) match {
@@ -492,17 +493,17 @@ abstract class TreeBuilder {
    */
   def makeCatchFromExpr(catchExpr: Tree): CaseDef = {
     val binder   = freshTermName("x")
-    val pat      = atPos(catchExpr.pos)(Bind(binder, Typed(Ident(nme.WILDCARD), Ident(tpnme.Throwable))))
+    val pat      = Bind(binder, Typed(Ident(nme.WILDCARD), Ident(tpnme.Throwable)))
     val catchDef = ValDef(NoMods, freshTermName("catchExpr"), TypeTree(), catchExpr)
     val catchFn  = Ident(catchDef.name)
-    val body     = Block(
+    val body     = atPos(catchExpr.pos.makeTransparent)(Block(
       List(catchDef),
       If(
         Apply(Select(catchFn, nme.isDefinedAt), List(Ident(binder))),
         Apply(Select(catchFn, nme.apply), List(Ident(binder))),
         Throw(Ident(binder))
       )
-    )
+    ))
     makeCaseDef(pat, EmptyTree, body)
   }
 
@@ -582,7 +583,7 @@ abstract class TreeBuilder {
             }
           var cnt = 0
           val restDefs = for ((vname, tpt, pos) <- vars) yield atPos(pos) {
-            cnt = cnt + 1
+            cnt += 1
             ValDef(mods, vname.toTermName, tpt, Select(Ident(tmp), newTermName("_" + cnt)))
           }
           firstDef :: restDefs
@@ -593,7 +594,7 @@ abstract class TreeBuilder {
   def makeFunctionTypeTree(argtpes: List[Tree], restpe: Tree): Tree =
     AppliedTypeTree(rootScalaDot(newTypeName("Function" + argtpes.length)), argtpes ::: List(restpe))
 
-  /** Append implicit parameter section if `contextBounds' nonempty */
+  /** Append implicit parameter section if `contextBounds` nonempty */
   def addEvidenceParams(owner: Name, vparamss: List[List[ValDef]], contextBounds: List[Tree]): List[List[ValDef]] =
     if (contextBounds.isEmpty) vparamss
     else {

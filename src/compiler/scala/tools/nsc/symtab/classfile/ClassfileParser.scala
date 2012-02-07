@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -12,9 +12,9 @@ import java.lang.Integer.toHexString
 
 import scala.collection.{ mutable, immutable }
 import scala.collection.mutable.{ ListBuffer, ArrayBuffer }
-import scala.tools.nsc.io.AbstractFile
 import scala.annotation.switch
-import reflect.generic.PickleBuffer
+import scala.reflect.internal.pickling.{PickleBuffer, ByteCodecs}
+import scala.tools.nsc.io.AbstractFile
 
 /** This abstract class implements a class file parser.
  *
@@ -49,7 +49,7 @@ abstract class ClassfileParser {
     val global: ClassfileParser.this.global.type = ClassfileParser.this.global
   }
 
-  private object unpickler extends UnPickler {
+  private object unpickler extends scala.reflect.internal.pickling.UnPickler {
     val global: ClassfileParser.this.global.type = ClassfileParser.this.global
   }
 
@@ -108,7 +108,7 @@ abstract class ClassfileParser {
 
   protected def statics: Symbol = staticModule.moduleClass
 
-  private def parseHeader {
+  private def parseHeader() {
     val magic = in.nextInt
     if (magic != JAVA_MAGIC)
       throw new IOException("class file '" + in.file + "' "
@@ -246,14 +246,14 @@ abstract class ClassfileParser {
           val origName = nme.originalName(name)
           val owner = if (static) ownerTpe.typeSymbol.linkedClassOfClass else ownerTpe.typeSymbol
 //          println("\t" + owner.info.member(name).tpe.widen + " =:= " + tpe)
-          f = owner.info.member(origName).suchThat(_.tpe.widen =:= tpe)
+          f = owner.info.findMember(origName, 0, 0, false).suchThat(_.tpe.widen =:= tpe)
           if (f == NoSymbol)
-            f = owner.info.member(newTermName(origName + nme.LOCAL_SUFFIX_STRING)).suchThat(_.tpe =:= tpe)
+            f = owner.info.findMember(newTermName(origName + nme.LOCAL_SUFFIX_STRING), 0, 0, false).suchThat(_.tpe =:= tpe)
           if (f == NoSymbol) {
             // if it's an impl class, try to find it's static member inside the class
             if (ownerTpe.typeSymbol.isImplClass) {
 //              println("impl class, member: " + owner.tpe.member(origName) + ": " + owner.tpe.member(origName).tpe)
-              f = ownerTpe.member(origName).suchThat(_.tpe =:= tpe)
+              f = ownerTpe.findMember(origName, 0, 0, false).suchThat(_.tpe =:= tpe)
             } else {
               log("Couldn't find " + name + ": " + tpe + " inside: \n" + ownerTpe)
               f = if (tpe.isInstanceOf[MethodType]) owner.newMethod(owner.pos, name).setInfo(tpe)
@@ -264,7 +264,7 @@ abstract class ClassfileParser {
 //            println("Looking for: " + name + ": " + tpe + " inside: " + ownerTpe.typeSymbol + "\n\tand found: " + ownerTpe.members)
           }
         }
-        assert(f != NoSymbol, "could not find " + name + ": " + tpe + "inside: \n" + ownerTpe.members)
+        assert(f != NoSymbol, "could not find\n  " + name + ": " + tpe + "\ninside:\n  " + ownerTpe.members.mkString(", "))
         values(index) = f
       }
       f
@@ -376,7 +376,7 @@ abstract class ClassfileParser {
         val len = in.getChar(start + 1)
         val bytes = new Array[Byte](len)
         Array.copy(in.buf, start + 3, bytes, 0, len)
-        val decodedLength = reflect.generic.ByteCodecs.decode(bytes)
+        val decodedLength = ByteCodecs.decode(bytes)
         value = bytes.take(decodedLength)
         values(index) = value
       }
@@ -396,7 +396,7 @@ abstract class ClassfileParser {
           bytesBuffer ++= in.buf.view(start + 3, start + 3 + len)
         }
         val bytes = bytesBuffer.toArray
-        val decodedLength = reflect.generic.ByteCodecs.decode(bytes)
+        val decodedLength = ByteCodecs.decode(bytes)
         value = bytes.take(decodedLength)
         values(indices.head) = value
       }
@@ -741,12 +741,9 @@ abstract class ClassfileParser {
                     case variance @ ('+' | '-' | '*') =>
                       index += 1
                       val bounds = variance match {
-                        case '+' => TypeBounds(definitions.NothingClass.tpe,
-                                               sig2type(tparams, skiptvs))
-                        case '-' => TypeBounds(sig2type(tparams, skiptvs),
-                                               definitions.AnyClass.tpe)
-                        case '*' => TypeBounds(definitions.NothingClass.tpe,
-                                               definitions.AnyClass.tpe)
+                        case '+' => TypeBounds.upper(objToAny(sig2type(tparams, skiptvs)))
+                        case '-' => TypeBounds.lower(sig2type(tparams, skiptvs))
+                        case '*' => TypeBounds.empty
                       }
                       val newtparam = sym.newExistential(sym.pos, newTypeName("?"+i)) setInfo bounds
                       existentials += newtparam
@@ -824,7 +821,7 @@ abstract class ClassfileParser {
         if (sig(index) != ':') // guard against empty class bound
           ts += objToAny(sig2type(tparams, skiptvs))
       }
-      TypeBounds(definitions.NothingClass.tpe, intersectionType(ts.toList, sym))
+      TypeBounds.upper(intersectionType(ts.toList, sym))
     }
 
     var tparams = classTParams
@@ -898,7 +895,7 @@ abstract class ClassfileParser {
           in.skip(attrLen)
         case tpnme.DeprecatedATTR =>
           val arg = Literal(Constant("see corresponding Javadoc for more information."))
-          sym.addAnnotation(AnnotationInfo(definitions.DeprecatedAttr.tpe, List(arg), List()))
+          sym addAnnotation AnnotationInfo(definitions.DeprecatedAttr.tpe, List(arg, Literal(Constant(""))), Nil)
           in.skip(attrLen)
         case tpnme.ConstantValueATTR =>
           val c = pool.getConstant(in.nextChar)
@@ -936,7 +933,7 @@ abstract class ClassfileParser {
                   throw new RuntimeException("Scala class file does not contain Scala annotation")
               }
             if (settings.debug.value)
-              log("" + sym + "; annotations = " + sym.annotations)
+              log("" + sym + "; annotations = " + sym.rawAnnotations)
           } else
             in.skip(attrLen)
 
@@ -1098,7 +1095,7 @@ abstract class ClassfileParser {
   /** Enter own inner classes in the right scope. It needs the scopes to be set up,
    *  and implicitly current class' superclasses.
    */
-  private def enterOwnInnerClasses {
+  private def enterOwnInnerClasses() {
     def className(name: Name): Name = {
       name.subName(name.lastPos('.') + 1, name.length)
     }
@@ -1217,7 +1214,7 @@ abstract class ClassfileParser {
      *  If the given name is not an inner class, it returns the symbol found in 'definitions'.
      */
     def classSymbol(externalName: Name): Symbol = {
-      /** Return the symbol of `innerName', having the given `externalName'. */
+      /** Return the symbol of `innerName`, having the given `externalName`. */
       def innerSymbol(externalName: Name, innerName: Name, static: Boolean): Symbol = {
         def getMember(sym: Symbol, name: Name): Symbol =
           if (static)
@@ -1234,7 +1231,7 @@ abstract class ClassfileParser {
               else entry.outerName
             val sym = classSymbol(outerName)
             val s =
-              // if loading during initialization of `definitions' typerPhase is not yet set.
+              // if loading during initialization of `definitions` typerPhase is not yet set.
               // in that case we simply load the member at the current phase
               if (currentRun.typerPhase != null)
                 atPhase(currentRun.typerPhase)(getMember(sym, innerName.toTypeName))
@@ -1264,7 +1261,7 @@ abstract class ClassfileParser {
     override def complete(sym: Symbol) {
       alias.initialize
       val tparams1 = cloneSymbols(alias.typeParams)
-      sym.setInfo(polyType(tparams1, alias.tpe.substSym(alias.typeParams, tparams1)))
+      sym.setInfo(typeFun(tparams1, alias.tpe.substSym(alias.typeParams, tparams1)))
     }
   }
 

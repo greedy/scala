@@ -1,5 +1,5 @@
 /* NSC -- new scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -39,6 +39,9 @@ trait Members { self: ICodes =>
 
     private var currentLabel: Int = 0
     private var _touched = false
+
+    def blockCount       = blocks.size
+    def instructionCount = blocks map (_.length) sum
 
     def touched = _touched
     def touched_=(b: Boolean): Unit = {
@@ -198,7 +201,7 @@ trait Members { self: ICodes =>
     override def toString() = symbol.fullName
 
     import opcodes._
-    def checkLocals: Unit = {
+    def checkLocals(): Unit = {
       def localsSet = code.blocks.flatten collect {
         case LOAD_LOCAL(l)  => l
         case STORE_LOCAL(l) => l
@@ -218,7 +221,7 @@ trait Members { self: ICodes =>
      *
      * This method should be most effective after heavy inlining.
      */
-    def normalize: Unit = if (this.code ne null) {
+    def normalize(): Unit = if (this.code ne null) {
       val nextBlock: mutable.Map[BasicBlock, BasicBlock] = mutable.HashMap.empty
       for (b <- code.blocks.toList
         if b.successors.length == 1;
@@ -251,7 +254,7 @@ trait Members { self: ICodes =>
       checkValid(this)
     }
 
-    def dump {
+    def dump() {
       val printer = new TextPrinter(new PrintWriter(Console.out, true),
                                     new DumpLinearizer)
       printer.printMethod(this)
@@ -262,10 +265,10 @@ trait Members { self: ICodes =>
   class Local(val sym: Symbol, val kind: TypeKind, val arg: Boolean) {
     var index: Int = -1
 
-    /** Starting PC for this local's visbility range. */
+    /** Starting PC for this local's visibility range. */
     var start: Int = _
 
-    /** Ending PC for this local's visbility range. */
+    /** Ending PC for this local's visibility range. */
     var end: Int = _
 
     /** PC-based ranges for this local variable's visibility */

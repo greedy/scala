@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -21,15 +21,30 @@ import generic._
  */
 trait Map[A, B]
   extends Iterable[(A, B)]
+//     with GenMap[A, B]
      with scala.collection.Map[A, B]
      with MapLike[A, B, Map[A, B]] {
 
   override def empty: Map[A, B] = Map.empty
 
-  /** The same map with a given default function */
+  override def seq: Map[A, B] = this
+
+  /** The same map with a given default function.
+   *
+   *  Invoking transformer methods (e.g. `map`) will not preserve the default value.
+   *
+   *  @param d     the function mapping keys to values, used for non-present keys
+   *  @return      a wrapper of the map with a default value
+   */
   def withDefault(d: A => B): mutable.Map[A, B] = new Map.WithDefault[A, B](this, d)
 
-  /** The same map with a given default value */
+  /** The same map with a given default value.
+   *
+   *  Invoking transformer methods (e.g. `map`) will not preserve the default value.
+   *
+   *  @param d     the function mapping keys to values, used for non-present keys
+   *  @return      a wrapper of the map with a default value
+   */
   def withDefaultValue(d: B): mutable.Map[A, B] = new Map.WithDefault[A, B](this, x => d)
 
   /** Return a read-only projection of this map.  !!! or just use an (immutable) MapProxy?

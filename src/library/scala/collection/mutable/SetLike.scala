@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -13,7 +13,8 @@ package mutable
 
 import generic._
 import script._
-import scala.annotation.migration
+import annotation.{migration, bridge}
+import parallel.mutable.ParSet
 
 /** A template trait for mutable sets of type `mutable.Set[A]`.
  *  @tparam A    the type of the elements of the set
@@ -60,6 +61,7 @@ trait SetLike[A, +This <: SetLike[A, This] with Set[A]]
      with Growable[A]
      with Shrinkable[A]
      with Cloneable[mutable.Set[A]]
+     with Parallelizable[A, ParSet[A]]
 { self =>
 
   /** A common implementation of `newBuilder` for all mutable sets
@@ -67,6 +69,8 @@ trait SetLike[A, +This <: SetLike[A, This] with Set[A]]
    *  for better efficiency.
    */
   override protected[this] def newBuilder: Builder[A, This] = empty
+
+  protected[this] override def parCombiner = ParSet.newCombiner[A]
 
   /** Adds an element to this $coll.
    *
@@ -125,7 +129,7 @@ trait SetLike[A, +This <: SetLike[A, This] with Set[A]]
    */
   def clear() { foreach(-=) }
 
-  override def clone(): This = empty ++= repr
+  override def clone(): This = empty ++= repr.seq
 
   /** The result when this set is used as a builder
    *  @return  the set representation itself.
@@ -169,13 +173,15 @@ trait SetLike[A, +This <: SetLike[A, This] with Set[A]]
    *  $addDuplicates
    *
    *  @param xs        the traversable object.
-   *  @return          a new set cconsisting of elements of this set and those in `xs`.
+   *  @return          a new set consisting of elements of this set and those in `xs`.
    */
   @migration(2, 8,
     "As of 2.8, this operation creates a new set.  To add the elements as a\n"+
     "side effect to an existing set and return that set itself, use ++=."
   )
-  override def ++(xs: TraversableOnce[A]): This = clone() ++= xs
+  override def ++(xs: GenTraversableOnce[A]): This = clone() ++= xs.seq
+
+  @bridge def ++(xs: TraversableOnce[A]): This = ++(xs: GenTraversableOnce[A])
 
   /** Creates a new set consisting of all the elements of this set except `elem`.
    *
@@ -215,7 +221,9 @@ trait SetLike[A, +This <: SetLike[A, This] with Set[A]]
     "As of 2.8, this operation creates a new set.  To remove the elements as a\n"+
     "side effect to an existing set and return that set itself, use --=."
   )
-  override def --(xs: TraversableOnce[A]): This = clone() --= xs
+  override def --(xs: GenTraversableOnce[A]): This = clone() --= xs.seq
+
+  @bridge def --(xs: TraversableOnce[A]): This = --(xs: GenTraversableOnce[A])
 
   /** Send a message to this scriptable object.
    *

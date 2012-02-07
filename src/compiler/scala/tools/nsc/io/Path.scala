@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Paul Phillips
  */
 
@@ -8,7 +8,7 @@ package io
 
 import java.io.{
   FileInputStream, FileOutputStream, BufferedReader, BufferedWriter, InputStreamReader, OutputStreamWriter,
-  BufferedInputStream, BufferedOutputStream, RandomAccessFile, File => JFile }
+  BufferedInputStream, BufferedOutputStream, RandomAccessFile }
 import java.net.{ URI, URL }
 import scala.util.Random.alphanumeric
 
@@ -28,36 +28,24 @@ import scala.util.Random.alphanumeric
  */
 
 object Path {
-  // See http://download.java.net/jdk7/docs/api/java/nio/file/Path.html
-  // for some ideas.
-  private val ZipMagicNumber = List[Byte](80, 75, 3, 4)
-  private def magicNumberIsZip(f: Path) = f.isFile && (f.toFile.bytes().take(4).toList == ZipMagicNumber)
+  def isExtensionJarOrZip(jfile: JFile): Boolean = isExtensionJarOrZip(jfile.getName)
+  def isExtensionJarOrZip(name: String): Boolean = {
+    val ext = extension(name)
+    ext == "jar" || ext == "zip"
+  }
+  def extension(name: String): String = {
+    var i = name.length - 1
+    while (i >= 0 && name.charAt(i) != '.')
+      i -= 1
 
-  /** If examineFile is true, it will look at the first four bytes of the file
-   *  and see if the magic number indicates it may be a jar or zip.
-   */
-  def isJarOrZip(f: Path): Boolean = isJarOrZip(f, true)
-  def isJarOrZip(f: Path, examineFile: Boolean): Boolean =
-    f.hasExtension("zip", "jar") || (examineFile && magicNumberIsZip(f))
+    if (i < 0) ""
+    else name.substring(i + 1).toLowerCase
+  }
+  def isJarOrZip(f: Path, examineFile: Boolean = true) = Jar.isJarOrZip(f, examineFile)
 
   // not certain these won't be problematic, but looks good so far
   implicit def string2path(s: String): Path = apply(s)
   implicit def jfile2path(jfile: JFile): Path = apply(jfile)
-
-  def locateJarByClass(clazz: Class[_]): Option[File] = {
-    try Some(File(clazz.getProtectionDomain().getCodeSource().getLocation().toURI().getPath()))
-    catch { case _: Exception => None }
-  }
-  /** Walks upward from wherever the scala library jar is searching for
-   *  the given jar name.  This approach finds the scala library jar in the
-   *  release layout and in trunk builds going up from pack.
-   */
-  def locateJarByName(name: String): Option[File] = {
-    def toSrc(d: Directory) = d.dirs.toList map (_ / name)
-    def walk(d: Directory)  = d.parents flatMap toSrc find (_.isFile) map (_.toFile)
-
-    locateJarByClass(classOf[ScalaObject]) flatMap (x => walk(x.parent))
-  }
 
   // java 7 style, we don't use it yet
   // object AccessMode extends Enumeration("AccessMode") {
@@ -77,9 +65,9 @@ object Path {
   def onlyFiles(xs: Iterator[Path]): Iterator[File] = xs filter (_.isFile) map (_.toFile)
   def onlyFiles(xs: List[Path]): List[File] = xs filter (_.isFile) map (_.toFile)
 
-  def roots: List[Path] = JFile.listRoots().toList map Path.apply
+  def roots: List[Path] = java.io.File.listRoots().toList map Path.apply
 
-  def apply(segments: Seq[String]): Path = apply(segments mkString JFile.separator)
+  def apply(segments: Seq[String]): Path = apply(segments mkString java.io.File.separator)
   def apply(path: String): Path = apply(new JFile(path))
   def apply(jfile: JFile): Path =
     if (jfile.isFile) new File(jfile)
@@ -96,8 +84,8 @@ import Path._
  *  semantics regarding how a Path might relate to the world.
  */
 class Path private[io] (val jfile: JFile) {
-  val separator = JFile.separatorChar
-  val separatorStr = JFile.separator
+  val separator = java.io.File.separatorChar
+  val separatorStr = java.io.File.separator
 
   // Validation: this verifies that the type of this object and the
   // contents of the filesystem are in agreement.  All objects are
@@ -109,6 +97,7 @@ class Path private[io] (val jfile: JFile) {
   def toFile: File = new File(jfile)
   def toDirectory: Directory = new Directory(jfile)
   def toAbsolute: Path = if (isAbsolute) this else Path(jfile.getAbsolutePath())
+  def toCanonical: Path = Path(jfile.getCanonicalPath())
   def toURI: URI = jfile.toURI()
   def toURL: URL = toURI.toURL()
   /** If this path is absolute, returns it: otherwise, returns an absolute
@@ -142,7 +131,7 @@ class Path private[io] (val jfile: JFile) {
   // identity
   def name: String = jfile.getName()
   def path: String = jfile.getPath()
-  def normalize: Path = Path(jfile.getCanonicalPath())
+  def normalize: Path = Path(jfile.getAbsolutePath())
   def isRootPath: Boolean = roots exists (_ isSame this)
 
   def resolve(other: Path) = if (other.isAbsolute || isEmpty) other else /(other)
@@ -184,21 +173,29 @@ class Path private[io] (val jfile: JFile) {
     if (p isSame this) Nil else p :: p.parents
   }
   // if name ends with an extension (e.g. "foo.jpg") returns the extension ("jpg"), otherwise ""
-  def extension: String = (name lastIndexOf '.') match {
-    case -1   => ""
-    case idx  => name drop (idx + 1)
+  def extension: String = {
+    var i = name.length - 1
+    while (i >= 0 && name.charAt(i) != '.')
+      i -= 1
+
+    if (i < 0) ""
+    else name.substring(i + 1)
   }
+  // def extension: String = (name lastIndexOf '.') match {
+  //   case -1   => ""
+  //   case idx  => name drop (idx + 1)
+  // }
   // compares against extensions in a CASE INSENSITIVE way.
   def hasExtension(ext: String, exts: String*) = {
-    val xs = (ext +: exts) map (_.toLowerCase)
-    xs contains extension.toLowerCase
+    val lower = extension.toLowerCase
+    ext.toLowerCase == lower || exts.exists(_.toLowerCase == lower)
   }
   // returns the filename without the extension.
   def stripExtension: String = name stripSuffix ("." + extension)
   // returns the Path with the extension.
   def addExtension(ext: String): Path = Path(path + "." + ext)
   // changes the existing extension out for a new one
-  def changeExtension(ext: String): Path = Path((path stripSuffix extension) + ext)
+  def changeExtension(ext: String): Path = Path(path stripSuffix extension) addExtension ext
 
   // conditionally execute
   def ifFile[T](f: File => T): Option[T] = if (isFile) Some(f(toFile)) else None
@@ -214,10 +211,6 @@ class Path private[io] (val jfile: JFile) {
   def isDirectory = jfile.isDirectory()
   def isAbsolute = jfile.isAbsolute()
   def isHidden = jfile.isHidden()
-  def isSymlink = {
-    val x = parent / name
-    x.normalize != x.toAbsolute
-  }
   def isEmpty = path.length == 0
 
   // Information
@@ -228,7 +221,7 @@ class Path private[io] (val jfile: JFile) {
   // Boolean path comparisons
   def endsWith(other: Path) = segments endsWith other.segments
   def startsWith(other: Path) = segments startsWith other.segments
-  def isSame(other: Path) = normalize == other.normalize
+  def isSame(other: Path) = toCanonical == other.toCanonical
   def isFresher(other: Path) = lastModified > other.lastModified
 
   // creations
@@ -248,6 +241,19 @@ class Path private[io] (val jfile: JFile) {
   // deletions
   def delete() = jfile.delete()
   def deleteIfExists() = if (jfile.exists()) delete() else false
+
+  /** Deletes the path recursively. Returns false on failure.
+   *  Use with caution!
+   */
+  def deleteRecursively(): Boolean = deleteRecursively(jfile)
+  private def deleteRecursively(f: JFile): Boolean = {
+    if (f.isDirectory) f.listFiles match {
+      case null =>
+      case xs   => xs foreach deleteRecursively
+    }
+    f.delete()
+  }
+
   def truncate() =
     isFile && {
       val raf = new RandomAccessFile(jfile, "rw")

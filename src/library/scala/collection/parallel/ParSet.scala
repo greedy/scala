@@ -1,3 +1,12 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
+
 package scala.collection.parallel
 
 
@@ -7,6 +16,7 @@ package scala.collection.parallel
 
 
 import scala.collection.Set
+import scala.collection.GenSet
 import scala.collection.mutable.Builder
 import scala.collection.generic._
 
@@ -15,14 +25,25 @@ import scala.collection.generic._
 
 
 
+/** A template trait for parallel sets.
+ *
+ *  $sideeffects
+ *
+ *  @tparam T    the element type of the set
+ *
+ *  @author Aleksandar Prokopec
+ *  @since 2.9
+ */
 trait ParSet[T]
-extends Set[T]
+extends GenSet[T]
    with GenericParTemplate[T, ParSet]
    with ParIterable[T]
    with ParSetLike[T, ParSet[T], Set[T]]
 {
 self =>
   override def empty: ParSet[T] = mutable.ParHashSet[T]()
+
+  //protected[this] override def newCombiner: Combiner[T, ParSet[T]] = ParSet.newCombiner[T]
 
   override def companion: GenericCompanion[ParSet] with GenericParCompanion[ParSet] = ParSet
 
@@ -36,22 +57,6 @@ object ParSet extends ParSetFactory[ParSet] {
 
   implicit def canBuildFrom[T]: CanCombineFrom[Coll, T, ParSet[T]] = new GenericCanCombineFrom[T]
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

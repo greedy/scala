@@ -2,16 +2,17 @@ package scala.tools.nsc
 package dependencies
 
 import util.SourceFile
-import io.{ AbstractFile, Path }
+import io.Path
 import collection._
 import symtab.Flags
+import scala.tools.nsc.io.AbstractFile
 
 trait DependencyAnalysis extends SubComponent with Files {
   import global._
 
   val phaseName = "dependencyAnalysis"
 
-  def off                  = settings.make.isDefault
+  def off                  = settings.make.isDefault || settings.make.value == "all"
   def shouldCheckClasspath = settings.make.value != "transitivenocp"
 
   def newPhase(prev: Phase) = new AnalysisPhase(prev)
@@ -35,9 +36,9 @@ trait DependencyAnalysis extends SubComponent with Files {
   }
 
   lazy val maxDepth = settings.make.value match {
-    case "changed" => 0
-    case "transitive" | "transitivenocp" => Int.MaxValue
+    case "changed"   => 0
     case "immediate" => 1
+    case _           => Int.MaxValue
   }
 
   // todo: order insensible checking and, also checking timestamp?
@@ -176,6 +177,7 @@ trait DependencyAnalysis extends SubComponent with Files {
               && (tree.symbol != NoSymbol)
               && (!tree.symbol.isPackage)
               && (!tree.symbol.isJavaDefined)
+              && (!tree.symbol.tpe.isError)
               && ((tree.symbol.sourceFile eq null)
                   || (tree.symbol.sourceFile.path != file.path))
               && (!tree.symbol.isClassConstructor)) {
@@ -231,6 +233,10 @@ trait DependencyAnalysis extends SubComponent with Files {
               for (tp <- t.args) checkType(tp)
 
             case t: PolyType   =>
+              checkType(t.resultType)
+              updateReferences(t.typeSymbol.fullName)
+
+            case t: NullaryMethodType =>
               checkType(t.resultType)
               updateReferences(t.typeSymbol.fullName)
 

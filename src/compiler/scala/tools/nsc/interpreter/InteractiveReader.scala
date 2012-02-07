@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Stepan Koltsov
  */
 
@@ -9,52 +9,50 @@ package interpreter
 import java.io.IOException
 import java.nio.channels.ClosedByInterruptException
 import scala.util.control.Exception._
+import session.History
 import InteractiveReader._
+import Properties.isMac
 
 /** Reads lines from an input stream */
 trait InteractiveReader {
+  val interactive: Boolean
+
+  def init(): Unit
+  def reset(): Unit
+
+  def history: History
+  def completion: Completion
+  def keyBindings: List[KeyBinding]
+  def eraseLine(): Unit
+  def redrawLine(): Unit
+  def currentLine: String
+
+  def readYesOrNo(prompt: String, alt: => Boolean): Boolean = readOneKey(prompt) match {
+    case 'y'  => true
+    case 'n'  => false
+    case _    => alt
+  }
+  def readAssumingNo(prompt: String)  = readYesOrNo(prompt, false)
+  def readAssumingYes(prompt: String) = readYesOrNo(prompt, true)
 
   protected def readOneLine(prompt: String): String
-  val interactive: Boolean
-  def init(): Unit = ()
-  def reset(): Unit = ()
-  def redrawLine(): Unit = ()
-  def currentLine = ""    // the current buffer contents, if available
+  protected def readOneKey(prompt: String): Int
 
-  def readLine(prompt: String): String = {
-    def handler: Catcher[String] = {
-      case e: ClosedByInterruptException          => system.error("Reader closed by interrupt.")
-      // Terminal has to be re-initialized after SIGSTP or up arrow etc. stop working.
-      case e: IOException if restartSystemCall(e) => reset() ; readLine(prompt)
-    }
-    catching(handler) { readOneLine(prompt) }
-  }
-
-  // override if history is available
-  def history: Option[History] = None
-  def historyList = history map (_.asList) getOrElse Nil
-
-  // override if completion is available
-  def completion: Option[Completion] = None
-
-  // hack necessary for OSX jvm suspension because read calls are not restarted after SIGTSTP
-  private def restartSystemCall(e: Exception): Boolean =
-    Properties.isMac && (e.getMessage == msgEINTR)
+  def readLine(prompt: String): String =
+    // hack necessary for OSX jvm suspension because read calls are not restarted after SIGTSTP
+    if (isMac) restartSysCalls(readOneLine(prompt), reset())
+    else readOneLine(prompt)
 }
 
 object InteractiveReader {
   val msgEINTR = "Interrupted system call"
-  def createDefault(): InteractiveReader = createDefault(null)
-
-  /** Create an interactive reader.  Uses <code>JLineReader</code> if the
-   *  library is available, but otherwise uses a <code>SimpleReader</code>.
-   */
-  def createDefault(interpreter: Interpreter): InteractiveReader =
-    try new JLineReader(interpreter)
-    catch {
-      case e @ (_: Exception | _: NoClassDefFoundError) =>
-        // println("Failed to create JLineReader(%s): %s".format(interpreter, e))
-        new SimpleReader
+  def restartSysCalls[R](body: => R, reset: => Unit): R =
+    try body catch {
+      case e: IOException if e.getMessage == msgEINTR => reset ; body
     }
+
+  def apply(): InteractiveReader = SimpleReader()
+  @deprecated("Use `apply` instead.", "2.9.0")
+  def createDefault(): InteractiveReader = apply()
 }
 

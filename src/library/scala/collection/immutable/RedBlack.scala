@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -35,11 +35,12 @@ abstract class RedBlack[A] extends Serializable {
     def delete(k: A): Tree[B] = blacken(del(k))
     def range(from: Option[A], until: Option[A]): Tree[B] = blacken(rng(from, until))
     def foreach[U](f: (A, B) =>  U)
-    @deprecated("use `foreach' instead")
+    @deprecated("use `foreach` instead", "2.8.0")
     def visit[T](input: T)(f: (T, A, B) => (Boolean, T)): (Boolean, T)
     def toStream: Stream[(A,B)]
     def iterator: Iterator[(A, B)]
-    @deprecated("use `iterator' instead") def elements = iterator
+    @deprecated("use `iterator` instead", "2.8.0")
+    def elements = iterator
     def upd[B1 >: B](k: A, v: B1): Tree[B1]
     def del(k: A): Tree[B]
     def smallest: NonEmpty[B]
@@ -98,7 +99,7 @@ abstract class RedBlack[A] extends Serializable {
       }
       def subl(t: Tree[B]) = t match {
         case BlackTree(x, xv, a, b) => RedTree(x, xv, a, b)
-        case _ => system.error("Defect: invariance violation; expected black, got "+t)
+        case _ => sys.error("Defect: invariance violation; expected black, got "+t)
       }
       def balLeft(x: A, xv: B, tl: Tree[B], tr: Tree[B]) = (tl, tr) match {
         case (RedTree(y, yv, a, b), c) =>
@@ -107,7 +108,7 @@ abstract class RedBlack[A] extends Serializable {
           balance(x, xv, bl, RedTree(y, yv, a, b))
         case (bl, RedTree(y, yv, BlackTree(z, zv, a, b), c)) =>
           RedTree(z, zv, BlackTree(x, xv, bl, a), balance(y, yv, b, subl(c)))
-        case _ => system.error("Defect: invariance violation at "+right)
+        case _ => sys.error("Defect: invariance violation at "+right)
       }
       def balRight(x: A, xv: B, tl: Tree[B], tr: Tree[B]) = (tl, tr) match {
         case (a, RedTree(y, yv, b, c)) =>
@@ -116,7 +117,7 @@ abstract class RedBlack[A] extends Serializable {
           balance(x, xv, RedTree(y, yv, a, b), bl)
         case (RedTree(y, yv, a, BlackTree(z, zv, b, c)), bl) =>
           RedTree(z, zv, balance(y, yv, subl(a), b), BlackTree(x, xv, c, bl))
-        case _ => system.error("Defect: invariance violation at "+left)
+        case _ => sys.error("Defect: invariance violation at "+left)
       }
       def delLeft = left match {
         case _: BlackTree[_] => balLeft(key, value, left.del(k), right)
@@ -164,7 +165,7 @@ abstract class RedBlack[A] extends Serializable {
       right foreach f
     }
 
-    @deprecated("use `foreach' instead")
+    @deprecated("use `foreach` instead", "2.8.0")
     def visit[T](input: T)(f: (T,A,B) => (Boolean, T)): (Boolean, T) = {
       val left = this.left.visit(input)(f)
       if (!left._1) return left
@@ -237,7 +238,7 @@ abstract class RedBlack[A] extends Serializable {
         case BlackTree(_, _, _, _) :: tail =>
           if (depth == 1) zipper else findDepth(tail, depth - 1)
         case _ :: tail => findDepth(tail, depth)
-        case Nil => system.error("Defect: unexpected empty zipper while computing range")
+        case Nil => sys.error("Defect: unexpected empty zipper while computing range")
       }
 
       // Blackening the smaller tree avoids balancing problems on union;
@@ -280,7 +281,7 @@ abstract class RedBlack[A] extends Serializable {
 
     def foreach[U](f: (A, Nothing) => U) {}
 
-    @deprecated("use `foreach' instead")
+    @deprecated("use `foreach` instead", "2.8.0")
     def visit[T](input: T)(f: (T, A, Nothing) => (Boolean, T)) = (true, input)
 
     def rng(from: Option[A], until: Option[A]) = this

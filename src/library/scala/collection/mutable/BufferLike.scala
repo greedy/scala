@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -13,7 +13,7 @@ package mutable
 
 import generic._
 import script._
-import annotation.migration
+import annotation.{migration, bridge}
 
 /** A template trait for buffers of type `Buffer[A]`.
  *
@@ -90,7 +90,7 @@ trait BufferLike[A, +This <: BufferLike[A, This] with Buffer[A]]
    *
    *  @param n      the index where new elements are inserted.
    *  @param elems  the traversable collection containing the elements to insert.
-   *  @throws   IndexOutofBoundsException if the index `n` is not in the valid range
+   *  @throws   IndexOutOfBoundsException if the index `n` is not in the valid range
    *            `0 <= n <= length`.
    */
   def insertAll(n: Int, elems: collection.Traversable[A])
@@ -99,7 +99,7 @@ trait BufferLike[A, +This <: BufferLike[A, This] with Buffer[A]]
     *
     *  @param n  the index which refers to the element to delete.
     *  @return   the previous element at index `n`
-    *   @throws   IndexOutofBoundsException if the if the index `n` is not in the valid range
+    *   @throws   IndexOutOfBoundsException if the if the index `n` is not in the valid range
     *            `0 <= n < length`.
     */
   def remove(n: Int): A
@@ -108,7 +108,7 @@ trait BufferLike[A, +This <: BufferLike[A, This] with Buffer[A]]
    *
    *  @param n  the index which refers to the first element to remove.
    *  @param count  the number of elements to remove.
-   *  @throws   IndexOutofBoundsException if the index `n` is not in the valid range
+   *  @throws   IndexOutOfBoundsException if the index `n` is not in the valid range
    *            `0 <= n <= length - count`.
    *  @throws   IllegalArgumentException if `count < 0`.
    */
@@ -160,7 +160,7 @@ trait BufferLike[A, +This <: BufferLike[A, This] with Buffer[A]]
    *
    *  @param n      the index where new elements are inserted.
    *  @param elems  the traversable collection containing the elements to insert.
-   *  @throws   IndexOutofBoundsException if the index `n` is not in the valid range
+   *  @throws   IndexOutOfBoundsException if the index `n` is not in the valid range
    *            `0 <= n <= length`.
    */
   def insert(n: Int, elems: A*) { insertAll(n, elems) }
@@ -220,7 +220,7 @@ trait BufferLike[A, +This <: BufferLike[A, This] with Buffer[A]]
    *  @param start  the first element to append
    *  @param len    the number of elements to append
    */
-  @deprecated("replace by: `buf ++= src.view(start, end)`")
+  @deprecated("replace by: `buf ++= src.view(start, end)`", "2.8.0")
   def ++=(src: Array[A], start: Int, len: Int) {
     var i = start
     val end = i + len
@@ -234,26 +234,26 @@ trait BufferLike[A, +This <: BufferLike[A, This] with Buffer[A]]
    *  the collection itself.
    *
    *  $compatMutate
-   *  You are strongly recommended to use '+=' instead.
+   *  You are strongly recommended to use `+=` instead.
    *
    *  @param elem  the element to add.
    */
   @deprecated("Use += instead if you intend to add by side effect to an existing collection.\n"+
-              "Use `clone() +=' if you intend to create a new collection.")
+              "Use `clone() +=` if you intend to create a new collection.", "2.8.0")
   def + (elem: A): This = { +=(elem); repr }
 
   /** Adds two or more elements to this collection and returns
    *  the collection itself.
    *
    *  $compatMutate
-   *  You are strongly recommended to use '++=' instead.
+   *  You are strongly recommended to use `++=` instead.
    *
    *  @param elem1 the first element to add.
    *  @param elem2 the second element to add.
    *  @param elems the remaining elements to add.
    */
   @deprecated("Use ++= instead if you intend to add by side effect to an existing collection.\n"+
-              "Use `clone() ++=' if you intend to create a new collection.")
+              "Use `clone() ++=` if you intend to create a new collection.", "2.8.0")
   def + (elem1: A, elem2: A, elems: A*): This = {
     this += elem1 += elem2 ++= elems
     repr
@@ -269,7 +269,10 @@ trait BufferLike[A, +This <: BufferLike[A, This] with Buffer[A]]
     "As of 2.8, ++ always creates a new collection, even on Buffers.\n"+
     "Use ++= instead if you intend to add by side effect to an existing collection.\n"
   )
-  def ++(xs: TraversableOnce[A]): This = clone() ++= xs
+  def ++(xs: GenTraversableOnce[A]): This = clone() ++= xs.seq
+
+  @bridge
+  def ++(xs: TraversableOnce[A]): This = ++(xs: GenTraversableOnce[A])
 
   /** Creates a new collection with all the elements of this collection except `elem`.
    *
@@ -308,5 +311,7 @@ trait BufferLike[A, +This <: BufferLike[A, This] with Buffer[A]]
     "As of 2.8, -- always creates a new collection, even on Buffers.\n"+
     "Use --= instead if you intend to remove by side effect from an existing collection.\n"
   )
-  override def --(xs: TraversableOnce[A]): This = clone() --= xs
+  override def --(xs: GenTraversableOnce[A]): This = clone() --= xs.seq
+
+  @bridge def --(xs: TraversableOnce[A]): This = --(xs: GenTraversableOnce[A])
 }

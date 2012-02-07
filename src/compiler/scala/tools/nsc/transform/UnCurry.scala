@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author
  */
 
@@ -10,7 +10,7 @@ import symtab.Flags._
 import scala.collection.{ mutable, immutable }
 
 /*<export> */
-/** - uncurry all symbol and tree types (@see UnCurryPhase)
+/** - uncurry all symbol and tree types (@see UnCurryPhase) -- this includes normalizing all proper types.
  *  - for every curried parameter list:  (ps_1) ... (ps_n) ==> (ps_1, ..., ps_n)
  *  - for every curried application: f(args_1)...(args_n) ==> f(args_1, ..., args_n)
  *  - for every type application: f[Ts] ==> f[Ts]() unless followed by parameters
@@ -19,7 +19,7 @@ import scala.collection.{ mutable, immutable }
  *  - for every use of a def-parameter: x ==> x.apply()
  *  - for every argument to a def parameter `x: => T':
  *      if argument is not a reference to a def parameter:
- *        convert argument `e' to (expansion of) `() => e'
+ *        convert argument `e` to (expansion of) `() => e'
  *  - for every repeated Scala parameter `x: T*' --> x: Seq[T].
  *  - for every repeated Java parameter `x: T...' --> x: Array[T], except:
  *    if T is an unbounded abstract type, replace --> x: Array[Object]
@@ -66,10 +66,8 @@ abstract class UnCurry extends InfoTransform with TypingTransformers with ast.Tr
           tp0
         case MethodType(h :: t, restpe) if h.isImplicit =>
           apply(MethodType(h.cloneSymbol.resetFlag(IMPLICIT) :: t, restpe))
-        case PolyType(List(), restpe) => // nullary method type
+        case NullaryMethodType(restpe) =>
           apply(MethodType(List(), restpe))
-        case PolyType(tparams, restpe) => // polymorphic nullary method type, since it didn't occur in a higher-kinded position
-          PolyType(tparams, apply(MethodType(List(), restpe)))
         case TypeRef(pre, ByNameParamClass, List(arg)) =>
           apply(functionType(List(), arg))
         case TypeRef(pre, RepeatedParamClass, args) =>
@@ -81,29 +79,6 @@ abstract class UnCurry extends InfoTransform with TypingTransformers with ast.Tr
           expandAlias(mapOver(tp))
       }
     }
-
-//@M TODO: better fix for the gross hack that conflates polymorphic nullary method types with type functions
-// `[tpars] tref` (PolyType(tpars, tref)) could uncurry to either:
-//   - `[tpars]() tref` (PolyType(tpars, MethodType(List(), tref))
-//         a nullary method types uncurry to a method with an empty argument list
-//   - `[tpars] tref`   (PolyType(tpars, tref))
-//         a proper type function -- see mapOverArgs: can only occur in args of TypeRef (right?))
-// the issue comes up when a partial type application gets normalised to a polytype, like `[A] Function1[X, A]`
-// should not apply the uncurry transform to such a type
-// see #2594 for an example
-
-    // decide whether PolyType represents a nullary method type (only if type has kind *)
-    // for higher-kinded types, leave PolyType intact
-    override def mapOverArgs(args: List[Type], tparams: List[Symbol]): List[Type] =
-      map2Conserve(args, tparams) { (arg, tparam) =>
-        arg match {
-          // is this a higher-kinded position? (TODO: confirm this is the only case)
-          case PolyType(tparams, restpe) if tparam.typeParams.nonEmpty =>  // higher-kinded type param
-            PolyType(tparams, apply(restpe)) // could not be a nullary method type
-          case _ =>
-            this(arg)
-        }
-      }
   }
 
   private val uncurryType = new TypeMap {
@@ -131,7 +106,7 @@ abstract class UnCurry extends InfoTransform with TypingTransformers with ast.Tr
     if (sym.isType) uncurryType(tp) else uncurry(tp)
 
   /** Traverse tree omitting local method definitions.
-   *  If a `return' is encountered, set `returnFound' to true.
+   *  If a `return` is encountered, set `returnFound` to true.
    *  Used for MSIL only.
    */
   private object lookForReturns extends Traverser {
@@ -158,6 +133,9 @@ abstract class UnCurry extends InfoTransform with TypingTransformers with ast.Tr
     private val newMembers = mutable.ArrayBuffer[Tree]()
     private val repeatedParams = mutable.Map[Symbol, List[ValDef]]()
 
+    private lazy val serialVersionUIDAnnotation =
+      AnnotationInfo(SerialVersionUIDAttr.tpe, List(Literal(Constant(0))), List())
+
     override def transformUnit(unit: CompilationUnit) {
       freeMutableVars.clear()
       freeLocalsTraverser(unit.body)
@@ -177,8 +155,8 @@ abstract class UnCurry extends InfoTransform with TypingTransformers with ast.Tr
         throw ex
     }
 
-    /* Is tree a reference `x' to a call by name parameter that needs to be converted to
-     * x.apply()? Note that this is not the case if `x' is used as an argument to another
+    /* Is tree a reference `x` to a call by name parameter that needs to be converted to
+     * x.apply()? Note that this is not the case if `x` is used as an argument to another
      * call by name parameter.
      */
     def isByNameRef(tree: Tree): Boolean =
@@ -334,6 +312,7 @@ abstract class UnCurry extends InfoTransform with TypingTransformers with ast.Tr
         val applyMethod = anonClass.newMethod(fun.pos, nme.apply) setFlag FINAL
         applyMethod setInfo MethodType(applyMethod newSyntheticValueParams formals, restpe)
         anonClass.info.decls enter applyMethod
+        anonClass.addAnnotation(serialVersionUIDAnnotation)
 
         fun.vparams foreach (_.symbol.owner = applyMethod)
         new ChangeOwnerTraverser(fun.symbol, applyMethod) traverse fun.body
@@ -489,8 +468,7 @@ abstract class UnCurry extends InfoTransform with TypingTransformers with ast.Tr
 // ------ The tree transformers --------------------------------------------------------
 
     def mainTransform(tree: Tree): Tree = {
-
-      def withNeedLift(needLift: Boolean)(f: => Tree): Tree = {
+      @inline def withNeedLift(needLift: Boolean)(f: => Tree): Tree = {
         val saved = needTryLift
         needTryLift = needLift
         try f
@@ -504,7 +482,7 @@ abstract class UnCurry extends InfoTransform with TypingTransformers with ast.Tr
       def shouldBeLiftedAnyway(tree: Tree) = false && // buggy, see #1981
         forMSIL && lookForReturns.found(tree)
 
-      /** Transform tree `t' to { def f = t; f } where `f' is a fresh name
+      /** Transform tree `t` to { def f = t; f } where `f` is a fresh name
        */
       def liftTree(tree: Tree) = {
         if (settings.debug.value)
@@ -583,7 +561,7 @@ abstract class UnCurry extends InfoTransform with TypingTransformers with ast.Tr
           val args1 = transformTrees(fn.symbol.name match {
             case nme.unapply    => args
             case nme.unapplySeq => transformArgs(tree.pos, fn.symbol, args, analyzer.unapplyTypeListFromReturnTypeSeq(fn.tpe))
-            case _              => system.error("internal error: UnApply node has wrong symbol")
+            case _              => sys.error("internal error: UnApply node has wrong symbol")
           })
           treeCopy.UnApply(tree, fn1, args1)
 
@@ -636,10 +614,10 @@ abstract class UnCurry extends InfoTransform with TypingTransformers with ast.Tr
 
     def postTransform(tree: Tree): Tree = atPhase(phase.next) {
       def applyUnary(): Tree = {
-        def needsParens = tree.symbol.isMethod && (!tree.tpe.isInstanceOf[PolyType] || tree.tpe.typeParams.isEmpty)
+        def needsParens = tree.symbol.isMethod && !tree.tpe.isInstanceOf[PolyType] // TODO_NMT: verify that the inner tree of a type-apply also gets parens if the whole tree is a polymorphic nullary method application
         def repair = {
-          if (!tree.tpe.isInstanceOf[MethodType])
-            tree.tpe = MethodType(Nil, tree.tpe)
+          if (!tree.tpe.isInstanceOf[MethodType]) // i.e., it's a NullaryMethodType
+            tree.tpe = MethodType(Nil, tree.tpe.resultType) // TODO_NMT: I think the original `tree.tpe` was wrong, since that would set the method's resulttype to PolyType(Nil, restp) instead of restp
 
           atPos(tree.pos)(Apply(tree, Nil) setType tree.tpe.resultType)
         }

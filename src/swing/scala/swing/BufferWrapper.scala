@@ -1,16 +1,15 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2007-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2007-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
 \*                                                                      */
 
-
-
 package scala.swing
 
 import scala.collection.mutable.Buffer
+import scala.collection.Iterator
 
 /**
  * Default partial implementation for buffer adapters.
@@ -21,7 +20,7 @@ protected[swing] abstract class BufferWrapper[A] extends Buffer[A] { outer =>
     remove(n)
     insertAt(n, a)
   }
-  def insertAll(n: Int, elems: scala.collection.Traversable[A]) {
+  def insertAll(n: Int, elems: Traversable[A]) {
     var i = n
     for (el <- elems) {
       insertAt(i, el)

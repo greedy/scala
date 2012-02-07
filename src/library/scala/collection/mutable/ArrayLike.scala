@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -47,19 +47,19 @@ trait ArrayLike[A, +Repr] extends IndexedSeqOptimized[A, Repr] { self =>
     override def stringPrefix = "Array"
   }
 
-  @deprecated("use deep.toString instead")
+  @deprecated("use deep.toString instead", "2.8.0")
   final def deepToString() =
     deep.toString
 
-  @deprecated("use deep.mkString instead")
+  @deprecated("use deep.mkString instead", "2.8.0")
   final def deepMkString(start: String, sep: String, end: String): String =
     deep.mkString(start, sep, end)
 
-  @deprecated("use deep.mkString instead")
+  @deprecated("use deep.mkString instead", "2.8.0")
   final def deepMkString(sep: String): String =
     deepMkString("", sep, "")
 
-  @deprecated("use array1.deep.equals(array2.deep) instead")
+  @deprecated("use array1.deep.equals(array2.deep) instead", "2.8.0")
   final def deepEquals(that: Any): Boolean = that match {
     case x: AnyRef if x.getClass.isArray => deep.equals(WrappedArray.make(x).deep)
     case _ => false

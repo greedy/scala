@@ -75,7 +75,7 @@ abstract class Inliners extends SubComponent {
    */
   class Inliner {
     object NonPublicRefs extends Enumeration {
-      val Public, Protected, Private = Value
+      val Private, Protected, Public = Value
 
       /** Cache whether a method calls private members. */
       val usesNonPublics: mutable.Map[IMethod, Value] = new mutable.HashMap
@@ -113,9 +113,9 @@ abstract class Inliners extends SubComponent {
     	override def default(k: Symbol) = 0
     }
 
-    def analyzeMethod(m: IMethod) {
-      var sizeBeforeInlining = if (m.code ne null) m.code.blocks.length else 0
-      var instrBeforeInlining = if (m.code ne null) m.code.blocks.foldLeft(0)(_ + _.length)  else 0
+    def analyzeMethod(m: IMethod): Unit = {
+      var sizeBeforeInlining  = if (m.code ne null) m.code.blockCount else 0
+      var instrBeforeInlining = if (m.code ne null) m.code.instructionCount else 0
       var retry = false
       var count = 0
       fresh.clear()
@@ -229,16 +229,19 @@ abstract class Inliners extends SubComponent {
 
       m.normalize
       if (sizeBeforeInlining > 0) {
-        val instrAfterInlining = m.code.blocks.foldLeft(0)(_ + _.length)
+        val instrAfterInlining = m.code.instructionCount
         val prefix = if ((instrAfterInlining > 2 * instrBeforeInlining) && (instrAfterInlining > 200)) " !! " else ""
         log(prefix + " %s blocks before inlining: %d (%d) after: %d (%d)".format(
-          m.symbol.fullName, sizeBeforeInlining, instrBeforeInlining, m.code.blocks.length, instrAfterInlining))
+          m.symbol.fullName, sizeBeforeInlining, instrBeforeInlining, m.code.blockCount, instrAfterInlining))
       }
     }
 
-    private def isMonadicMethod(sym: Symbol) = sym.name match {
-      case nme.foreach | nme.filter | nme.withFilter | nme.map | nme.flatMap => true
-      case _                                                                 => false
+    private def isMonadicMethod(sym: Symbol) = {
+      val (origName, _, _) = nme.splitSpecializedName(sym.name)
+      origName match {
+        case nme.foreach | nme.filter | nme.withFilter | nme.map | nme.flatMap => true
+        case _ => false
+      }
     }
 
     private def isHigherOrderMethod(sym: Symbol) =
@@ -296,7 +299,7 @@ abstract class Inliners extends SubComponent {
       def isMonadic     = isMonadicMethod(sym)
 
       def handlers      = m.exh
-      def blocks        = if (m.code eq null) system.error("blocks = null + " + m) else m.code.blocks
+      def blocks        = if (m.code eq null) sys.error("blocks = null + " + m) else m.code.blocks
       def locals        = m.locals
       def length        = blocks.length
       def openBlocks    = blocks filterNot (_.closed)
@@ -380,7 +383,7 @@ abstract class Inliners extends SubComponent {
           handler
         }
 
-        /** alfa-rename `l' in caller's context. */
+        /** alfa-rename `l` in caller's context. */
         def dupLocal(l: Local): Local = {
           val sym = caller.sym.newVariable(l.sym.pos, freshName(l.sym.name.toString))
           // sym.setInfo(l.sym.tpe)
@@ -518,6 +521,7 @@ abstract class Inliners extends SubComponent {
         case Public     => true
       }
       private def sameSymbols = caller.sym == inc.sym
+      private def sameOwner   = caller.owner == inc.owner
 
       /** A method is safe to inline when:
        *    - it does not contain calls to private methods when
@@ -534,7 +538,7 @@ abstract class Inliners extends SubComponent {
             if (settings.debug.value)
               log("Making not-private symbol out of synthetic: " + f)
 
-            f setFlag Flags.notPRIVATE
+            f setNotFlag Flags.PRIVATE
             true
           }
 
@@ -567,17 +571,11 @@ abstract class Inliners extends SubComponent {
             case _                            => Public
           }
 
-          def iterate(): NonPublicRefs.Value = {
-            var seenProtected = false
-            inc.instructions foreach { i =>
-              getAccess(i) match {
-                case Private    => return Private
-                case Protected  => seenProtected = true
-                case _          => ()
-              }
-            }
-            if (seenProtected) Protected else Public
-          }
+          def iterate(): NonPublicRefs.Value = inc.instructions.foldLeft(Public)((res, inc) => getAccess(inc) match {
+            case Private    => return Private
+            case Protected  => Protected
+            case Public     => res
+          })
           iterate()
         })
 
@@ -641,7 +639,7 @@ abstract class Inliners extends SubComponent {
     def lookupIMethod(meth: Symbol, receiver: Symbol): Option[IMethod] = {
       def tryParent(sym: Symbol) = icodes icode sym flatMap (_ lookupMethod meth)
 
-      receiver.info.baseClasses.iterator map tryParent find (_.isDefined) getOrElse None
+      receiver.info.baseClasses.iterator map tryParent find (_.isDefined) flatten
     }
   } /* class Inliner */
 } /* class Inliners */

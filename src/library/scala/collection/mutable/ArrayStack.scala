@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -25,9 +25,10 @@ object ArrayStack extends SeqFactory[ArrayStack] {
   implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, ArrayStack[A]] = new GenericCanBuildFrom[A]
   def newBuilder[A]: Builder[A, ArrayStack[A]] = new ArrayStack[A]
   def empty: ArrayStack[Nothing] = new ArrayStack()
-  def apply[A: ClassManifest](elems: A*): ArrayStack[A]= {
+  def apply[A: ClassManifest](elems: A*): ArrayStack[A] = {
     val els: Array[AnyRef] = elems.reverse.map{_.asInstanceOf[AnyRef]}(breakOut)
-    new ArrayStack[A](els, els.length)
+    if (els.length == 0) new ArrayStack()
+    else new ArrayStack[A](els, els.length)
   }
 
   private[mutable] def growArray(x: Array[AnyRef]) = {
@@ -113,8 +114,8 @@ extends Seq[T]
    *
    *  @return the element on top of the stack
    */
-  def pop: T = {
-    if (index == 0) system.error("Stack empty")
+  def pop(): T = {
+    if (index == 0) sys.error("Stack empty")
     index -= 1
     val x = table(index).asInstanceOf[T]
     table(index) = null
@@ -122,7 +123,7 @@ extends Seq[T]
   }
 
   /** View the top element of the stack. */
-  @deprecated("use top instead")
+  @deprecated("use top instead", "2.8.0")
   def peek = top
 
   /** View the top element of the stack.
@@ -140,10 +141,10 @@ extends Seq[T]
    *  the top equal to the element that was previously at the top.
    *  If the stack is empty, an exception is thrown.
    */
-  def dup = push(top)
+  def dup() = push(top)
 
   /** Empties the stack. */
-  def clear {
+  def clear() {
     index = 0
     table = new Array(1)
   }
@@ -160,7 +161,7 @@ extends Seq[T]
    *  @param x  The source of elements to push.
    *  @return   A reference to this stack.
    */
-  override def ++=(xs: TraversableOnce[T]): this.type = { xs foreach += ; this }
+  override def ++=(xs: TraversableOnce[T]): this.type = { xs.seq foreach += ; this }
 
   /** Does the same as `push`, but returns the updated stack.
    *
@@ -169,7 +170,22 @@ extends Seq[T]
    */
   def +=(x: T): this.type = { push(x); this }
 
-  def result = new ArrayStack[T](table.reverse, index)
+  def result = {
+    reverseTable()
+    this
+  }
+
+  private def reverseTable() {
+    var i = 0
+    val until = index / 2
+    while (i < until) {
+      val revi = index - i - 1
+      val tmp = table(i)
+      table(i) = table(revi)
+      table(revi) = tmp
+      i += 1
+    }
+  }
 
   /** Pop the top two elements off the stack, apply `f` to them and push the result
    *  back on to the stack.
@@ -215,7 +231,7 @@ extends Seq[T]
   def iterator: Iterator[T] = new Iterator[T] {
     var currentIndex = index
     def hasNext = currentIndex > 0
-    def next = {
+    def next() = {
       currentIndex -= 1
       table(currentIndex).asInstanceOf[T]
     }
@@ -229,5 +245,5 @@ extends Seq[T]
     }
   }
 
-  override def clone = new ArrayStack[T](ArrayStack.clone(table), index)
+  override def clone() = new ArrayStack[T](ArrayStack.clone(table), index)
 }

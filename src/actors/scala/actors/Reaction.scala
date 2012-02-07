@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -24,7 +24,7 @@ private[actors] class KillActorControl extends ControlThrowable
  *
  *  @author Philipp Haller
  */
-@deprecated("This class will be removed in a future release")
+@deprecated("This class will be removed in a future release", "2.7.7")
 class Reaction(a: Actor, f: PartialFunction[Any, Any], msg: Any)
 extends ActorTask(a, if (f == null) (() => a.act()) else null, f, msg) {
 

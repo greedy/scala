@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -13,8 +13,8 @@ import java.lang.Float.intBitsToFloat
 import java.lang.Double.longBitsToDouble
 
 import cmd.program.Simple
-import symtab.{ Flags, Names }
-import scala.reflect.generic.{ PickleBuffer, PickleFormat }
+import scala.reflect.internal.{Flags, Names}
+import scala.reflect.internal.pickling.{ PickleBuffer, PickleFormat }
 import interpreter.ByteCode.scalaSigBytesForPath
 
 object ShowPickled extends Names {
@@ -28,10 +28,10 @@ object ShowPickled extends Names {
     }
     def readName =
       if (isName) new String(bytes, "UTF-8")
-      else system.error("%s is no name" format tagName)
+      else sys.error("%s is no name" format tagName)
     def nameIndex =
       if (hasName) readNat(bytes, 0)
-      else system.error("%s has no name" format tagName)
+      else sys.error("%s has no name" format tagName)
 
     def tagName = tag2string(tag)
     override def toString = "%d,%d: %s".format(num, startIndex, tagName)
@@ -76,7 +76,7 @@ object ShowPickled extends Names {
     case CLASSINFOtpe   => "CLASSINFOtpe"
     case METHODtpe      => "METHODtpe"
     case POLYtpe        => "POLYtpe"
-    case IMPLICITMETHODtpe => "IMPLICITMETHODtpe"
+    case IMPLICITMETHODtpe => "METHODtpe" // IMPLICITMETHODtpe no longer used.
     case SUPERtpe       => "SUPERtpe"
     case LITERALunit    => "LITERALunit"
     case LITERALboolean => "LITERALboolean"

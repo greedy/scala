@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -7,21 +7,14 @@
 package scala.tools.nsc
 package io
 
-import java.io.{ ByteArrayInputStream, ByteArrayOutputStream, InputStream, OutputStream, File => JFile }
-import PartialFunction._
+import java.io.{ ByteArrayInputStream, ByteArrayOutputStream, InputStream, OutputStream }
 
 /** This class implements an in-memory file.
  *
  *  @author  Philippe Altherr
  *  @version 1.0, 23/03/2004
  */
-class VirtualFile(val name: String, _path: String) extends AbstractFile
-{
-  assert((name ne null) && (path ne null), name + " - " + path)
-
-  //########################################################################
-  // Public Constructors
-
+class VirtualFile(val name: String, override val path: String) extends AbstractFile {
   /**
    * Initializes this instance with the specified name and an
    * identical path.
@@ -31,8 +24,11 @@ class VirtualFile(val name: String, _path: String) extends AbstractFile
    */
   def this(name: String) = this(name, name)
 
-  override def hashCode = path.##
-  override def equals(that: Any) = cond(that) { case x: VirtualFile => x.path == path }
+  override def hashCode = path.hashCode
+  override def equals(that: Any) = that match {
+    case x: VirtualFile => x.path == path
+    case _              => false
+  }
 
   //########################################################################
   // Private data
@@ -40,9 +36,6 @@ class VirtualFile(val name: String, _path: String) extends AbstractFile
 
   //########################################################################
   // Public Methods
-
-  def path = _path
-
   def absolute = this
 
   /** Returns null. */
@@ -78,10 +71,10 @@ class VirtualFile(val name: String, _path: String) extends AbstractFile
   }
 
   /** Does this abstract file denote an existing file? */
-  def create { unsupported }
+  def create() { unsupported }
 
   /** Delete the underlying file or directory (recursively). */
-  def delete { unsupported }
+  def delete() { unsupported }
 
   /**
    * Returns the abstract file in this abstract directory with the

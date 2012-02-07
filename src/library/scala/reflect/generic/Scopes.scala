@@ -1,10 +1,10 @@
 package scala.reflect
 package generic
 
-trait Scopes { self: Universe =>
+@deprecated("scala.reflect.generic will be removed", "2.9.1") trait Scopes { self: Universe =>
 
   abstract class AbsScope extends Iterable[Symbol] {
-    def enter(sym: Symbol): Symbol
+    private[reflect] def enter(sym: Symbol): Symbol
   }
 
   type Scope <: AbsScope

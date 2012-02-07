@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Iulian Dragos
  */
 
@@ -10,7 +10,6 @@ package classfile
 import scala.collection.{ mutable, immutable }
 import mutable.ListBuffer
 import backend.icode._
-import io.AbstractFile
 import ClassfileConstants._
 import Flags._
 
@@ -37,7 +36,7 @@ abstract class ICodeReader extends ClassfileParser {
    *  for non-static members.
    */
   def readClass(cls: Symbol): (IClass, IClass) = {
-    var classFile: AbstractFile = null;
+    var classFile: io.AbstractFile = null;
     var sym = cls
     sym.info // ensure accurate type information
 
@@ -101,9 +100,9 @@ abstract class ICodeReader extends ClassfileParser {
         (jflags, NoSymbol)
       else {
         val owner = getOwner(jflags)
-        var sym = owner.info.member(name).suchThat(old => sameType(old.tpe, tpe));
+        var sym = owner.info.findMember(name, 0, 0, false).suchThat(old => sameType(old.tpe, tpe));
         if (sym == NoSymbol)
-          sym = owner.info.member(newTermName(name + nme.LOCAL_SUFFIX_STRING)).suchThat(old => old.tpe =:= tpe);
+          sym = owner.info.findMember(newTermName(name + nme.LOCAL_SUFFIX_STRING), 0, 0, false).suchThat(old => old.tpe =:= tpe);
         if (sym == NoSymbol) {
           log("Could not find symbol for " + name + ": " + tpe)
           log(owner.info.member(name).tpe + " : " + tpe)
@@ -226,7 +225,7 @@ abstract class ICodeReader extends ClassfileParser {
     val codeLength = in.nextInt
     val code = new LinearCode
 
-    def parseInstruction {
+    def parseInstruction() {
       import opcodes._
       import code._
       var size = 1 // instruction size
@@ -360,12 +359,12 @@ abstract class ICodeReader extends ClassfileParser {
         case JVM.pop         => code.emit(DROP(INT))   // any 1-word type would do
         case JVM.pop2        => code.emit(DROP(LONG))  // any 2-word type would do
         case JVM.dup         => code.emit(DUP(ObjectReference)) // TODO: Is the kind inside DUP ever needed?
-        case JVM.dup_x1      => code.emit(DUP_X1)      // system.error("Unsupported JVM bytecode: dup_x1")
-        case JVM.dup_x2      => code.emit(DUP_X2)      // system.error("Unsupported JVM bytecode: dup_x2")
+        case JVM.dup_x1      => code.emit(DUP_X1)      // sys.error("Unsupported JVM bytecode: dup_x1")
+        case JVM.dup_x2      => code.emit(DUP_X2)      // sys.error("Unsupported JVM bytecode: dup_x2")
         case JVM.dup2        => code.emit(DUP(LONG))   // TODO: Is the kind inside DUP ever needed?
-        case JVM.dup2_x1     => code.emit(DUP2_X1)     // system.error("Unsupported JVM bytecode: dup2_x1")
-        case JVM.dup2_x2     => code.emit(DUP2_X2)     // system.error("Unsupported JVM bytecode: dup2_x2")
-        case JVM.swap        => system.error("Unsupported JVM bytecode: swap")
+        case JVM.dup2_x1     => code.emit(DUP2_X1)     // sys.error("Unsupported JVM bytecode: dup2_x1")
+        case JVM.dup2_x2     => code.emit(DUP2_X2)     // sys.error("Unsupported JVM bytecode: dup2_x2")
+        case JVM.swap        => sys.error("Unsupported JVM bytecode: swap")
 
         case JVM.iadd        => code.emit(CALL_PRIMITIVE(Arithmetic(ADD, INT)))
         case JVM.ladd        => code.emit(CALL_PRIMITIVE(Arithmetic(ADD, LONG)))
@@ -452,8 +451,8 @@ abstract class ICodeReader extends ClassfileParser {
         case JVM.if_acmpne   => code.emit(LCJUMP(parseJumpTarget, pc + size, NE, ObjectReference))
 
         case JVM.goto        => emit(LJUMP(parseJumpTarget))
-        case JVM.jsr         => system.error("Cannot handle jsr/ret")
-        case JVM.ret         => system.error("Cannot handle jsr/ret")
+        case JVM.jsr         => sys.error("Cannot handle jsr/ret")
+        case JVM.ret         => sys.error("Cannot handle jsr/ret")
         case JVM.tableswitch =>
           val padding = if ((pc + size) % 4 != 0) 4 - ((pc + size) % 4) else 0
           size += padding
@@ -578,14 +577,14 @@ abstract class ICodeReader extends ClassfileParser {
             case JVM.fstore => code.emit(STORE_LOCAL(code.getLocal(in.nextChar, FLOAT)));  size += 2
             case JVM.dstore => code.emit(STORE_LOCAL(code.getLocal(in.nextChar, DOUBLE))); size += 2
             case JVM.astore => code.emit(STORE_LOCAL(code.getLocal(in.nextChar, ObjectReference))); size += 2
-            case JVM.ret => system.error("Cannot handle jsr/ret")
+            case JVM.ret => sys.error("Cannot handle jsr/ret")
             case JVM.iinc =>
               size += 4
               val local = code.getLocal(in.nextChar, INT)
               code.emit(CONSTANT(Constant(in.nextChar)))
               code.emit(CALL_PRIMITIVE(Arithmetic(ADD, INT)))
               code.emit(STORE_LOCAL(local))
-            case _ => system.error("Invalid 'wide' operand")
+            case _ => sys.error("Invalid 'wide' operand")
           }
 
         case JVM.multianewarray =>
@@ -598,9 +597,9 @@ abstract class ICodeReader extends ClassfileParser {
         case JVM.ifnull    => code.emit(LCZJUMP(parseJumpTarget, pc + size, EQ, ObjectReference))
         case JVM.ifnonnull => code.emit(LCZJUMP(parseJumpTarget, pc + size, NE, ObjectReference))
         case JVM.goto_w    => code.emit(LJUMP(parseJumpTargetW))
-        case JVM.jsr_w     => system.error("Cannot handle jsr/ret")
+        case JVM.jsr_w     => sys.error("Cannot handle jsr/ret")
 
-//        case _ => system.error("Unknown bytecode")
+//        case _ => sys.error("Unknown bytecode")
       }
       pc += size
     }
@@ -739,7 +738,7 @@ abstract class ICodeReader extends ClassfileParser {
       method.code
     }
 
-    def resolveDups {
+    def resolveDups() {
       import opcodes._
 
       val tfa = new analysis.MethodTFA() {
@@ -922,7 +921,7 @@ abstract class ICodeReader extends ClassfileParser {
     }
 
     /** Recover def-use chains for NEW and initializers. */
-    def resolveNEWs {
+    def resolveNEWs() {
       import opcodes._
 
       val rdef = new reachingDefinitions.ReachingDefinitionsAnalysis
@@ -957,7 +956,7 @@ abstract class ICodeReader extends ClassfileParser {
     def getLocal(idx: Int, kind: TypeKind): Local = {
       assert(idx < maxLocals, "Index too large for local variable.");
 
-      def checkValidIndex {
+      def checkValidIndex() {
         locals.get(idx - 1) match {
           case Some(others) if others exists (_._2.isWideType) =>
             global.globalError("Illegal index: " + idx + " points in the middle of another local")

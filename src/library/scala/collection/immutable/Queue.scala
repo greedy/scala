@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -81,7 +81,7 @@ class Queue[+A] protected(protected val in: List[A], protected val out: List[A])
    *
    *  @param  elem        the element to insert
    */
-  @deprecated("Use the method <code>enqueue</code> from now on.")
+  @deprecated("Use `enqueue` instead", "2.7.2")
   def +[B >: A](elem: B) = enqueue(elem)
 
   /** Creates a new queue with element added at the end
@@ -99,7 +99,7 @@ class Queue[+A] protected(protected val in: List[A], protected val out: List[A])
    *
    *  @param  iter        an iterable object
    */
-  @deprecated("Use the method <code>enqueue</code> from now on.")
+  @deprecated("Use `enqueue` instead", "2.7.2")
   def +[B >: A](iter: Iterable[B]) = enqueue(iter)
 
   /** Returns a new queue with all elements provided by
@@ -151,6 +151,6 @@ object Queue extends SeqFactory[Queue] {
 
   private object EmptyQueue extends Queue[Nothing](Nil, Nil) { }
 
-  @deprecated("Use Queue.empty instead")
+  @deprecated("Use Queue.empty instead", "2.8.0")
   val Empty: Queue[Nothing] = Queue()
 }

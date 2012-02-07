@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -84,7 +84,7 @@ trait BasicBlocks {
     var varsInScope: mutable.Set[Local] = new mutable.LinkedHashSet()
 
     /** ICode instructions, used as temporary storage while emitting code.
-     * Once closed is called, only the `instrs' array should be used.
+     * Once closed is called, only the `instrs` array should be used.
      */
     private var instructionList: List[Instruction] = Nil
 
@@ -149,7 +149,7 @@ trait BasicBlocks {
 
     /**
      * Replace the given instruction with the new one.
-     * Returns `true' if it actually changed something.
+     * Returns `true` if it actually changed something.
      * It retains the position of the previous instruction.
      */
     def replaceInstruction(oldInstr: Instruction, newInstr: Instruction): Boolean = {
@@ -206,7 +206,7 @@ trait BasicBlocks {
     /** Remove the last instruction of this basic block. It is
      *  fast for an open block, but slower when the block is closed.
      */
-    def removeLastInstruction {
+    def removeLastInstruction() {
       if (closed)
         removeInstructionsAt(size)
       else {
@@ -301,7 +301,7 @@ trait BasicBlocks {
     }
 
     /** Close the block */
-    def close {
+    def close() {
       assert(!closed || ignore)
       assert(instructionList.nonEmpty, "Empty block.")
       closed = true
@@ -310,7 +310,7 @@ trait BasicBlocks {
       instrs = instructionList.toArray
     }
 
-    def open {
+    def open() {
       assert(closed)
       closed = false
       ignore = false
@@ -318,7 +318,7 @@ trait BasicBlocks {
       instructionList = instructionList.reverse  // prepare for appending to the head
     }
 
-    def clear {
+    def clear() {
       instructionList = Nil
       instrs = null
       preds  = null
@@ -330,11 +330,11 @@ trait BasicBlocks {
      *  added to this basic block. It makes the generation of THROW
      *  and RETURNs easier.
      */
-    def enterIgnoreMode = {
+    def enterIgnoreMode() = {
       ignore = true
     }
 
-    def exitIgnoreMode {
+    def exitIgnoreMode() {
       assert(ignore, "Exit ignore mode when not in ignore mode.")
       ignore = false
     }
@@ -351,7 +351,7 @@ trait BasicBlocks {
     def exceptionSuccessorsForBlock(block: BasicBlock): List[BasicBlock] =
       method.exh collect { case x if x covers block => x.startBlock }
 
-    /** Cached value of successors. Must be recomputed whenver a block in the current method is changed. */
+    /** Cached value of successors. Must be recomputed whenever a block in the current method is changed. */
     private var succs: List[BasicBlock] = Nil
     private def updateSuccs() {
       resetFlag(DIRTYSUCCS)

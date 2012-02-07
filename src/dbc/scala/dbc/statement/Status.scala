@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -15,7 +15,7 @@ import scala.dbc.Database
 import scala.dbc.result
 
 /** A statement that changes the status of the database. */
-abstract class Status extends Statement {
+@deprecated(DbcIsDeprecated, "2.9.0") abstract class Status extends Statement {
 
   /** A SQL-99 compliant string representation of the statement. */
   def sqlString: String

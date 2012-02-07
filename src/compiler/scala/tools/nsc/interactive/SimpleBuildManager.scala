@@ -1,3 +1,7 @@
+/* NSC -- new Scala compiler
+ * Copyright 2009-2011 Scala Solutions and LAMP/EPFL
+ * @author Martin Odersky
+ */
 package scala.tools.nsc
 package interactive
 
@@ -91,7 +95,7 @@ class SimpleBuildManager(val settings: Settings) extends BuildManager {
     success
   }
 
-  /** Save dependency information to `file'. */
+  /** Save dependency information to `file`. */
   def saveTo(file: AbstractFile, fromFile: AbstractFile => String) {
     compiler.dependencyAnalysis.dependenciesFile = file
     compiler.dependencyAnalysis.saveDependencies(fromFile)

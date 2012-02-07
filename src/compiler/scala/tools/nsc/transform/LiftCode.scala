@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Gilles Dubochet
  */
 
@@ -51,9 +51,6 @@ abstract class LiftCode extends Transform with Reifiers {
     def className(value: AnyRef): String = value match {
       case _ :: _ => "scala.$colon$colon"
       case reflect.MethodType(_, _) =>
-        if (value.isInstanceOf[reflect.ImplicitMethodType])
-          "scala.reflect.ImplicitMethodType"
-        else
           "scala.reflect.MethodType"
       case x:Product =>
         "scala.reflect."+x.productPrefix //caseName

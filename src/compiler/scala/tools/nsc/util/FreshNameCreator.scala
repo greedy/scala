@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -15,9 +15,9 @@ trait FreshNameCreator {
   def newName(): String
   def newName(prefix: String): String
 
-  @deprecated("use newName(prefix)")
+  @deprecated("use newName(prefix)", "2.9.0")
   def newName(pos: util.Position, prefix: String): String = newName(prefix)
-  @deprecated("use newName()")
+  @deprecated("use newName()", "2.9.0")
   def newName(pos: util.Position): String = newName()
 }
 

@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -63,7 +63,7 @@ trait SynchronizedBuffer[A] extends Buffer[A] {
    *
    *  @param xs the traversable object.
    */
-  override def ++(xs: TraversableOnce[A]): Self = synchronized {
+  override def ++(xs: GenTraversableOnce[A]): Self = synchronized {
     super.++(xs)
   }
 

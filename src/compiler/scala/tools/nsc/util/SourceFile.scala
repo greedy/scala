@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -12,7 +12,7 @@ import scala.collection.mutable.ArrayBuffer
 import annotation.tailrec
 import java.util.regex.Pattern
 import java.io.IOException
-import Chars._
+import scala.reflect.internal.Chars._
 
 /** abstract base class of a source file used in the compiler */
 abstract class SourceFile {
@@ -22,7 +22,7 @@ abstract class SourceFile {
   def isSelfContained: Boolean
   def length : Int
   def position(offset: Int) : Position = {
-    assert(offset < length)
+    assert(offset < length, file + ": " + offset + " >= " + length)
     new OffsetPosition(this, offset)
   }
   def position(line: Int, column: Int) : Position = new OffsetPosition(this, lineToOffset(line) + column)
@@ -46,7 +46,7 @@ abstract class SourceFile {
   final def skipWhitespace(offset: Int): Int =
     if (content(offset).isWhitespace) skipWhitespace(offset + 1) else offset
 
-  def identifier(pos: Position, compiler: Global): Option[String] = None
+  def identifier(pos: Position): Option[String] = None
 }
 
 object ScriptSourceFile {
@@ -101,12 +101,12 @@ class BatchSourceFile(val file : AbstractFile, val content: Array[Char]) extends
   def start = 0
   def isSelfContained = true
 
-  override def identifier(pos: Position, compiler: Global) =
+  override def identifier(pos: Position) =
     if (pos.isDefined && pos.source == this && pos.point != -1) {
       def isOK(c: Char) = isIdentifierPart(c) || isOperatorPart(c)
       Some(new String(content drop pos.point takeWhile isOK))
     } else {
-      super.identifier(pos, compiler)
+      super.identifier(pos)
     }
 
   def isLineBreak(idx: Int) =

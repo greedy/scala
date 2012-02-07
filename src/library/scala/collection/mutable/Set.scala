@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -13,17 +13,22 @@ package mutable
 
 import generic._
 
-/** A base trait for sets that can be mutated.
+/** A generic trait for mutable sets.
  *  $setNote
  *  $setTags
+ *
  *  @since 1.0
  *  @author Matthias Zenger
+ *  @define Coll mutable.Set
+ *  @define coll mutable set
  */
 trait Set[A] extends Iterable[A]
+//                with GenSet[A]
                 with scala.collection.Set[A]
                 with GenericSetTemplate[A, Set]
                 with SetLike[A, Set[A]] {
   override def companion: GenericCompanion[Set] = Set
+  override def seq: Set[A] = this
 }
 
 /** $factoryInfo

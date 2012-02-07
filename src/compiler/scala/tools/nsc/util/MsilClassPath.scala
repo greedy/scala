@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2006-2010 LAMP/EPFL
+ * Copyright 2006-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -112,7 +112,7 @@ class AssemblyClassPath(types: Array[MSILType], namespace: String, val context: 
     else namespace drop (i + 1)
   }
   def asURLs = List(new java.net.URL(name))
-  def asClasspathString = system.error("Unknown")  // I don't know what if anything makes sense here?
+  def asClasspathString = sys.error("Unknown")  // I don't know what if anything makes sense here?
 
   private lazy val first: Int = {
     var m = 0
@@ -135,7 +135,7 @@ class AssemblyClassPath(types: Array[MSILType], namespace: String, val context: 
         cls += ClassRep(Some(types(i)), None)
       i += 1
     }
-    cls.toList
+    cls.toIndexedSeq
   }
 
   lazy val packages = {
@@ -152,11 +152,13 @@ class AssemblyClassPath(types: Array[MSILType], namespace: String, val context: 
       }
       i += 1
     }
-    for (ns <- nsSet.toList)
+    val xs = for (ns <- nsSet.toList)
       yield new AssemblyClassPath(types, ns, context)
+
+    xs.toIndexedSeq
   }
 
-  val sourcepaths: List[AbstractFile] = Nil
+  val sourcepaths: IndexedSeq[AbstractFile] = IndexedSeq()
 
   override def toString() = "assembly classpath "+ namespace
 }

@@ -362,7 +362,7 @@ abstract class CPSAnnotationChecker extends CPSUtils {
 
       tree match {
 
-        case Apply(fun @ Select(qual, name), args) if (fun.tpe ne null) && !fun.tpe.isErroneous =>
+        case Apply(fun @ Select(qual, name), args) if fun.isTyped =>
 
           // HACK: With overloaded methods, fun will never get annotated. This is because
           // the 'overloaded' type gets annotated, but not the alternatives (among which
@@ -372,12 +372,13 @@ abstract class CPSAnnotationChecker extends CPSUtils {
 
           transChildrenInOrder(tree, tpe, qual::(transArgList(fun, args).flatten), Nil)
 
-        case TypeApply(fun @ Select(qual, name), args) if (fun.tpe ne null) && !fun.tpe.isErroneous =>
+        case TypeApply(fun @ Select(qual, name), args) if fun.isTyped =>
+          def stripNullaryMethodType(tp: Type) = tp match { case NullaryMethodType(restpe) => restpe case tp => tp }
           vprintln("[checker] checking select apply " + tree + "/" + tpe)
 
-          transChildrenInOrder(tree, tpe, List(qual, fun), Nil)
+          transChildrenInOrder(tree, stripNullaryMethodType(tpe), List(qual, fun), Nil)
 
-        case Apply(fun, args) if (fun.tpe ne null) && !fun.tpe.isErroneous =>
+        case Apply(fun, args) if fun.isTyped =>
 
           vprintln("[checker] checking unknown apply " + tree + "/" + tpe)
 
@@ -389,7 +390,7 @@ abstract class CPSAnnotationChecker extends CPSUtils {
 
           transChildrenInOrder(tree, tpe, List(fun), Nil)
 
-        case Select(qual, name) =>
+        case Select(qual, name) if qual.isTyped =>
 
           vprintln("[checker] checking select " + tree + "/" + tpe)
 
@@ -406,7 +407,7 @@ abstract class CPSAnnotationChecker extends CPSUtils {
             // we have to do it here so we don't lose the cps information (wouldn't trigger our
             // adapt and there is no Apply/TypeApply created)
             tpe match {
-              case PolyType(List(), restpe) =>
+              case NullaryMethodType(restpe) =>
                 //println("yep: " + restpe + "," + restpe.getClass)
                 transChildrenInOrder(tree, restpe, List(qual), Nil)
               case _ : PolyType => tpe

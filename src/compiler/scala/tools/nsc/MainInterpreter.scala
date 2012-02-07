@@ -1,13 +1,13 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Lex Spoon
  */
 
 package scala.tools.nsc
 
-/** A command-line wrapper for the interpreter */
+import interpreter._
+
+@deprecated("Use a class in the scala.tools.nsc.interpreter package.", "2.9.0")
 object MainInterpreter {
-  def main(args: Array[String]) {
-    (new InterpreterLoop).main(args)
-  }
+  def main(args: Array[String]): Unit = new ILoop main args
 }

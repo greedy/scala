@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -13,8 +13,7 @@ package factory
 import parsing.{ FactoryAdapter, NoBindingFactoryAdapter }
 import java.io.{ InputStream, Reader, StringReader, File, FileDescriptor, FileInputStream }
 
-trait NodeFactory[A <: Node]
-{
+trait NodeFactory[A <: Node] {
   val ignoreComments  = false
   val ignoreProcInstr = false
 

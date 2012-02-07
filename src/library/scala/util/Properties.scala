@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2006-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -11,14 +11,13 @@ package scala.util
 
 import java.io.{ IOException, PrintWriter }
 
-/** Loads library.properties from the jar. */
+/** Loads `library.properties` from the jar. */
 object Properties extends PropertiesTrait {
   protected def propCategory    = "library"
   protected def pickJarBasedOn  = classOf[ScalaObject]
 }
 
-private[scala] trait PropertiesTrait
-{
+private[scala] trait PropertiesTrait {
   protected def propCategory: String      // specializes the remainder of the values
   protected def pickJarBasedOn: Class[_]  // props file comes from jar containing this
 
@@ -56,14 +55,46 @@ private[scala] trait PropertiesTrait
   def envOrNone(name: String)                   = Option(System getenv name)
 
   // for values based on propFilename
-  def scalaPropOrElse(name: String, alt: String): String  = scalaProps.getProperty(name, alt)
-  def scalaPropOrEmpty(name: String): String              = scalaPropOrElse(name, "")
+  def scalaPropOrElse(name: String, alt: String): String = scalaProps.getProperty(name, alt)
+  def scalaPropOrEmpty(name: String): String             = scalaPropOrElse(name, "")
+  def scalaPropOrNone(name: String): Option[String]      = Option(scalaProps.getProperty(name))
+
+  /** The numeric portion of the runtime Scala version, if this is a final
+   *  release.  If for instance the versionString says "version 2.9.0.final",
+   *  this would return Some("2.9.0").
+   *
+   *  @return Some(version) if this is a final release build, None if
+   *  it is an RC, Beta, etc. or was built from source, or if the version
+   *  cannot be read.
+   */
+  val releaseVersion = scalaPropOrNone("version.number") flatMap { s =>
+    val segments = s split '.'
+    if (segments.size == 4 && segments.last == "final") Some(segments take 3 mkString ".") else None
+  }
+
+  /** The development Scala version, if this is not a final release.
+   *  The precise contents are not guaranteed, but it aims to provide a
+   *  unique repository identifier (currently the svn revision) in the
+   *  fourth dotted segment if the running version was built from source.
+   *
+   *  @return Some(version) if this is a non-final version, None if this
+   *  is a final release or the version cannot be read.
+   */
+  val developmentVersion = scalaPropOrNone("version.number") flatMap { s =>
+    val segments = s split '.'
+    if (segments.isEmpty || segments.last == "final")
+      None
+    else if (segments.last startsWith "r")
+      Some(s takeWhile (ch => ch != '-'))    // Cutting e.g. 2.10.0.r24774-b20110417125606 to 2.10.0.r24774
+    else
+      Some(s)
+  }
 
   /** The version number of the jar this was loaded from plus "version " prefix,
    *  or "version (unknown)" if it cannot be determined.
    */
   val versionString         = "version " + scalaPropOrElse("version.number", "(unknown)")
-  val copyrightString       = scalaPropOrElse("copyright.string", "(c) 2002-2010 LAMP/EPFL")
+  val copyrightString       = scalaPropOrElse("copyright.string", "(c) 2002-2011 LAMP/EPFL")
 
   /** This is the encoding to use reading in source files, overridden with -encoding
    *  Note that it uses "prop" i.e. looks in the scala jar, not the system properties.
@@ -72,7 +103,7 @@ private[scala] trait PropertiesTrait
   def sourceReader          = scalaPropOrElse("source.reader", "scala.tools.nsc.io.SourceReader")
 
   /** This is the default text encoding, overridden (unreliably) with
-   *  JAVA_OPTS="-Dfile.encoding=Foo"
+   *  `JAVA_OPTS="-Dfile.encoding=Foo"`
    */
   def encodingString        = propOrElse("file.encoding", "UTF-8")
 

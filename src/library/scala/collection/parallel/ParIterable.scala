@@ -1,10 +1,17 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
 package scala.collection.parallel
 
-
+import scala.collection.GenIterable
 import scala.collection.generic._
 import scala.collection.parallel.mutable.ParArrayCombiner
 import scala.collection.parallel.mutable.ParArray
-
 
 /** A template trait for parallel iterable collections.
  *
@@ -14,16 +21,23 @@ import scala.collection.parallel.mutable.ParArray
  *
  *  @tparam T    the element type of the collection
  *
- *  @author prokopec
- *  @since 2.8
+ *  @author Aleksandar Prokopec
+ *  @since 2.9
+ *
+ *  @define Coll ParIterable
+ *  @define coll parallel iterable
  */
-trait ParIterable[+T] extends Iterable[T]
-                         with GenericParTemplate[T, ParIterable]
-                         with ParIterableLike[T, ParIterable[T], Iterable[T]] {
+trait ParIterable[+T]
+extends GenIterable[T]
+   with GenericParTemplate[T, ParIterable]
+   with ParIterableLike[T, ParIterable[T], Iterable[T]] {
   override def companion: GenericCompanion[ParIterable] with GenericParCompanion[ParIterable] = ParIterable
+  //protected[this] override def newBuilder = ParIterable.newBuilder[T]
+
+  def stringPrefix = "ParIterable"
 }
 
-/** $factoryinfo
+/** $factoryInfo
  */
 object ParIterable extends ParFactory[ParIterable] {
   implicit def canBuildFrom[T]: CanCombineFrom[Coll, T, ParIterable[T]] = new GenericCanCombineFrom[T]
@@ -32,17 +46,4 @@ object ParIterable extends ParFactory[ParIterable] {
 
   def newCombiner[T]: Combiner[T, ParIterable[T]] = ParArrayCombiner[T]
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 

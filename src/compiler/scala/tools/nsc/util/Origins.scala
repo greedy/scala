@@ -1,5 +1,5 @@
 /* NSC -- new scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Paul Phillips
  */
 
@@ -85,7 +85,7 @@ object Origins {
 
   {
     // Console.println("\nOrigins loaded: registering shutdown hook to display results.")
-    system.addShutdownHook(counters foreach (_.purge()))
+    sys.addShutdownHook(counters foreach (_.purge()))
   }
 
   def apply[T: Manifest](tag: String): Origins = apply(tag, manifest[T].erasure)

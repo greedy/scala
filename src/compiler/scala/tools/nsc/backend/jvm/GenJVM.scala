@@ -7,18 +7,19 @@
 package scala.tools.nsc
 package backend.jvm
 
-import java.io.DataOutputStream
+import java.io.{ DataOutputStream, OutputStream }
 import java.nio.ByteBuffer
 import scala.collection.{ mutable, immutable }
-import mutable.{ ListBuffer, LinkedHashSet }
-import scala.reflect.generic.{ PickleFormat, PickleBuffer }
-import scala.tools.nsc.io.AbstractFile
+import scala.reflect.internal.pickling.{ PickleFormat, PickleBuffer }
+import scala.tools.reflect.SigParser
+import scala.tools.nsc.util.ScalaClassLoader
 import scala.tools.nsc.symtab._
 import scala.tools.nsc.symtab.classfile.ClassfileConstants._
-
 import ch.epfl.lamp.fjbg._
 import JAccessFlags._
 import JObjectType.{ JAVA_LANG_STRING, JAVA_LANG_OBJECT }
+import java.util.jar.{ JarEntry, JarOutputStream }
+import scala.tools.nsc.io.AbstractFile
 
 /** This class ...
  *
@@ -26,7 +27,7 @@ import JObjectType.{ JAVA_LANG_STRING, JAVA_LANG_OBJECT }
  *  @version 1.0
  *
  */
-abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
+abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with BytecodeWriters {
   import global._
   import icodes._
   import icodes.opcodes._
@@ -43,28 +44,54 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
   /** Create a new phase */
   override def newPhase(p: Phase): Phase = new JvmPhase(p)
 
+  private def outputDirectory(sym: Symbol): AbstractFile = (
+    settings.outputDirs.outputDirFor {
+      atPhase(currentRun.flattenPhase.prev)(sym.sourceFile)
+    }
+  )
+  private def getFile(base: AbstractFile, cls: JClass, suffix: String): AbstractFile = {
+    var dir = base
+    val pathParts = cls.getName().split("[./]").toList
+    for (part <- pathParts.init) {
+      dir = dir.subdirectoryNamed(part)
+    }
+    dir.fileNamed(pathParts.last + suffix)
+  }
+  private def getFile(sym: Symbol, cls: JClass, suffix: String): AbstractFile =
+    getFile(outputDirectory(sym), cls, suffix)
+
   /** JVM code generation phase
    */
   class JvmPhase(prev: Phase) extends ICodePhase(prev) {
-
     def name = phaseName
     override def erasedTypes = true
+    def apply(cls: IClass) = sys.error("no implementation")
 
-    override def run {
+    override def run() {
       // we reinstantiate the bytecode generator at each run, to allow the GC
       // to collect everything
-      val codeGenerator = new BytecodeGenerator
       if (settings.debug.value) inform("[running phase " + name + " on icode]")
       if (settings.Xdce.value)
         for ((sym, cls) <- icodes.classes if inliner.isClosureClass(sym) && !deadCode.liveClosures(sym))
           icodes.classes -= sym
 
-      classes.values foreach codeGenerator.genClass
-      classes.clear
-    }
-
-    def apply(cls: IClass) {
-      error("no implementation")
+      val bytecodeWriter = settings.outputDirs.getSingleOutput match {
+        case Some(f) if f hasExtension "jar"    =>
+          new DirectToJarfileWriter(f)
+        case _                                  =>
+          if (settings.Ygenjavap.isDefault) new ClassBytecodeWriter { }
+          else new ClassBytecodeWriter with JavapBytecodeWriter { }
+      }
+      val codeGenerator = new BytecodeGenerator(bytecodeWriter)
+      classes.values foreach { c =>
+        try codeGenerator.genClass(c)
+        catch {
+          case e: JCode.CodeSizeTooBigException =>
+            log("Skipped class %s because it has methods that are too long.".format(c.toString))
+        }
+      }
+      bytecodeWriter.close()
+      classes.clear()
     }
   }
 
@@ -80,19 +107,10 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
    * Java bytecode generator.
    *
    */
-  class BytecodeGenerator extends BytecodeUtil {
+  class BytecodeGenerator(bytecodeWriter: BytecodeWriter) extends BytecodeUtil {
+    def this() = this(new ClassBytecodeWriter { })
     def debugLevel = settings.debuginfo.indexOfChoice
-    import scala.tools.reflect.SigParser
-    def verifySig(sym: Symbol, sig: String) = {
-      val ok =
-        if (sym.isMethod) SigParser verifyMethod sig
-        else if (sym.isTerm) SigParser verifyType sig
-        else SigParser verifyClass sig
-
-      def label = if (ok) "[ OK ] " else "[BAD!] "
-      if (settings.verbose.value || !ok)
-        println(label + sym + " in " + sym.owner.skipPackageObject.fullName + "\n  " + sig)
-    }
+    import bytecodeWriter.writeClass
 
     val MIN_SWITCH_DENSITY = 0.7
     val INNER_CLASSES_FLAGS =
@@ -157,11 +175,7 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
      */
     def emitClass(jclass: JClass, sym: Symbol) {
       addInnerClasses(jclass)
-      val outfile = getFile(sym, jclass, ".class")
-      val outstream = new DataOutputStream(outfile.bufferedOutput)
-      jclass writeTo outstream
-      outstream.close()
-      informProgress("wrote " + outfile)
+      writeClass("" + sym.name, jclass, sym)
     }
 
     /** Returns the ScalaSignature annotation if it must be added to this class,
@@ -209,7 +223,7 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
     var isRemoteClass: Boolean = false
     var isParcelableClass = false
 
-    private val innerClassBuffer = new ListBuffer[Symbol]
+    private val innerClassBuffer = new mutable.ListBuffer[Symbol]
 
     def genClass(c: IClass) {
       clasz = c
@@ -227,13 +241,13 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
 
       for (annot <- c.symbol.annotations) annot match {
         case AnnotationInfo(tp, _, _) if tp.typeSymbol == SerializableAttr =>
-          parents = parents ::: List(SerializableClass.tpe)
+          parents :+= SerializableClass.tpe
         case AnnotationInfo(tp, _, _) if tp.typeSymbol == CloneableAttr =>
-          parents = parents ::: List(CloneableClass.tpe)
+          parents :+= CloneableClass.tpe
         case AnnotationInfo(tp, Literal(const) :: _, _) if tp.typeSymbol == SerialVersionUIDAttr =>
           serialVUID = Some(const.longValue)
         case AnnotationInfo(tp, _, _) if tp.typeSymbol == RemoteAttr =>
-          parents = parents ::: List(RemoteInterface.tpe)
+          parents :+= RemoteInterface.tpe
           isRemoteClass = true
         case _ =>
       }
@@ -241,7 +255,7 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
       parents = parents.distinct
 
       if (parents.tail.nonEmpty)
-        ifaces = parents drop 1 map (x => javaName(x.typeSymbol)) toArray;
+        ifaces = mkArray(parents drop 1 map (x => javaName(x.typeSymbol)))
 
       jclass = fjbgContext.JClass(javaFlags(c.symbol),
                                   name,
@@ -291,6 +305,7 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
       val ssa = scalaSignatureAddingMarker(jclass, c.symbol)
       addGenericSignature(jclass, c.symbol, c.symbol.owner)
       addAnnotations(jclass, c.symbol.annotations ++ ssa)
+
       addEnclosingMethodAttribute(jclass, c.symbol)
       emitClass(jclass, c.symbol)
 
@@ -301,7 +316,7 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
     private def addEnclosingMethodAttribute(jclass: JClass, clazz: Symbol) {
       val sym = clazz.originalEnclosingMethod
       if (sym.isMethod) {
-        log("enclosing method for %s is %s (%s)".format(clazz, sym, sym.enclClass))
+        log("enclosing method for %s is %s (in %s)".format(clazz, sym, sym.enclClass))
         jclass addAttribute fjbgContext.JEnclosingMethodAttribute(
           jclass,
           javaName(sym.enclClass),
@@ -310,15 +325,21 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
         )
       } else if (clazz.isAnonymousClass) {
         val enclClass = clazz.rawowner
-        assert(enclClass.isClass)
+        assert(enclClass.isClass, "" + enclClass)
         val sym = enclClass.primaryConstructor
-        log("enclosing method for %s is %s (%s)".format(clazz, sym, enclClass))
-        jclass addAttribute fjbgContext.JEnclosingMethodAttribute(
-          jclass,
-          javaName(enclClass),
-          javaName(sym),
-          JMethodType.ARGLESS_VOID_FUNCTION
-        )
+        if (sym == NoSymbol)
+          log("Ran out of room looking for an enclosing method for %s: no constructor here.".format(
+            enclClass, clazz)
+          )
+        else {
+          log("enclosing method for %s is %s (in %s)".format(clazz, sym, enclClass))
+          jclass addAttribute fjbgContext.JEnclosingMethodAttribute(
+            jclass,
+            javaName(enclClass),
+            javaName(sym),
+            javaType(sym).asInstanceOf[JMethodType]
+          )
+        }
       }
     }
 
@@ -391,11 +412,7 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
       jcode.emitRETURN()
 
       // write the bean information class file.
-      val outfile = getFile(c.symbol, beanInfoClass, ".class")
-      val outstream = new DataOutputStream(outfile.bufferedOutput)
-      beanInfoClass writeTo outstream
-      outstream.close()
-      informProgress("wrote BeanInfo " + outfile)
+      writeClass("BeanInfo ", beanInfoClass, c.symbol)
     }
 
     /** Add the given 'throws' attributes to jmethod */
@@ -523,9 +540,17 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
       nannots
     }
 
+    /** Run the signature parser to catch bogus signatures.
+     */
+    def isValidSignature(sym: Symbol, sig: String) = (
+      if (sym.isMethod) SigParser verifyMethod sig
+      else if (sym.isTerm) SigParser verifyType sig
+      else SigParser verifyClass sig
+    )
+
     // @M don't generate java generics sigs for (members of) implementation
     // classes, as they are monomorphic (TODO: ok?)
-    private def noGenericSignature(sym: Symbol) = (
+    private def needsGenericSignature(sym: Symbol) = !(
       // PP: This condition used to include sym.hasExpandedName, but this leads
       // to the total loss of generic information if a private member is
       // accessed from a closure: both the field and the accessor were generated
@@ -534,18 +559,43 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
       // unrelated change.
          sym.isSynthetic
       || sym.isLiftedMethod
+      || sym.isBridge
       || (sym.ownerChain exists (_.isImplClass))
     )
     def addGenericSignature(jmember: JMember, sym: Symbol, owner: Symbol) {
-      if (noGenericSignature(sym)) ()
-      else {
+      if (needsGenericSignature(sym)) {
         val memberTpe = atPhase(currentRun.erasurePhase)(owner.thisType.memberInfo(sym))
         // println("addGenericSignature sym: " + sym.fullName + " : " + memberTpe + " sym.info: " + sym.info)
         // println("addGenericSignature: "+ (sym.ownerChain map (x => (x.name, x.isImplClass))))
         erasure.javaSig(sym, memberTpe) foreach { sig =>
-          if (settings.Yverifysigs.value)
-            verifySig(sym, sig)
-
+          /** Since we're using a sun internal class for signature validation,
+           *  we have to allow for it not existing or otherwise malfunctioning:
+           *  in which case we treat every signature as valid.  Medium term we
+           *  should certainly write independent signature validation.
+           */
+          if (settings.Xverify.value && SigParser.isParserAvailable && !isValidSignature(sym, sig)) {
+            clasz.cunit.warning(sym.pos,
+                """|compiler bug: created invalid generic signature for %s in %s
+                   |signature: %s
+                   |if this is reproducible, please report bug at http://lampsvn.epfl.ch/trac/scala
+                """.trim.stripMargin.format(sym, sym.owner.skipPackageObject.fullName, sig))
+            return
+          }
+          if ((settings.check.value contains "genjvm")) {
+            val normalizedTpe = atPhase(currentRun.erasurePhase)(erasure.prepareSigMap(memberTpe))
+            val bytecodeTpe = owner.thisType.memberInfo(sym)
+            if (!sym.isType && !sym.isConstructor && !(erasure.erasure(normalizedTpe) =:= bytecodeTpe)) {
+              clasz.cunit.warning(sym.pos,
+                  """|compiler bug: created generic signature for %s in %s that does not conform to its erasure
+                     |signature: %s
+                     |original type: %s
+                     |normalized type: %s
+                     |erasure type: %s
+                     |if this is reproducible, please report bug at http://lampsvn.epfl.ch/trac/scala
+                  """.trim.stripMargin.format(sym, sym.owner.skipPackageObject.fullName, sig, memberTpe, normalizedTpe, bytecodeTpe))
+               return
+            }
+          }
           val index = jmember.getConstantPool.addUtf8(sig).toShort
           if (opt.verboseDebug)
             atPhase(currentRun.erasurePhase) {
@@ -700,15 +750,15 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
       jmethod = jclass.addNewMethod(flags,
                                     javaName(m.symbol),
                                     resTpe,
-                                    m.params map (p => javaType(p.kind)) toArray,
-                                    m.params map (p => javaName(p.sym)) toArray)
+                                    mkArray(m.params map (p => javaType(p.kind))),
+                                    mkArray(m.params map (p => javaName(p.sym))))
 
       addRemoteException(jmethod, m.symbol)
 
       if (!jmethod.isAbstract() && !method.native) {
         val jcode = jmethod.getCode().asInstanceOf[JExtendedCode]
 
-        // add a fake local for debugging purpuses
+        // add a fake local for debugging purposes
         if (emitVars && isClosureApply(method.symbol)) {
           val outerField = clasz.symbol.info.decl(nme.OUTER_LOCAL)
           if (outerField != NoSymbol) {
@@ -742,6 +792,14 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
       addExceptionsAttribute(jmethod, excs)
       addAnnotations(jmethod, others)
       addParamAnnotations(jmethod, m.params.map(_.sym.annotations))
+
+      // check for code size
+      try jmethod.freeze()
+      catch {
+        case e: JCode.CodeSizeTooBigException =>
+          clasz.cunit.error(m.symbol.pos, "Code size exceeds JVM limits: %d".format(e.codeSize))
+          throw e
+      }
     }
 
     private def addRemoteException(jmethod: JMethod, meth: Symbol) {
@@ -784,7 +842,7 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
       }
     }
 
-    def addModuleInstanceField {
+    def addModuleInstanceField() {
       jclass.addNewField(PublicStaticFinal,
                         nme.MODULE_INSTANCE_FIELD.toString,
                         jclass.getType())
@@ -895,8 +953,8 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
         accessFlags,
         javaName(m),
         javaType(methodInfo.resultType),
-        paramJavaTypes.toArray,
-        paramNames.toArray)
+        mkArray(paramJavaTypes),
+        mkArray(paramNames))
       val mirrorCode = mirrorMethod.getCode().asInstanceOf[JExtendedCode]
       mirrorCode.emitGETSTATIC(moduleName,
                                nme.MODULE_INSTANCE_FIELD.toString,
@@ -925,13 +983,16 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
       addParamAnnotations(mirrorMethod, m.info.params.map(_.annotations))
     }
 
-    /** Add forwarders for all methods defined in `module' that don't conflict
-     *  with methods in the companion class of `module'. A conflict arises when
+    /** Add forwarders for all methods defined in `module` that don't conflict
+     *  with methods in the companion class of `module`. A conflict arises when
      *  a method with the same name is defined both in a class and its companion
      *  object: method signature is not taken into account.
      */
     def addForwarders(jclass: JClass, moduleClass: Symbol) {
       assert(moduleClass.isModuleClass)
+      if (settings.debug.value)
+        log("Dumping mirror class for object: " + moduleClass)
+
       val className    = jclass.getName
       val linkedClass  = moduleClass.companionClass
       val linkedModule = linkedClass.companionSymbol
@@ -953,7 +1014,7 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
       lazy val membersInCommon     =
         memberNames(linkedModule) intersect memberNames(linkedClass)
 
-      /** Should method `m' get a forwarder in the mirror class? */
+      /** Should method `m` get a forwarder in the mirror class? */
       def shouldForward(m: Symbol): Boolean = (
         m.owner != ObjectClass
         && m.isMethod
@@ -982,7 +1043,9 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
      *  instead be made to add the forwarder methods to the companion class.
      */
     def dumpMirrorClass(clasz: Symbol, sourceFile: String) {
-      val mirrorName = javaName(clasz).init   // drops "$"
+      import JAccessFlags._
+      val moduleName = javaName(clasz) // + "$"
+      val mirrorName = moduleName.substring(0, moduleName.length() - 1)
       val mirrorClass = fjbgContext.JClass(ACC_SUPER | ACC_PUBLIC | ACC_FINAL,
                                            mirrorName,
                                            JAVA_LANG_OBJECT.getName,
@@ -1028,7 +1091,7 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
       }
 
     /** Generate exception handlers for the current method. */
-    def genExceptionHandlers {
+    def genExceptionHandlers() {
 
       /** Return a list of pairs of intervals where the handler is active.
        *  The intervals in the list have to be inclusive in the beginning and
@@ -1123,8 +1186,8 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
           case LOAD_LOCAL(local) =>
             jcode.emitLOAD(indexOf(local), javaType(local.kind))
 
-          case LOAD_FIELD(field, isStatic) =>
-            var owner = javaName(field.owner)
+          case lf @ LOAD_FIELD(field, isStatic) =>
+            var owner = javaName(lf.hostClass)
             if (settings.debug.value)
               log("LOAD_FIELD with owner: " + owner +
                   " flags: " + Flags.flagsToString(field.owner.flags))
@@ -1254,7 +1317,9 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
           case CHECK_CAST(tpe) =>
             tpe match {
               case REFERENCE(cls) =>
-                jcode emitCHECKCAST new JObjectType(javaName(cls))
+                // No need to checkcast for Objects
+                if (cls != ObjectClass)
+                  jcode emitCHECKCAST new JObjectType(javaName(cls))
               case ARRAY(elem) =>
                 jcode emitCHECKCAST new JArrayType(javaType(elem))
               case _ =>
@@ -1432,8 +1497,9 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
 
 //        assert(instr.pos.source.isEmpty || instr.pos.source.get == (clasz.cunit.source), "sources don't match")
 //        val crtLine = instr.pos.line.get(lastLineNr);
+
         val crtLine = try {
-          (instr.pos).line
+          if (instr.pos == NoPosition) lastLineNr else (instr.pos).line // check NoPosition to avoid costly exception
         } catch {
           case _: UnsupportedOperationException =>
             log("Warning: wrong position in: " + method)
@@ -1752,19 +1818,6 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
       (sym.isJavaDefined && sym.isNonBottomSubClass(ClassfileAnnotationClass))
     }
 
-    /** Return an abstract file for the given class symbol, with the desired suffix.
-     *  Create all necessary subdirectories on the way.
-     */
-    def getFile(sym: Symbol, cls: JClass, suffix: String): AbstractFile = {
-      val sourceFile = atPhase(currentRun.flattenPhase.prev)(sym.sourceFile)
-      var dir: AbstractFile = settings.outputDirs.outputDirFor(sourceFile)
-      val pathParts = cls.getName().split("[./]").toList
-      for (part <- pathParts.init) {
-        dir = dir.subdirectoryNamed(part)
-      }
-      dir.fileNamed(pathParts.last + suffix)
-    }
-
     /** Merge adjacent ranges. */
     private def mergeEntries(ranges: List[(Int, Int)]): List[(Int, Int)] =
       (ranges.foldLeft(Nil: List[(Int, Int)]) { (collapsed: List[(Int, Int)], p: (Int, Int)) => (collapsed, p) match {
@@ -1810,7 +1863,7 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid {
       if (sym.isInterface) ACC_INTERFACE else 0,
       if (sym.isFinal && !sym.enclClass.isInterface && !sym.isClassConstructor) ACC_FINAL else 0,
       if (sym.isStaticMember) ACC_STATIC else 0,
-      if (sym.isBridge) ACC_BRIDGE else 0,
+      if (sym.isBridge || sym.hasFlag(Flags.MIXEDIN) && sym.isMethod) ACC_BRIDGE else 0,
       if (sym.isClass && !sym.isInterface) ACC_SUPER else 0,
       if (sym.isVarargsMethod) ACC_VARARGS else 0
     )

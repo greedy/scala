@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -37,9 +37,9 @@ trait MapMethods[A, +B, +This <: MapLike[A, B, This] with Map[A, B]]
   def values: Iterable[B]
   def valuesIterator: Iterator[B]
   def default(key: A): B
-  def filterKeys(p: A => Boolean): DefaultMap[A, B]
-  def mapValues[C](f: B => C): DefaultMap[A, C]
+  def filterKeys(p: A => Boolean): Map[A, B]
+  def mapValues[C](f: B => C): Map[A, C]
   def updated [B1 >: B](key: A, value: B1): Map[A, B1]
   def + [B1 >: B] (elem1: (A, B1), elem2: (A, B1), elems: (A, B1) *): Map[A, B1]
-  def ++[B1 >: B](xs: TraversableOnce[(A, B1)]): Map[A, B1]
+  def ++[B1 >: B](xs: GenTraversableOnce[(A, B1)]): Map[A, B1]
 }

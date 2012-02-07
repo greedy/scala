@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Stephane Micheloud
  */
 
@@ -756,7 +756,7 @@ abstract class Detach extends PluginComponent
           proxy
       }
 
-      def addAccessors {
+      def addAccessors() {
         def mkGetter(sym: Symbol, name: String): Symbol = {
           val getter = if (sym.isMethod) {
             val meth = sym.cloneSymbol(proxyIntf)
@@ -1131,8 +1131,8 @@ abstract class Detach extends PluginComponent
       if (newDefs.isEmpty) stats1 else stats1 ::: newDefs
     }
 
-    private def genProxies {
-      def printDebugInfo {
+    private def genProxies() {
+      def printDebugInfo() {
         println("\ncompilation unit : "+unit)
         for ((sym, _) <- detachedClosure) {
           println("closure to detach: "+sym+" (owner: "+sym.owner+")")
@@ -1155,7 +1155,7 @@ abstract class Detach extends PluginComponent
           println("\t"+sym+" -> "+xs.mkString(", ")+" ["+xs.length+"]")
         }
       }
-      def printDebugInfo2 {
+      def printDebugInfo2() {
         println("\nproxy classes    :")
         for (sym <- proxies.keysIterator)
           println("\t"+sym+"("+sym.tpe+") -> "+proxies(sym))
@@ -1179,7 +1179,7 @@ abstract class Detach extends PluginComponent
      *      closures;</li>
      *    <li>it then adds proxies for free objects;</li>
      *    <li>finally, if transforms detached closures (both definition and
-     *       instantation).</li>
+     *       instantiation).</li>
      *  </ol>
      */
     override def transformUnit(unit: CompilationUnit) {

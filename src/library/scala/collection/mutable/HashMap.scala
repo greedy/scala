@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -32,7 +32,7 @@ import scala.collection.parallel.mutable.ParHashMap
  *    pairs of type `(A, B)`. This is because an implicit of type `CanBuildFrom[HashMap, (A, B), HashMap[A, B]]`
  *    is defined in object `HashMap`. Otherwise, `That` resolves to the most specific type that doesn't have
  *    to contain pairs of type `(A, B)`, which is `Iterable`.
- *  @define $bfinfo an implicit value of class `CanBuildFrom` which determines the
+ *  @define bfinfo an implicit value of class `CanBuildFrom` which determines the
  *    result class `That` from the current representation type `Repr`
  *    and the new element type `B`. This is usually the `canBuildFrom` value
  *    defined in object `HashMap`.
@@ -44,7 +44,7 @@ class HashMap[A, B] private[collection] (contents: HashTable.Contents[A, Default
 extends Map[A, B]
    with MapLike[A, B, HashMap[A, B]]
    with HashTable[A, DefaultEntry[A, B]]
-   with Parallelizable[ParHashMap[A, B]]
+   with CustomParallelizable[(A, B), ParHashMap[A, B]]
    with Serializable
 {
   initWithContents(contents)
@@ -57,7 +57,15 @@ extends Map[A, B]
 
   def this() = this(null)
 
-  def par = new ParHashMap[A, B](hashTableContents)
+  override def par = new ParHashMap[A, B](hashTableContents)
+
+  // contains and apply overridden to avoid option allocations.
+  override def contains(key: A) = findEntry(key) != null
+  override def apply(key: A): B = {
+    val result = findEntry(key)
+    if (result == null) default(key)
+    else result.value
+  }
 
   def get(key: A): Option[B] = {
     val e = findEntry(key)
@@ -106,14 +114,14 @@ extends Map[A, B]
   override def keysIterator: Iterator[A] = new Iterator[A] {
     val iter = entriesIterator
     def hasNext = iter.hasNext
-    def next = iter.next.key
+    def next() = iter.next.key
   }
 
   /* Override to avoid tuple allocation */
   override def valuesIterator: Iterator[B] = new Iterator[B] {
     val iter = entriesIterator
     def hasNext = iter.hasNext
-    def next = iter.next.value
+    def next() = iter.next.value
   }
 
   /** Toggles whether a size map is used to track hash map statistics.
@@ -129,11 +137,6 @@ extends Map[A, B]
   private def readObject(in: java.io.ObjectInputStream) {
     init[B](in, new Entry(_, _))
   }
-
-  override def toParIterable = par
-
-  private type C = (A, B)
-  override def toParMap[D, E](implicit ev: C <:< (D, E)) = par.asInstanceOf[ParHashMap[D, E]]
 
 }
 

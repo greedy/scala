@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -13,7 +13,7 @@ package value;
 
 
 /** A SQL-99 value of type character varying string. */
-abstract class CharacterVarying extends Value {
+@deprecated(DbcIsDeprecated, "2.9.0") abstract class CharacterVarying extends Value {
 
   override val dataType: datatype.CharacterVarying;
 
@@ -27,7 +27,7 @@ abstract class CharacterVarying extends Value {
 /** An object offering transformation methods (views) on the value.
   * This object must be visible in an expression to use value auto-
   * conversion. */
-object CharacterVarying {
+@deprecated(DbcIsDeprecated, "2.9.0") object CharacterVarying {
 
   /** A character varying string value as a native string. */
   implicit def characterVaryingToString (obj:value.CharacterVarying): String = obj.nativeValue;

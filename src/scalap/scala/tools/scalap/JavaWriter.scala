@@ -1,6 +1,6 @@
 /*     ___ ____ ___   __   ___   ___
 **    / _// __// _ | / /  / _ | / _ \    Scala classfile decoder
-**  __\ \/ /__/ __ |/ /__/ __ |/ ___/    (c) 2003-2010, LAMP/EPFL
+**  __\ \/ /__/ __ |/ /__/ __ |/ ___/    (c) 2003-2011, LAMP/EPFL
 ** /____/\___/_/ |_/____/_/ |_/_/        http://scala-lang.org/
 **
 */
@@ -172,7 +172,7 @@ class JavaWriter(classfile: Classfile, writer: Writer) extends CodeWriter(writer
     }
   }
 
-  def printClassHeader {
+  def printClassHeader() {
     if (isInterface(cf.flags)) {
       print("trait " + getSimpleClassName(cf.classname))
     } else {
@@ -185,7 +185,7 @@ class JavaWriter(classfile: Classfile, writer: Writer) extends CodeWriter(writer
     }
   }
 
-  def printClass {
+  def printClass() {
     val pck = getPackage(cf.classname);
     if (pck.length() > 0)
       println("package " + pck + ";")

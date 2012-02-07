@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -34,7 +34,7 @@ object Main extends AnyRef with EvalLoop {
     loop { line =>
       val args = line.split(' ').toList
       val command = new CompilerCommand(args, new Settings(scalacError))
-      compiler.reporter.reset
+      compiler.reporter.reset()
       new compiler.Run() compile command.files
     }
   }
@@ -59,7 +59,7 @@ object Main extends AnyRef with EvalLoop {
 
       reloaded.get.right.toOption match {
         case Some(ex) => reporter.cancelled = true // Causes exit code to be non-0
-        case None => reporter.reset // Causes other compiler errors to be ignored
+        case None => reporter.reset() // Causes other compiler errors to be ignored
       }
       askShutdown
     }
@@ -109,18 +109,19 @@ object Main extends AnyRef with EvalLoop {
         }
       }
       catch {
-        case FatalError(msg)              =>
-          reporter.error(null, "fatal error: " + msg)
-        case ex if compiler.opt.richExes  =>
+        case ex =>
           compiler.logThrowable(ex)
-          throw ex
+          ex match {
+            case FatalError(msg)  => reporter.error(null, "fatal error: " + msg)
+            case _                => throw ex
+          }
       }
     }
   }
 
   def main(args: Array[String]) {
     process(args)
-    system exit (if (reporter.hasErrors) 1 else 0)
+    sys.exit(if (reporter.hasErrors) 1 else 0)
   }
 
 }

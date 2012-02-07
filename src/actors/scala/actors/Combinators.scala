@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -41,6 +41,6 @@ private[actors] trait Combinators {
    * of the next loop iteration when invoked inside the body of `loop`
    * or `loopWhile`.
    */
-  def continue: Unit = throw new KillActorControl
+  def continue(): Unit = throw new KillActorControl
 
 }

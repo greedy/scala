@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2002-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2002-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -37,8 +37,15 @@ class WrappedString(val self: String) extends IndexedSeq[Char] with StringLike[W
   /** Creates a string builder buffer as builder for this class */
   override protected[this] def newBuilder = WrappedString.newBuilder
 
-  override def slice(from: Int, until: Int): WrappedString =
-    new WrappedString(self.substring(from max 0, until min self.length))
+  override def slice(from: Int, until: Int): WrappedString = {
+    val start = if (from < 0) 0 else from
+    if (until <= start || start >= repr.length)
+      return new WrappedString("")
+
+    val end = if (until > length) length else until
+    new WrappedString(repr.substring(start, end))
+  }
+  override def length = self.length
   override def toString = self
 }
 
@@ -47,5 +54,10 @@ class WrappedString(val self: String) extends IndexedSeq[Char] with StringLike[W
  *  @since 2.8
  */
 object WrappedString {
+  implicit def canBuildFrom: CanBuildFrom[WrappedString, Char, WrappedString] = new CanBuildFrom[WrappedString, Char, WrappedString] {
+    def apply(from: WrappedString) = newBuilder
+    def apply() = newBuilder
+  }
+
   def newBuilder: Builder[Char, WrappedString] = StringBuilder.newBuilder mapResult (x => new WrappedString(x))
 }

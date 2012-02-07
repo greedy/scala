@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -63,16 +63,6 @@ abstract trait Attribute extends MetaData {
     val arg = if (isPrefixed) scope getURI pre else null
     (next(arg, scope, key) == null) && (next wellformed scope)
   }
-
-  override def canEqual(other: Any) = other match {
-    case _: Attribute   => true
-    case _              => false
-  }
-  override def strict_==(other: Equality) = other match {
-    case x: Attribute   => (pre == x.pre) && (key == x.key) && (value sameElements x.value) && (next == x.next)
-    case _              => false
-  }
-  override def basisForHashCode = List(pre, key, value)
 
   /** Appends string representation of only this attribute to stringbuffer.
    */

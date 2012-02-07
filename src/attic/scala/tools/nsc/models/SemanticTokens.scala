@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -648,11 +648,11 @@ class SemanticTokens(val compiler: Global) {
       var token: Token = end
       var offset: Int = 0
 
-      def next: Unit = if (token == end) end else {
+      def next(): Unit = if (token == end) end else {
         offset = offset + token.length
         token  = token.next
       }
-      def prev: Unit = if (token.prev == begin) token else {
+      def prev(): Unit = if (token.prev == begin) token else {
         offset = offset - token.prev.length
         token = token.prev
       }

@@ -1,3 +1,12 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
+
 package scala.collection
 
 
@@ -6,7 +15,7 @@ import java.lang.Thread._
 import scala.collection.generic.CanBuildFrom
 import scala.collection.generic.CanCombineFrom
 import scala.collection.parallel.mutable.ParArray
-
+import scala.collection.mutable.UnrolledBuffer
 import annotation.unchecked.uncheckedVariance
 
 
@@ -15,7 +24,7 @@ import annotation.unchecked.uncheckedVariance
 package object parallel {
 
   /* constants */
-  val MIN_FOR_COPY = -1
+  val MIN_FOR_COPY = 512
   val CHECK_RATE = 512
   val SQRT2 = math.sqrt(2)
   val availableProcessors = java.lang.Runtime.getRuntime.availableProcessors
@@ -46,17 +55,6 @@ package object parallel {
   val tasksupport = getTaskSupport
 
   /* implicit conversions */
-
-  /** An implicit conversion providing arrays with a `par` method, which
-   *  returns a parallel array.
-   *
-   *  @tparam T      type of the elements in the array, which is a subtype of AnyRef
-   *  @param array   the array to be parallelized
-   *  @return        a `Parallelizable` object with a `par` method=
-   */
-  implicit def array2ParArray[T <: AnyRef](array: Array[T]) = new Parallelizable[mutable.ParArray[T]] {
-    def par = mutable.ParArray.handoff[T](array)
-  }
 
   trait FactoryOps[From, Elem, To] {
     trait Otherwise[R] {
@@ -90,7 +88,7 @@ package object parallel {
     def toParArray: ParArray[T]
   }
 
-  implicit def traversable2ops[T](t: TraversableOnce[T]) = new TraversableOps[T] {
+  implicit def traversable2ops[T](t: collection.GenTraversableOnce[T]) = new TraversableOps[T] {
     def isParallel = t.isInstanceOf[Parallel]
     def isParIterable = t.isInstanceOf[ParIterable[_]]
     def asParIterable = t.asInstanceOf[ParIterable[T]]
@@ -123,16 +121,18 @@ package object parallel {
   /* classes */
 
   /** Composite throwable - thrown when multiple exceptions are thrown at the same time. */
-  final class CompositeThrowable(val throwables: Set[Throwable])
-  extends Throwable("Multiple exceptions thrown during a parallel computation: " + throwables.map(t => (t, t.getStackTrace.toList)).mkString(", "))
+  final case class CompositeThrowable(val throwables: Set[Throwable])
+  extends Throwable("Multiple exceptions thrown during a parallel computation: " + throwables.map(
+    t => t + "\n" + t.getStackTrace.take(10).++("...").mkString("\n")
+  ).mkString("\n\n"))
 
 
   /** A helper iterator for iterating very small array buffers.
    *  Automatically forwards the signal delegate when splitting.
    */
-  private[parallel] class BufferIterator[T]
+  private[parallel] class BufferSplitter[T]
     (private val buffer: collection.mutable.ArrayBuffer[T], private var index: Int, private val until: Int, var signalDelegate: collection.generic.Signalling)
-  extends ParIterableIterator[T] {
+  extends IterableSplitter[T] {
     def hasNext = index < until
     def next = {
       val r = buffer(index)
@@ -140,12 +140,12 @@ package object parallel {
       r
     }
     def remaining = until - index
-    def dup = new BufferIterator(buffer, index, until, signalDelegate)
-    def split: Seq[ParIterableIterator[T]] = if (remaining > 1) {
+    def dup = new BufferSplitter(buffer, index, until, signalDelegate)
+    def split: Seq[IterableSplitter[T]] = if (remaining > 1) {
       val divsz = (until - index) / 2
       Seq(
-        new BufferIterator(buffer, index, index + divsz, signalDelegate),
-        new BufferIterator(buffer, index + divsz, until, signalDelegate)
+        new BufferSplitter(buffer, index, index + divsz, signalDelegate),
+        new BufferSplitter(buffer, index + divsz, until, signalDelegate)
       )
     } else Seq(this)
     private[parallel] override def debugInformation = {
@@ -188,7 +188,7 @@ package object parallel {
   private[parallel] abstract class BucketCombiner[-Elem, +To, Buck, +CombinerType <: BucketCombiner[Elem, To, Buck, CombinerType]]
     (private val bucketnumber: Int)
   extends Combiner[Elem, To] {
-  self: EnvironmentPassingCombiner[Elem, To] =>
+  //self: EnvironmentPassingCombiner[Elem, To] =>
     protected var buckets: Array[UnrolledBuffer[Buck]] @uncheckedVariance = new Array[UnrolledBuffer[Buck]](bucketnumber)
     protected var sz: Int = 0
 
@@ -221,7 +221,7 @@ package object parallel {
         afterCombine(other)
 
         this
-      } else system.error("Unexpected combiner type.")
+      } else sys.error("Unexpected combiner type.")
     } else this
 
   }

@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -16,13 +16,10 @@ package mutable
  *  This trait is used internally. It can be mixed in with various collections relying on
  *  hash table as an implementation.
  *
- *  @coll flat hash table
- *
+ *  @define coll flat hash table
  *  @define cannotStoreNull '''Note''': A $coll cannot store `null` elements.
- *
  *  @since 2.3
- *
- *  @tparam A   the type of the elements contained in the flat hash table.
+ *  @tparam A   the type of the elements contained in the $coll.
  */
 trait FlatHashTable[A] extends FlatHashTable.HashUtils[A] {
   import FlatHashTable._
@@ -244,7 +241,7 @@ trait FlatHashTable[A] extends FlatHashTable.HashUtils[A] {
   }
 
   // discards the previous sizemap and populates the new one
-  protected def sizeMapInitAndRebuild {
+  protected def sizeMapInitAndRebuild() {
     // first allocate
     sizeMapInit(table.length)
 
@@ -266,11 +263,11 @@ trait FlatHashTable[A] extends FlatHashTable.HashUtils[A] {
     }
   }
 
-  private[collection] def printSizeMap {
+  private[collection] def printSizeMap() {
     println(sizemap.toList)
   }
 
-  protected def sizeMapDisable = sizemap = null
+  protected def sizeMapDisable() = sizemap = null
 
   protected def isSizeMapDefined = sizemap ne null
 
@@ -282,7 +279,7 @@ trait FlatHashTable[A] extends FlatHashTable.HashUtils[A] {
     // improve(hcode) & (table.length - 1)
     val improved = improve(hcode)
     val ones = table.length - 1
-    (improved >> (32 - java.lang.Integer.bitCount(ones))) & ones
+    (improved >>> (32 - java.lang.Integer.bitCount(ones))) & ones
   }
 
   protected def clearTable() {
@@ -326,7 +323,7 @@ private[collection] object FlatHashTable {
    */
   private[collection] def initialSize: Int = 16
 
-  private[collection] def sizeForThreshold(size: Int, _loadFactor: Int) = size * loadFactorDenum / _loadFactor
+  private[collection] def sizeForThreshold(size: Int, _loadFactor: Int) = (size.toLong * loadFactorDenum / _loadFactor).toInt
 
   private[collection] def newThreshold(_loadFactor: Int, size: Int) = {
     val lf = _loadFactor

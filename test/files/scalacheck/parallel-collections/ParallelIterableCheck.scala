@@ -15,7 +15,7 @@ import scala.collection.parallel._
 
 
 abstract class ParallelIterableCheck[T](collName: String) extends Properties(collName) with Operators[T] {
-  type CollType <: ParIterable[T] with Sequentializable[T, Iterable[T]]
+  type CollType <: ParIterable[T]
 
   def values: Seq[Gen[T]]
   def ofSize(vals: Seq[Gen[T]], sz: Int): Iterable[T]
@@ -71,11 +71,11 @@ abstract class ParallelIterableCheck[T](collName: String) extends Properties(col
     (inst, fromTraversable(inst), modif)
   }
 
-  def areEqual(t1: Traversable[T], t2: Traversable[T]) = if (hasStrictOrder) {
+  def areEqual(t1: GenTraversable[T], t2: GenTraversable[T]) = if (hasStrictOrder) {
     t1 == t2 && t2 == t1
   } else (t1, t2) match { // it is slightly delicate what `equal` means if the order is not strict
-    case (m1: Map[_, _], m2: Map[_, _]) => m1 == m2 && m2 == m1
-    case (i1: Iterable[_], i2: Iterable[_]) =>
+    case (m1: GenMap[_, _], m2: GenMap[_, _]) => m1 == m2 && m2 == m1
+    case (i1: GenIterable[_], i2: GenIterable[_]) =>
       val i1s = i1.toSet
       val i2s = i2.toSet
       i1s == i2s && i2s == i1s
@@ -413,6 +413,22 @@ abstract class ParallelIterableCheck[T](collName: String) extends Properties(col
         ("operator " + ind) |: tscan == cscan && cscan == tscan
       }).reduceLeft(_ && _)
   }
+
+  // property("groupBy must be equal") = forAll(collectionPairs) {
+  //   case (t, coll) =>
+  //     (for ((f, ind) <- groupByFunctions.zipWithIndex) yield {
+  //       val tgroup = t.groupBy(f)
+  //       val cgroup = coll.groupBy(f)
+  //       if (tgroup != cgroup || cgroup != tgroup) {
+  //         println("from: " + t)
+  //         println("and: " + coll)
+  //         println("groups are: ")
+  //         println(tgroup)
+  //         println(cgroup)
+  //       }
+  //       ("operator " + ind) |: tgroup == cgroup && cgroup == tgroup
+  //     }).reduceLeft(_ && _)
+  // }
 
 }
 

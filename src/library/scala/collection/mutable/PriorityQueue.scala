@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -12,7 +12,7 @@ package scala.collection
 package mutable
 
 import generic._
-import annotation.migration
+import annotation.{migration, bridge}
 
 /** This class implements priority queues using a heap.
  *  To prioritize elements of type A there must be an implicit
@@ -92,8 +92,8 @@ class PriorityQueue[A](implicit val ord: Ordering[A])
   }
 
   @deprecated(
-    "Use += instead if you intend to add by side effect to an existing collection.\n"+
-    "Use `clone() +=' if you intend to create a new collection."
+    "Use `+=` instead if you intend to add by side effect to an existing collection.\n"+
+    "Use `clone() +=` if you intend to create a new collection.", "2.8.0"
   )
   def +(elem: A): PriorityQueue[A] = { this.clone() += elem }
 
@@ -103,8 +103,8 @@ class PriorityQueue[A](implicit val ord: Ordering[A])
    *  @param    kvs the remaining elements.
    */
   @deprecated(
-    "Use ++= instead if you intend to add by side effect to an existing collection.\n"+
-    "Use `clone() ++=' if you intend to create a new collection."
+    "Use `++=` instead if you intend to add by side effect to an existing collection.\n"+
+    "Use `clone() ++=` if you intend to create a new collection.", "2.8.0"
   )
   def +(elem1: A, elem2: A, elems: A*) = { this.clone().+=(elem1, elem2, elems : _*) }
 
@@ -127,7 +127,10 @@ class PriorityQueue[A](implicit val ord: Ordering[A])
    *  @param  xs    a traversable object.
    *  @return       a new priority queue containing elements of both `xs` and `this`.
    */
-  def ++(xs: TraversableOnce[A]) = { this.clone() ++= xs }
+  def ++(xs: GenTraversableOnce[A]): PriorityQueue[A] = { this.clone() ++= xs.seq }
+
+  @bridge
+  def ++(xs: TraversableOnce[A]): PriorityQueue[A] = ++ (xs: GenTraversableOnce[A])
 
   /** Adds all elements to the queue.
    *
@@ -163,7 +166,15 @@ class PriorityQueue[A](implicit val ord: Ordering[A])
    *
    *  @return   the element with the highest priority.
    */
+  @deprecated("Use `head` instead.", "2.9.0")
   def max: A = if (resarr.p_size0 > 1) toA(resarr.p_array(1)) else throw new NoSuchElementException("queue is empty")
+
+  /** Returns the element with the highest priority in the queue,
+   *  or throws an error if there is no element contained in the queue.
+   *
+   *  @return   the element with the highest priority.
+   */
+  override def head: A = if (resarr.p_size0 > 1) toA(resarr.p_array(1)) else throw new NoSuchElementException("queue is empty")
 
   /** Removes all elements from the queue. After this operation is completed,
    *  the queue will be empty.
@@ -242,7 +253,7 @@ class PriorityQueue[A](implicit val ord: Ordering[A])
    */
   override def clone(): PriorityQueue[A] = new PriorityQueue[A] ++= this.iterator
 
-  // def printstate {
+  // def printstate() {
   //   println("-----------------------")
   //   println("Size: " + resarr.p_size0)
   //   println("Internal array: " + resarr.p_array.toList)

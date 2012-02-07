@@ -1,6 +1,6 @@
 /*     ___ ____ ___   __   ___   ___
 **    / _// __// _ | / /  / _ | / _ \  Scala classfile decoder
-**  __\ \/ /__/ __ |/ /__/ __ |/ ___/  (c) 2003-2010, LAMP/EPFL
+**  __\ \/ /__/ __ |/ /__/ __ |/ ___/  (c) 2003-2011, LAMP/EPFL
 ** /____/\___/_/ |_/____/_/ |_/_/      http://scala-lang.org/
 **
 */
@@ -205,16 +205,17 @@ class ScalaSigPrinter(stream: PrintStream, printPrivates: Boolean) {
         case ms: MethodSymbol => ms.name + " : " + toString(ms.infoType)(TypeFlags(true))
         case _ => "^___^"
       })
+      val implicitWord = mt.paramSymbols.headOption match {
+        case Some(p) if p.isImplicit  => "implicit "
+        case _                        => ""
+      }
 
       // Print parameter clauses
-      print(paramEntries.mkString(
-        "(" + (mt match {case _: ImplicitMethodType => "implicit "; case _ => ""})
-        , ", ", ")"))
+      print(paramEntries.mkString("(" + implicitWord, ", ", ")"))
 
       // Print result type
       mt.resultType match {
         case mt: MethodType => printMethodType(mt, printResult)({})
-        case imt: ImplicitMethodType => printMethodType(imt, printResult)({})
         case x => if (printResult) {
           print(" : ");
           printType(x)
@@ -223,8 +224,8 @@ class ScalaSigPrinter(stream: PrintStream, printPrivates: Boolean) {
     }
 
     t match {
+      case NullaryMethodType(resType) => if (printResult) { print(" : "); printType(resType) }
       case mt@MethodType(resType, paramSymbols) => _pmt(mt)
-      case mt@ImplicitMethodType(resType, paramSymbols) => _pmt(mt)
       case pt@PolyType(mt, typeParams) => {
         print(typeParamString(typeParams))
         printMethodType(mt, printResult)({})
@@ -238,7 +239,7 @@ class ScalaSigPrinter(stream: PrintStream, printPrivates: Boolean) {
   }
 
   def printMethod(level: Int, m: MethodSymbol, indent: () => Unit) {
-    def cont = print(" = { /* compiled code */ }")
+    def cont() = print(" = { /* compiled code */ }")
 
     val n = m.name
     if (underCaseClass(m) && n == CONSTRUCTOR_NAME) return
@@ -372,8 +373,8 @@ class ScalaSigPrinter(stream: PrintStream, printPrivates: Boolean) {
       case ClassInfoTypeWithCons(symbol, typeRefs, cons) => sep + typeRefs.map(toString).
               mkString(cons + " extends ", " with ", "")
 
-      case ImplicitMethodType(resultType, _) => toString(resultType, sep)
       case MethodType(resultType, _) => toString(resultType, sep)
+      case NullaryMethodType(resultType) => toString(resultType, sep)
 
       case PolyType(typeRef, symbols) => typeParamString(symbols) + toString(typeRef, sep)
       case PolyTypeWithCons(typeRef, symbols, cons) => typeParamString(symbols) + processName(cons) + toString(typeRef, sep)

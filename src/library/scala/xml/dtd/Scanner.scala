@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2002-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2002-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -33,7 +33,7 @@ class Scanner extends Tokens with parsing.TokenTests {
   }
 
   /** scans the next token */
-  final def nextToken {
+  final def nextToken() {
     if (token != END) token = readToken
   }
 
@@ -41,10 +41,10 @@ class Scanner extends Tokens with parsing.TokenTests {
   final def isIdentChar = ( ('a' <= c && c <= 'z')
                            || ('A' <= c && c <= 'Z'));
 
-  final def next = if (it.hasNext) c = it.next else c = ENDCH
+  final def next() = if (it.hasNext) c = it.next else c = ENDCH
 
   final def acc(d: Char) {
-    if (c == d) next else system.error("expected '"+d+"' found '"+c+"' !");
+    if (c == d) next else sys.error("expected '"+d+"' found '"+c+"' !");
   }
 
   final def accS(ds: Seq[Char]) { ds foreach acc }
@@ -65,7 +65,7 @@ class Scanner extends Tokens with parsing.TokenTests {
       case ENDCH => END
       case _     =>
         if (isNameStart(c)) name; // NAME
-        else system.error("unexpected character:" + c)
+        else sys.error("unexpected character:" + c)
     }
 
   final def name = {

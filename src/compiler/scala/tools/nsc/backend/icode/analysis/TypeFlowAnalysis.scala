@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -46,7 +46,7 @@ abstract class TypeFlowAnalysis {
     def lub2(exceptional: Boolean)(s1: TypeStack, s2: TypeStack) = {
       if (s1 eq bottom) s2
       else if (s2 eq bottom) s1
-      else if ((s1 eq exceptionHandlerStack) || (s2 eq exceptionHandlerStack)) system.error("merging with exhan stack")
+      else if ((s1 eq exceptionHandlerStack) || (s2 eq exceptionHandlerStack)) sys.error("merging with exhan stack")
       else {
 //        if (s1.length != s2.length)
 //          throw new CheckerException("Incompatible stacks: " + s1 + " and " + s2);
@@ -57,7 +57,7 @@ abstract class TypeFlowAnalysis {
 
   /** A map which returns the bottom type for unfound elements */
   class VarBinding extends mutable.HashMap[icodes.Local, icodes.TypeKind] {
-    override def get(l: icodes.Local) = super.get(l) orElse Some(typeLattice.bottom)
+    override def default(l: icodes.Local) = typeLattice.bottom
 
     def this(o: VarBinding) = {
       this()
@@ -627,11 +627,11 @@ abstract class TypeFlowAnalysis {
 
     private var lastStart = 0L
 
-    def reset {
+    def reset() {
       millis = 0L
     }
 
-    def start {
+    def start() {
       lastStart = System.currentTimeMillis
     }
 

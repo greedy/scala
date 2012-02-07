@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2007-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2007-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -103,7 +103,7 @@ abstract class Component extends UIElement {
   def tooltip_=(t: String) = peer.setToolTipText(t)
 
   def inputVerifier: Component => Boolean = { a =>
-    peer.getInputVerifier.verify(a.peer)
+    Option(peer.getInputVerifier) forall (_ verify a.peer)
   }
   def inputVerifier_=(v: Component => Boolean) {
     peer.setInputVerifier(new javax.swing.InputVerifier {
@@ -122,7 +122,7 @@ abstract class Component extends UIElement {
 
 
 
-  @deprecated("Use mouse instead") lazy val Mouse = mouse
+  @deprecated("Use mouse instead", "2.8.0") lazy val Mouse = mouse
 
   /**
    * Contains publishers for various mouse events. They are separated for
@@ -200,7 +200,7 @@ abstract class Component extends UIElement {
   def requestFocusInWindow() = peer.requestFocusInWindow()
   def hasFocus: Boolean = peer.isFocusOwner
 
-  protected override def onFirstSubscribe {
+  protected override def onFirstSubscribe() {
     super.onFirstSubscribe
     // TODO: deprecated, remove after 2.8
     peer.addComponentListener(new java.awt.event.ComponentListener {

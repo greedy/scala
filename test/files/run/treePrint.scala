@@ -2,6 +2,7 @@
  */
 object Test {
   import scala.tools.nsc._
+  import interpreter._
   import java.io.{ OutputStream, BufferedReader, StringReader, PrintWriter, Writer, OutputStreamWriter}
 
   val code = """
@@ -33,8 +34,9 @@ object Test {
     settings.classpath.value = System.getProperty("java.class.path")
     settings.Ycompacttrees.value = true
 
-    val repl = new Interpreter(settings, new PrintWriter(new NullOutputStream))
-    repl.interpret("""def initialize = "Have to interpret something or we get errors." """)
-    println(repl.power mkTree code)
+    val intp = new IMain(settings, new PrintWriter(new NullOutputStream))
+    val power = Power(intp)
+    intp.interpret("""def initialize = "Have to interpret something or we get errors." """)
+    power trees code foreach println
   }
 }

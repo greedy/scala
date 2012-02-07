@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Martin Odersky
  */
 
@@ -11,22 +11,23 @@ import symtab.Flags._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-/** <ul>
- *    <li>
- *      <code>productArity</code>, <code>element</code> implementations added
- *      to case classes
- *    </li>
- *    <li>
- *      <code>equals</code>, <code>hashCode</code> and </code>toString</code>
- *      methods are added to case classes, unless they are defined in the
- *      class or a baseclass different from <code>java.lang.Object</code>
- *    </li>
- *    <li>
- *      <code>toString</code> method is added to case objects, unless they
- *      are defined in the class or a baseclass different from
- *      <code>java.lang.Object</code>
- *    </li>
- *  </ul>
+/** Synthetic method implementations for case classes and case objects.
+ *
+ *  Added to all case classes/objects:
+ *    def productArity: Int
+ *    def productElement(n: Int): Any
+ *    def productPrefix: String
+ *    def productIterator: Iterator[Any]
+ *
+ *  Selectively added to case classes/objects, unless a non-default
+ *  implementation already exists:
+ *    def equals(other: Any): Boolean
+ *    def hashCode(): Int
+ *    def canEqual(other: Any): Boolean
+ *    def toString(): String
+ *
+ *  Special handling:
+ *    protected def readResolve(): AnyRef
  */
 trait SyntheticMethods extends ast.TreeDSL {
   self: Analyzer =>
@@ -34,19 +35,21 @@ trait SyntheticMethods extends ast.TreeDSL {
   import global._                  // the global environment
   import definitions._             // standard classes and methods
 
-  // @S: type hack: by default, we are used from global.analyzer context
-  // so this cast won't fail. If we aren't in global.analyzer, we have
-  // to override this method anyways.
-  protected def typer : Typer = global.typer.asInstanceOf[Typer]
-
   /** In general case classes/objects are not given synthetic equals methods if some
    *  non-AnyRef implementation is inherited.  However if you let a case object inherit
    *  an implementation from a case class, it creates an asymmetric equals with all the
    *  associated badness: see ticket #883.  So if it sees such a thing this has happened
    *  (by virtue of the symbol being in createdMethodSymbols) it re-overrides it with
    *  reference equality.
+   *
+   *  TODO: remove once (deprecated) case class inheritance is dropped form nsc.
    */
   private val createdMethodSymbols = new mutable.HashSet[Symbol]
+
+  /** Clear the cache of createdMethodSymbols.  */
+  def resetSynthetics() {
+    createdMethodSymbols.clear()
+  }
 
   /** Add the synthetic methods to case classes.  Note that a lot of the
    *  complexity herein is a consequence of case classes inheriting from
@@ -54,8 +57,9 @@ trait SyntheticMethods extends ast.TreeDSL {
    *  the opportunity for removal arises, this can be simplified.
    */
   def addSyntheticMethods(templ: Template, clazz: Symbol, context: Context): Template = {
-    val localContext         = if (reporter.hasErrors) context makeSilent false else context
-    val localTyper           = newTyper(localContext)
+    val localTyper = newTyper(
+      if (reporter.hasErrors) context makeSilent false else context
+    )
 
     def hasOverridingImplementation(meth: Symbol): Boolean = {
       val sym = clazz.info nonPrivateMember meth.name
@@ -86,12 +90,12 @@ trait SyntheticMethods extends ast.TreeDSL {
     import CODE._
 
     def productPrefixMethod: Tree = typer.typed {
-      val method = syntheticMethod(nme.productPrefix, 0, sym => PolyType(Nil, StringClass.tpe))
+      val method = syntheticMethod(nme.productPrefix, 0, sym => NullaryMethodType(StringClass.tpe))
       DEF(method) === LIT(clazz.name.decode)
     }
 
     def productArityMethod(nargs: Int): Tree = {
-      val method = syntheticMethod(nme.productArity, 0, sym => PolyType(Nil, IntClass.tpe))
+      val method = syntheticMethod(nme.productArity, 0, sym => NullaryMethodType(IntClass.tpe))
       typer typed { DEF(method) === LIT(nargs) }
     }
 
@@ -134,11 +138,6 @@ trait SyntheticMethods extends ast.TreeDSL {
         }
       }
     }
-
-    // XXX short term, expecting to make murmur the default as soon as it is put through some paces.
-    def hashCodeTarget: Name =
-      if (settings.Ymurmur.value) "hashCodeMurmur"
-      else nme.hashCode_
 
     /** The equality method for case modules:
      *   def equals(that: Any) = this eq that
@@ -257,7 +256,7 @@ trait SyntheticMethods extends ast.TreeDSL {
 
         // methods for case classes only
         def classMethods = List(
-          Object_hashCode -> (() => forwardingMethod(nme.hashCode_, "_" + hashCodeTarget)),
+          Object_hashCode -> (() => forwardingMethod(nme.hashCode_, "_" + nme.hashCode_)),
           Object_toString -> (() => forwardingMethod(nme.toString_, "_" + nme.toString_)),
           Object_equals   -> (() => equalsClassMethod)
         )

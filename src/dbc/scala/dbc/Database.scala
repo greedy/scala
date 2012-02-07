@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -18,7 +18,7 @@ import java.sql._
  *
  *  @author  Gilles Dubochet
  */
-case class Database(dbms: Vendor) {
+@deprecated(DbcIsDeprecated, "2.9.0") case class Database(dbms: Vendor) {
 
   class Closed extends Exception {}
 
@@ -87,7 +87,7 @@ case class Database(dbms: Vendor) {
 
   /** ..
    */
-  def close {
+  def close() {
     closing = true
     for (conn <- availableConnections) conn.close()
   }
@@ -134,7 +134,7 @@ case class Database(dbms: Vendor) {
     new scala.dbc.result.Status[Unit] {
       val statement = statusStatement;
       if (debug) Console.println("## " + statement.sqlString);
-      def result = ();
+      def result = ()
       private val connection = getConnection;
       val jdbcStatement: java.sql.Statement = connection.createStatement();
       jdbcStatement.execute(statement.sqlString);

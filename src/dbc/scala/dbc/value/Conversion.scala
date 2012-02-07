@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -11,10 +11,9 @@
 package scala.dbc
 package value;
 
-
 import java.math._;
 
-object Conversion {
+@deprecated(DbcIsDeprecated, "2.9.0") object  Conversion {
 
   class Illegal (msg:String) extends Exception(msg);
 

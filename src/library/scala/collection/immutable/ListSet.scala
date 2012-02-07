@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -12,7 +12,7 @@ package scala.collection
 package immutable
 
 import generic._
-import annotation.tailrec
+import annotation.{tailrec, bridge}
 import mutable.{ ListBuffer, Builder }
 
 /** $factoryInfo
@@ -99,9 +99,11 @@ class ListSet[A] extends Set[A]
    *  so we take the easy way out and add ourselves and the argument to
    *  a new builder.
    */
-  override def ++(xs: TraversableOnce[A]): ListSet[A] =
+  override def ++(xs: GenTraversableOnce[A]): ListSet[A] =
     if (xs.isEmpty) this
-    else new ListSet.ListSetBuilder(this) ++= xs result
+    else new ListSet.ListSetBuilder(this) ++= xs.seq result
+
+  @bridge def ++(xs: TraversableOnce[A]): ListSet[A] = ++(xs: GenTraversableOnce[A]): ListSet[A]
 
   private[ListSet] def unchecked_+(e: A): ListSet[A] = new Node(e)
   private[ListSet] def unchecked_outer: ListSet[A] =

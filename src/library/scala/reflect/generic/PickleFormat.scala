@@ -9,7 +9,7 @@ package generic
  *  @author Martin Odersky
  *  @version 1.0
  */
-object PickleFormat {
+@deprecated("scala.reflect.generic will be removed", "2.9.1") object PickleFormat {
 
 /***************************************************
  * Symbol table attribute format:
@@ -110,7 +110,7 @@ object PickleFormat {
  *   AnnotArg       = Tree | Constant
  *   ConstAnnotArg  = Constant | AnnotInfo | AnnotArgArray
  *
- *   len is remaining length after `len'.
+ *   len is remaining length after `len`.
  */
   val MajorVersion = 5
   val MinorVersion = 0
@@ -137,7 +137,7 @@ object PickleFormat {
   final val CLASSINFOtpe = 19
   final val METHODtpe = 20
   final val POLYtpe = 21
-  final val IMPLICITMETHODtpe = 22
+  final val IMPLICITMETHODtpe = 22    // no longer generated
 
   final val LITERAL = 23   // base line for literals
   final val LITERALunit = 24

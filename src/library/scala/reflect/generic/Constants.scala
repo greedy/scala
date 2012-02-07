@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -9,7 +9,7 @@ package generic
 import java.lang.Integer.toOctalString
 import annotation.switch
 
-trait Constants {
+@deprecated("scala.reflect.generic will be removed", "2.9.1") trait Constants {
   self: Universe =>
 
   import definitions._
@@ -236,7 +236,6 @@ trait Constants {
     def typeValue: Type     = value.asInstanceOf[Type]
     def symbolValue: Symbol = value.asInstanceOf[Symbol]
 
-    override def hashCode: Int =
-      if (value == null) 0 else value.## * 41 + 17
+    override def hashCode: Int = value.## * 41 + 17
   }
 }

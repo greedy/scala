@@ -1,45 +1,22 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
 \*                                                                      */
 
-
-
 package scala.collection
 package immutable
 
-
-import scala.collection.generic.CanBuildFrom
-import scala.collection.mutable.Builder
-import scala.collection.mutable.MapBuilder
-
-
+import scala.collection.generic.{ CanBuildFrom, BitOperations }
+import scala.collection.mutable.{ Builder, MapBuilder }
 
 /** Utility class for long maps.
  *  @author David MacIver
  */
-private[immutable] object LongMapUtils{
-  def zero(i : Long, mask : Long) = (i & mask) == 0L;
-  def mask(i : Long, mask : Long) = i & (complement(mask - 1) ^ mask)
-  def hasMatch(key : Long, prefix : Long, m : Long) = mask(key, m) == prefix;
-  def unsignedCompare(i : Long, j : Long) = (i < j) ^ (i < 0) ^ (j < 0)
-  def shorter(m1 : Long, m2 : Long) = unsignedCompare(m2, m1)
-  def complement(i : Long) = (-1) ^ i;
-  def branchMask(i : Long, j : Long) = highestOneBit(i ^ j);
-
-  def highestOneBit(j : Long) = {
-    var i = j;
-    i |= (i >>  1);
-    i |= (i >>  2);
-    i |= (i >>  4);
-    i |= (i >>  8);
-    i |= (i >> 16);
-    i |= (i >> 32);
-    i - (i >>> 1);
-  }
+private[immutable] object LongMapUtils extends BitOperations.Long {
+  def branchMask(i: Long, j: Long) = highestOneBit(i ^ j)
 
   def join[T](p1 : Long, t1 : LongMap[T], p2 : Long, t2 : LongMap[T]) : LongMap[T] = {
     val m = branchMask(p1, p2);
@@ -58,9 +35,14 @@ private[immutable] object LongMapUtils{
 import LongMapUtils._
 
 /** A companion object for long maps.
+ *
+ *  @define Coll  LongMap
+ *  @define mapCanBuildFromInfo
+ *    The standard `CanBuildFrom` instance for `$Coll` objects.
+ *    The created value is an instance of class `MapCanBuildFrom`.
  *  @since 2.7
  */
-object LongMap{
+object LongMap {
   /** $mapCanBuildFromInfo */
   implicit def canBuildFrom[A, B] = new CanBuildFrom[LongMap[A], (Long, B), LongMap[B]] {
     def apply(from: LongMap[A]): Builder[(Long, B), LongMap[B]] = apply()
@@ -92,7 +74,6 @@ object LongMap{
       else LongMap.Bin[S](prefix, mask, left, right);
     }
   }
-
 }
 
 import LongMap._
@@ -107,7 +88,7 @@ private[immutable] abstract class LongMapIterator[V, T](it : LongMap[V]) extends
   var index = 0;
   var buffer = new Array[AnyRef](65);
 
-  def pop = {
+  def pop() = {
     index -= 1;
     buffer(index).asInstanceOf[LongMap[V]];
   }
@@ -125,7 +106,7 @@ private[immutable] abstract class LongMapIterator[V, T](it : LongMap[V]) extends
 
   def hasNext = index != 0;
   final def next : T =
-    pop match {
+    pop() match {
       case LongMap.Bin(_,_, t@LongMap.Tip(_, _), right) => {
         push(right);
         valueOf(t);
@@ -138,7 +119,7 @@ private[immutable] abstract class LongMapIterator[V, T](it : LongMap[V]) extends
       case t@LongMap.Tip(_, _) => valueOf(t);
       // This should never happen. We don't allow LongMap.Nil in subtrees of the LongMap
       // and don't return an LongMapIterator for LongMap.Nil.
-      case LongMap.Nil => system.error("Empty maps not allowed as subtrees");
+      case LongMap.Nil => sys.error("Empty maps not allowed as subtrees");
     }
 }
 
@@ -275,8 +256,8 @@ sealed abstract class LongMap[+T] extends Map[Long, T] with MapLike[Long, T, Lon
 
   final override def apply(key : Long) : T = this match {
     case LongMap.Bin(prefix, mask, left, right) => if (zero(key, mask)) left(key) else right(key);
-    case LongMap.Tip(key2, value) => if (key == key2) value else system.error("Key not found");
-    case LongMap.Nil => system.error("key not found");
+    case LongMap.Tip(key2, value) => if (key == key2) value else sys.error("Key not found");
+    case LongMap.Nil => sys.error("key not found");
   }
 
   def + [S >: T] (kv: (Long, S)): LongMap[S] = updated(kv._1, kv._2)
@@ -289,9 +270,6 @@ sealed abstract class LongMap[+T] extends Map[Long, T] with MapLike[Long, T, Lon
                              else join(key, LongMap.Tip(key, value), key2, this);
     case LongMap.Nil => LongMap.Tip(key, value);
   }
-
-  @deprecated("use `updated' instead")
-  override def update[S >: T](key: Long, value: S): LongMap[S] = updated(key, value)
 
   /**
    * Updates the map, using the provided function to resolve conflicts if the key is already present.

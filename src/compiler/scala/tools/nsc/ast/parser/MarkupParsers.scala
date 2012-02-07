@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Burak Emir
  */
 
@@ -12,7 +12,7 @@ import scala.util.control.ControlThrowable
 import scala.tools.nsc.util.{SourceFile,CharArrayReader}
 import scala.xml.{ Text, TextBuffer }
 import scala.xml.Utility.{ isNameStart, isNameChar, isSpace }
-import util.Chars.{ SU, LF }
+import scala.reflect.internal.Chars.{ SU, LF }
 
 // XXX/Note: many/most of the functions in here are almost direct cut and pastes
 // from another file - scala.xml.parsing.MarkupParser, it looks like.
@@ -47,7 +47,7 @@ trait MarkupParsers {
 
   import global._
 
-  class MarkupParser(parser: UnitParser, final val preserveWS: Boolean) extends scala.xml.parsing.MarkupParserCommon {
+  class MarkupParser(parser: SourceFileParser, final val preserveWS: Boolean) extends scala.xml.parsing.MarkupParserCommon {
 
     import Tokens.{ EMPTY, LBRACE, RBRACE }
 
@@ -76,8 +76,8 @@ trait MarkupParsers {
     var tmppos : Position = NoPosition
     def ch = input.ch
     /** this method assign the next character to ch and advances in input */
-    def nextch = { val result = input.ch; input.nextChar(); result }
-    def ch_returning_nextch = nextch
+    def nextch() { input.nextChar() }
+    def ch_returning_nextch = { val result = ch; input.nextChar(); result }
 
     def mkProcInstr(position: Position, name: String, text: String): Tree =
       parser.symbXMLBuilder.procInstr(position, name, text)
@@ -398,7 +398,9 @@ trait MarkupParsers {
     def reportSyntaxError(pos: Int, str: String) = parser.syntaxError(pos, str)
     def reportSyntaxError(str: String) = {
       reportSyntaxError(curOffset, "in XML literal: " + str)
+      val result = ch
       nextch
+      result
     }
 
     /** '<' xPattern  ::= Name [S] { xmlPattern | '{' pattern3 '}' } ETag

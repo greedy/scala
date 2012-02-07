@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2007-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2007-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -122,7 +122,7 @@ object ComboBox {
 
   def newConstantModel[A](items: Seq[A]): ComboBoxModel = {
     new AbstractListModel with ComboBoxModel {
-      private var selected = items(0)
+      private var selected: A = if (items.isEmpty) null.asInstanceOf[A] else items(0)
       def getSelectedItem: AnyRef = selected.asInstanceOf[AnyRef]
       def setSelectedItem(a: Any) {
         if ((selected != null && selected != a) ||

@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -38,12 +38,15 @@ trait SetMethods[A, +This <: SetLike[A, This] with Set[A]]
   def - (elem: A): This
 
   // concrete
+  def & (that: Set[A]): This
+  def &~ (that: Set[A]): This
+  def + (elem1: A, elem2: A, elems: A*): This
   def apply(elem: A): Boolean
+  def diff(that: Set[A]): This
   def intersect(that: Set[A]): This
-  def &(that: Set[A]): This
+  def subsetOf(that: Set[A]): Boolean
+  def subsets(len: Int): Iterator[This]
+  def subsets: Iterator[This]
   def union(that: Set[A]): This
   def | (that: Set[A]): This
-  def diff(that: Set[A]): This
-  def &~(that: Set[A]): This
-  def subsetOf(that: Set[A]): Boolean
 }

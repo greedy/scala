@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala Ant Tasks                      **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -80,7 +80,6 @@ class FastScalac extends Scalac {
        *  Most likely this manifests in confusing and very difficult to debug behavior in fsc.
        *  We should warn or fix.
        */
-
       val stringSettings =
         List(s.outdir, s.classpath, s.bootclasspath, s.extdirs, s.encoding) flatMap (x => List(x.name, x.value))
 
@@ -104,7 +103,7 @@ class FastScalac extends Scalac {
 
       val args = (cmdOptions ::: (sourceFiles map (_.toString))).toArray
       try {
-        if (scala.tools.nsc.CompileClient.main0(args) > 0 && failonerror)
+        if (scala.tools.nsc.CompileClient.process(args) && failonerror)
           buildError("Compile failed; see the compiler error output for details.")
       }
       catch {

@@ -1,32 +1,38 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
 package scala.collection.parallel.immutable
-
-
-
-
-
-
 
 import scala.collection.parallel.ParSetLike
 import scala.collection.parallel.Combiner
-import scala.collection.parallel.ParIterableIterator
-import scala.collection.parallel.EnvironmentPassingCombiner
-import scala.collection.parallel.UnrolledBuffer.Unrolled
-import scala.collection.parallel.UnrolledBuffer
+import scala.collection.parallel.IterableSplitter
+import scala.collection.mutable.UnrolledBuffer.Unrolled
+import scala.collection.mutable.UnrolledBuffer
 import scala.collection.generic.ParSetFactory
 import scala.collection.generic.CanCombineFrom
 import scala.collection.generic.GenericParTemplate
 import scala.collection.generic.GenericParCompanion
 import scala.collection.generic.GenericCompanion
-import scala.collection.immutable.HashSet
+import scala.collection.immutable.{ HashSet, TrieIterator }
 
-
-
-
-
-
-/** Parallel hash trie set.
+/** Immutable parallel hash set, based on hash tries.
  *
- *  @author prokopec
+ *  $paralleliterableinfo
+ *
+ *  $sideeffects
+ *
+ *  @tparam T    the element type of the set
+ *
+ *  @author Aleksandar Prokopec
+ *  @since 2.9
+ *
+ *  @define Coll immutable.ParHashSet
+ *  @define coll immutable parallel hash set
  */
 @SerialVersionUID(1L)
 class ParHashSet[T] private[immutable] (private[this] val trie: HashSet[T])
@@ -43,9 +49,9 @@ self =>
 
   override def empty: ParHashSet[T] = new ParHashSet[T]
 
-  def parallelIterator: ParIterableIterator[T] = new ParHashSetIterator(trie.iterator, trie.size) with SCPI
+  def splitter: IterableSplitter[T] = new ParHashSetIterator(trie.iterator, trie.size) with SCPI
 
-  def seq = trie
+  override def seq = trie
 
   def -(e: T) = new ParHashSet(trie - e)
 
@@ -67,9 +73,8 @@ self =>
   self: SignalContextPassingIterator[ParHashSetIterator] =>
     var i = 0
     def dup = triter match {
-      case t: HashSet.TrieIterator[_] =>
-        val dupt = t.dupIterator.asInstanceOf[Iterator[T]]
-        dupFromIterator(dupt)
+      case t: TrieIterator[_] =>
+        dupFromIterator(t.dupIterator)
       case _ =>
         val buff = triter.toBuffer
         triter = buff.iterator
@@ -81,9 +86,9 @@ self =>
       phit
     }
     def split: Seq[ParIterator] = if (remaining < 2) Seq(this) else triter match {
-      case t: HashSet.TrieIterator[_] =>
+      case t: TrieIterator[_] =>
         val previousRemaining = remaining
-        val ((fst, fstlength), snd) = t.asInstanceOf[HashSet.TrieIterator[T]].split
+        val ((fst, fstlength), snd) = t.split
         val sndlength = previousRemaining - fstlength
         Seq(
           new ParHashSetIterator(fst, fstlength) with SCPI,
@@ -108,6 +113,10 @@ self =>
 }
 
 
+/** $factoryInfo
+ *  @define Coll immutable.ParHashSet
+ *  @define coll immutable parallel hash set
+ */
 object ParHashSet extends ParSetFactory[ParHashSet] {
   def newCombiner[T]: Combiner[T, ParHashSet[T]] = HashSetCombiner[T]
 
@@ -120,9 +129,9 @@ object ParHashSet extends ParSetFactory[ParHashSet] {
 
 private[immutable] abstract class HashSetCombiner[T]
 extends collection.parallel.BucketCombiner[T, ParHashSet[T], Any, HashSetCombiner[T]](HashSetCombiner.rootsize) {
-self: EnvironmentPassingCombiner[T, ParHashSet[T]] =>
+//self: EnvironmentPassingCombiner[T, ParHashSet[T]] =>
   import HashSetCombiner._
-  import tasksupport._
+  import collection.parallel.tasksupport._
   val emptyTrie = HashSet.empty[T]
 
   def +=(elem: T) = {
@@ -204,26 +213,11 @@ self: EnvironmentPassingCombiner[T, ParHashSet[T]] =>
 
 
 object HashSetCombiner {
-  def apply[T] = new HashSetCombiner[T] with EnvironmentPassingCombiner[T, ParHashSet[T]] {}
+  def apply[T] = new HashSetCombiner[T] {} // was: with EnvironmentPassingCombiner[T, ParHashSet[T]] {}
 
   private[immutable] val rootbits = 5
   private[immutable] val rootsize = 1 << 5
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

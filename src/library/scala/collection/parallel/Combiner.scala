@@ -1,3 +1,12 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
+
 package scala.collection.parallel
 
 
@@ -8,21 +17,24 @@ import scala.collection.generic.Sizing
 
 
 /** The base trait for all combiners.
- *  A combiner lets one construct collections incrementally just like
+ *  A combiner incremental collection construction just like
  *  a regular builder, but also implements an efficient merge operation of two builders
  *  via `combine` method. Once the collection is constructed, it may be obtained by invoking
  *  the `result` method.
  *
+ *  The complexity of the `combine` method should be less than linear for best
+ *  performance. The `result` method doesn't have to be a constant time operation,
+ *  but may be performed in parallel.
+ *
  *  @tparam Elem   the type of the elements added to the builder
  *  @tparam To     the type of the collection the builder produces
  *
- *  @author prokopec
+ *  @author Aleksandar Prokopec
+ *  @since 2.9
  */
 trait Combiner[-Elem, +To] extends Builder[Elem, To] with Sizing with Parallel {
-self: EnvironmentPassingCombiner[Elem, To] =>
+//self: EnvironmentPassingCombiner[Elem, To] =>
   private[collection] final val tasksupport = getTaskSupport
-
-  type EPC = EnvironmentPassingCombiner[Elem, To]
 
   /** Combines the contents of the receiver builder and the `other` builder,
    *  producing a new builder containing both their elements.
@@ -54,14 +66,14 @@ self: EnvironmentPassingCombiner[Elem, To] =>
 }
 
 
-trait EnvironmentPassingCombiner[-Elem, +To] extends Combiner[Elem, To] {
+/*
+private[collection] trait EnvironmentPassingCombiner[-Elem, +To] extends Combiner[Elem, To] {
   abstract override def result = {
     val res = super.result
-    //
     res
   }
 }
-
+*/
 
 
 

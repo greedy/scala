@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2006-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -48,7 +48,8 @@ extends IndexedSeq[T] with Serializable {
    */
   import num._
 
-  private val numRangeElements: Int =
+  // See comment in Range for why this must be lazy.
+  private lazy val numRangeElements: Int =
     NumericRange.count(start, end, step, isInclusive)
 
   override def length  = numRangeElements
@@ -106,6 +107,18 @@ extends IndexedSeq[T] with Serializable {
   // will overflow.  This creates an exclusive range where start == end
   // based on the given value.
   private def newEmptyRange(value: T) = NumericRange(value, value, step)
+
+  final override def take(n: Int): NumericRange[T] = (
+    if (n <= 0 || length == 0) newEmptyRange(start)
+    else if (n >= length) this
+    else new NumericRange.Inclusive(start, locationAfterN(n - 1), step)
+  )
+
+  final override def drop(n: Int): NumericRange[T] = (
+    if (n <= 0 || length == 0) this
+    else if (n >= length) newEmptyRange(end)
+    else copy(locationAfterN(n), end, step)
+  )
 
   def apply(idx: Int): T = {
     if (idx < 0 || idx >= length) throw new IndexOutOfBoundsException(idx.toString)
@@ -183,28 +196,38 @@ object NumericRange {
    *  whether or not it is inclusive.  Throws an exception if step == 0 or
    *  the number of elements exceeds the maximum Int.
    */
-  def count[T: Integral](start: T, end: T, step: T, isInclusive: Boolean): Int = {
-    val num = implicitly[Integral[T]]
-    import num._
+  def count[T](start: T, end: T, step: T, isInclusive: Boolean)(implicit num: Integral[T]): Int = {
+    val zero    = num.zero
+    val upward  = num.lt(start, end)
+    val posStep = num.gt(step, zero)
 
-    if (step == zero)
-      throw new IllegalArgumentException("step cannot be 0.")
+    if (step == zero) throw new IllegalArgumentException("step cannot be 0.")
+    else if (start == end) if (isInclusive) 1 else 0
+    else if (upward != posStep) 0
+    else {
+      val diff      = num.minus(end, start)
+      val jumps     = num.toLong(num.quot(diff, step))
+      val remainder = num.toLong(num.rem(diff, step))
+      val longCount = jumps + (
+        if (!isInclusive && zero == remainder) 0 else 1
+      )
 
-    val longCount: Long =
-      if (start == end) { if (isInclusive) 1 else 0 }
-      else if (end > start != step > zero) 0
-      else {
-        val jumps     = toLong((end - start) / step)
-        val remainder = toLong((end - start) % step)
+      /** The edge cases keep coming.  Since e.g.
+       *    Long.MaxValue + 1 == Long.MinValue
+       *  we do some more improbable seeming checks lest
+       *  overflow turn up as an empty range.
+       */
+      // The second condition contradicts an empty result.
+      val isOverflow = longCount == 0 && num.lt(num.plus(start, step), end) == upward
 
-        if (!isInclusive && zero == remainder) jumps
-        else jumps + 1L
+      if (longCount > scala.Int.MaxValue || longCount < 0L || isOverflow) {
+        val word  = if (isInclusive) "to" else "until"
+        val descr = List(start, word, end, "by", step) mkString " "
+
+        throw new IllegalArgumentException(descr + ": seqs cannot contain more than Int.MaxValue elements.")
       }
-
-    if (longCount > scala.Int.MaxValue || longCount < 0L)
-      throw new IllegalArgumentException("Seqs cannot contain more than Int.MaxValue elements.")
-
-    longCount.toInt
+      longCount.toInt
+    }
   }
 
   class Inclusive[T](start: T, end: T, step: T)(implicit num: Integral[T])

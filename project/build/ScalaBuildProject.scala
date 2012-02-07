@@ -2,7 +2,7 @@ import sbt._
 import ScalaBuildProject._
 
 
-abstract class ScalaBuildProject extends Project{
+abstract class ScalaBuildProject extends Project {
   lazy val projectRoot = info.projectPath
   lazy val layerOutput = outputRootPath / name
   lazy val pathLayout = new PathLayout(projectRoot, layerOutput)
@@ -15,8 +15,6 @@ abstract class ScalaBuildProject extends Project{
   lazy val antJar = lib / "ant" / "ant.jar"
   lazy val fjbgJar = lib / fjbgJarName
   lazy val msilJar = lib /  msilJarName
-
-
 
 }
 

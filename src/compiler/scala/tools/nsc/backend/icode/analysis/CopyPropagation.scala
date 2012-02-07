@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -212,7 +212,7 @@ abstract class CopyPropagation {
       }
     }
 
-    override def run {
+    override def run() {
       forwardAnalysis(blockTransfer)
       if (settings.debug.value) {
         linearizer.linearize(method).foreach(b => if (b != method.code.startBlock)
@@ -301,7 +301,7 @@ abstract class CopyPropagation {
                   out.bindings += (LocalVar(local) -> v)
               }
             case Nil =>
-              system.error("Incorrect icode in " + method + ". Expecting something on the stack.")
+              sys.error("Incorrect icode in " + method + ". Expecting something on the stack.")
           }
           out.stack = out.stack drop 1;
 

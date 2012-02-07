@@ -1,5 +1,5 @@
 /* NEST (New Scala Test)
- * Copyright 2007-2010 LAMP/EPFL
+ * Copyright 2007-2011 LAMP/EPFL
  * @author Philipp Haller
  */
 
@@ -12,7 +12,6 @@ import java.io.{ File, FilenameFilter, IOException, StringWriter }
 import java.net.URI
 import scala.util.Properties.{ propOrElse, scalaCmd, scalacCmd }
 import scala.tools.util.PathResolver
-import scala.tools.nsc.{ Settings }
 import scala.tools.nsc.{ io, util }
 import util.{ ClassPath }
 import io.{ Path, Directory }
@@ -62,7 +61,7 @@ class ConsoleFileManager extends FileManager {
 
   if (!srcDir.isDirectory) {
     NestUI.failure("Source directory \"" + srcDir.path + "\" not found")
-    system.exit(1)
+    sys.exit(1)
   }
 
   CLASSPATH = {
@@ -167,6 +166,7 @@ class ConsoleFileManager extends FileManager {
   var latestCompFile: File = _
   var latestPartestFile: File = _
   var latestFjbgFile: File = _
+  def latestScalapFile: File = (latestLibFile.parent / "scalap.jar").jfile
   var testClassesDir: Directory = _
   // initialize above fields
   findLatest()

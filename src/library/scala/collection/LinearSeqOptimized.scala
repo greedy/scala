@@ -1,16 +1,14 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
 \*                                                                      */
 
-
-
 package scala.collection
-import generic._
 
+import generic._
 import mutable.ListBuffer
 import immutable.List
 import scala.util.control.Breaks._
@@ -50,7 +48,7 @@ trait LinearSeqOptimized[+A, +Repr <: LinearSeqOptimized[A, Repr]] extends Linea
    */
   def apply(n: Int): A = {
     val rest = drop(n)
-    if (n < 0 || rest.isEmpty) throw new IndexOutOfBoundsException
+    if (n < 0 || rest.isEmpty) throw new IndexOutOfBoundsException("" + n)
     rest.head
   }
 
@@ -165,6 +163,17 @@ trait LinearSeqOptimized[+A, +Repr <: LinearSeqOptimized[A, Repr]] extends Linea
       these = these.tail
       count -= 1
     }
+    // !!! This line should actually be something like:
+    //   newBuilder ++= these result
+    // since we are in collection.*, not immutable.*.
+    // However making that change will pessimize all the
+    // immutable linear seqs (like list) which surely expect
+    // drop to share.  (Or at least it would penalize List if
+    // it didn't override drop.  It would be a lot better if
+    // the leaf collections didn't override so many methods.)
+    //
+    // Upshot: MutableList is broken and passes part of the
+    // original list as the result of drop.
     these
   }
 
@@ -183,13 +192,21 @@ trait LinearSeqOptimized[+A, +Repr <: LinearSeqOptimized[A, Repr]] extends Linea
 
   override /*IterableLike*/
   def slice(from: Int, until: Int): Repr = {
+    var these: Repr = repr
+    var count = from max 0
+    if (until <= count)
+      return newBuilder.result
+
     val b = newBuilder
-    var i = from
-    var these = this drop from
-    while (i < until && !these.isEmpty) {
+    var sliceElems = until - count
+    while (these.nonEmpty && count > 0) {
+      these = these.tail
+      count -= 1
+    }
+    while (these.nonEmpty && sliceElems > 0) {
+      sliceElems -= 1
       b += these.head
       these = these.tail
-      i += 1
     }
     b.result
   }
@@ -217,7 +234,7 @@ trait LinearSeqOptimized[+A, +Repr <: LinearSeqOptimized[A, Repr]] extends Linea
   }
 
   override /*IterableLike*/
-  def sameElements[B >: A](that: Iterable[B]): Boolean = that match {
+  def sameElements[B >: A](that: GenIterable[B]): Boolean = that match {
     case that1: LinearSeq[_] =>
       var these = this
       var those = that1

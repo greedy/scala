@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala Ant Tasks                      **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -45,6 +45,7 @@ import scala.tools.nsc.reporters.{Reporter, ConsoleReporter}
  *    <li>bottom,</li>
  *    <li>addparams,</li>
  *    <li>deprecation,</li>
+ *    <li>docgenerator,</li>
  *    <li>unchecked.</li>
  *  </ul>
  *  <p>
@@ -99,6 +100,9 @@ class Scaladoc extends ScalaMatchingTask {
   /** The character encoding of the files to compile. */
   private var encoding: Option[String] = None
 
+  /** The fully qualified name of a doclet class, which will be used to generate the documentation. */
+  private var docgenerator: Option[String] = None
+
   /** The document title of the generated HTML documentation. */
   private var doctitle: Option[String] = None
 
@@ -107,6 +111,9 @@ class Scaladoc extends ScalaMatchingTask {
 
   /** Instruct the compiler to generate links to sources */
   private var docsourceurl: Option[String] = None
+
+  /** Point scaladoc at uncompilable sources. */
+  private var docUncompilable: Option[String] = None
 
   /** Instruct the compiler to use additional parameters */
   private var addParams: String = ""
@@ -265,6 +272,14 @@ class Scaladoc extends ScalaMatchingTask {
     encoding = Some(input)
   }
 
+  /** Sets the <code>docgenerator</code> attribute.
+   *
+   *  @param input A fully qualified class name of a doclet.
+   */
+  def setDocgenerator(input: String) {
+    docgenerator = Some(input)
+  }
+
   /** Sets the <code>docversion</code> attribute.
    *
    *  @param input The value of <code>docversion</code>.
@@ -317,6 +332,10 @@ class Scaladoc extends ScalaMatchingTask {
       unchecked = "yes".equals(input) || "on".equals(input)
     else
       buildError("Unknown unchecked flag '" + input + "'")
+  }
+
+  def setDocUncompilable(input: String) {
+    docUncompilable = Some(input)
   }
 
 /*============================================================================*\
@@ -506,8 +525,11 @@ class Scaladoc extends ScalaMatchingTask {
     if (!doctitle.isEmpty) docSettings.doctitle.value = decodeEscapes(doctitle.get)
     if (!docversion.isEmpty) docSettings.docversion.value = decodeEscapes(docversion.get)
     if (!docsourceurl.isEmpty) docSettings.docsourceurl.value =decodeEscapes(docsourceurl.get)
+    if (!docUncompilable.isEmpty) docSettings.docUncompilable.value = decodeEscapes(docUncompilable.get)
+
     docSettings.deprecation.value = deprecation
     docSettings.unchecked.value = unchecked
+    if (!docgenerator.isEmpty) docSettings.docgenerator.value = docgenerator.get
     log("Scaladoc params = '" + addParams + "'", Project.MSG_DEBUG)
 
     docSettings processArgumentString addParams

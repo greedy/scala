@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -13,12 +13,12 @@ package statement
 
 
 /** A join behaviour in a <code>Jointure</code>. */
-abstract class JoinType {
+@deprecated(DbcIsDeprecated, "2.9.0") abstract class JoinType {
   /** A SQL-99 string representation of the join behaviour. */
   def sqlString: String
 }
 
-object JoinType {
+@deprecated(DbcIsDeprecated, "2.9.0") object JoinType {
 
   /** A join behaviour where a joined tuple is created only when a
    *  corresponding tuple exists in both original relations.

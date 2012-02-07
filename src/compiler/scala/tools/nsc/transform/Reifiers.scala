@@ -12,7 +12,7 @@ import collection.mutable.HashMap
  *  @author Gilles Dubochet, Lex Spoon
  */
 trait Reifiers {
-  val symbols: SymbolTable
+  val symbols: Global
   import symbols._
 
   private def mkGlobalSymbol(fullname: String, sym: Symbol): reflect.Symbol =
@@ -79,6 +79,8 @@ trait Reifiers {
       if (_log_reify_type_) println("cannot handle ClassInfoType "+tp); reflect.NoType
     case MethodType(params, result) =>
       reflect.MethodType(params.map(reify), reify(result))
+    case NullaryMethodType(result) =>
+      reflect.NullaryMethodType(reify(result))
     case PolyType(tparams, result) =>
       val boundss =
 	for {
@@ -146,6 +148,8 @@ trait Reifiers {
 	TypeBounds(unreify(lo), unreify(hi))
       case reflect.MethodType(params, restpe) =>
 	MethodType(params.map(unreify), unreify(restpe))
+      case reflect.NullaryMethodType(restpe) =>
+	NullaryMethodType(unreify(restpe))
       case reflect.PolyType(typeParams, typeBounds, resultType) =>
 	PolyType(typeParams.map(unreify), unreify(resultType))
       //todo: treat ExistentialType
@@ -301,7 +305,7 @@ trait Reifiers {
         val rrhs   = reify(rhs)
         reflect.DefDef(rsym, rparss, rret, rrhs)
 
-      case sp @ Super(qual: Name, mix: Name) =>
+      case sp @ Super(qual, mix) =>
         val rsym = reify(sp.symbol)
         reflect.Super(rsym)
 

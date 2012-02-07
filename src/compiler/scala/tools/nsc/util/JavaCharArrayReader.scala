@@ -1,12 +1,12 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
 package scala.tools.nsc
 package util
 
-import Chars._
+import scala.reflect.internal.Chars._
 
 class JavaCharArrayReader(buf: IndexedSeq[Char], start: Int, /* startline: int, startcol: int, */
                       decodeUni: Boolean, error: String => Unit) extends Iterator[Char] with Cloneable {
@@ -110,7 +110,7 @@ class JavaCharArrayReader(buf: IndexedSeq[Char], start: Int, /* startline: int, 
     ch
   }
 
-  def rewind {
+  def rewind() {
     if (oldBp == -1) throw new IllegalArgumentException
     bp = oldBp
     ch = oldCh

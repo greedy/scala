@@ -48,6 +48,11 @@ class Exceptional(val ex: Throwable)(implicit prefs: ScalaPrefs) {
   def causes  = Exceptional.causes(ex)
   def summary = unwrapped.toString + "\n  at " + apply(0).shortNameString
 
+  private def println(msg: Any) = {
+    Console println msg
+    Console.flush()
+  }
+
   def show(): Unit         = println(context())
   def show(num: Int): Unit = println(context(num))
   def showCauses()         = println((ex :: causes).mkString("", "\n  caused by -> ", ""))
@@ -59,6 +64,20 @@ class Exceptional(val ex: Throwable)(implicit prefs: ScalaPrefs) {
 
 
 object Exceptional {
+  type Catcher[+T] = PartialFunction[Throwable, T]
+
+  /** Creates an exception handler which will only ever catch the given
+   *  number of exceptions (if the given pf is defined there) and after
+   *  that will disable itself.
+   */
+  def expiringHandler[T](numCatches: Int)(pf: Catcher[T]): Catcher[T] = {
+    var remaining = numCatches;
+    { case ex: Throwable if remaining > 0 && pf.isDefinedAt(ex) =>
+        remaining -= 1
+        pf(ex)
+    }
+  }
+
   /** The Throwable => Exceptional implicit plus the associated factory. */
   implicit def throwableToExceptional(ex: Throwable)(implicit prefs: ScalaPrefs): Exceptional = apply(ex)(prefs)
   def apply(ex: Throwable)(implicit prefs: ScalaPrefs) = new Exceptional(ex)(prefs)
@@ -66,6 +85,7 @@ object Exceptional {
   /** Some handy functions. */
   def stack()  = JavaStackFrame frames ((new Throwable).getStackTrace dropWhile isLocal)
   def showme() = apply(new Throwable).show()
+  def showstack() = apply(new Throwable).showTable()
 
   /** A frame formatter with more refined aesthetics than the default.
    *  Come, let us be civilized.

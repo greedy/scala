@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2006-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -28,7 +28,7 @@ trait IndexedSeqOptimized[+A, +Repr] extends IndexedSeqLike[A, Repr] { self =>
   def isEmpty: Boolean = { length == 0 }
 
   override /*IterableLike*/
-  def foreach[U](f: A =>  U): Unit = {
+  def foreach[U](f: A => U): Unit = {
     var i = 0
     val len = length
     while (i < len) { f(this(i)); i += 1 }
@@ -73,7 +73,7 @@ trait IndexedSeqOptimized[+A, +Repr] extends IndexedSeqLike[A, Repr] { self =>
     if (length > 0) foldr(0, length - 1, this(length - 1), op) else super.reduceRight(op)
 
   override /*IterableLike*/
-  def zip[A1 >: A, B, That](that: Iterable[B])(implicit bf: CanBuildFrom[Repr, (A1, B), That]): That = that match {
+  def zip[A1 >: A, B, That](that: GenIterable[B])(implicit bf: CanBuildFrom[Repr, (A1, B), That]): That = that match {
     case that: IndexedSeq[_] =>
       val b = bf(repr)
       var i = 0
@@ -103,12 +103,15 @@ trait IndexedSeqOptimized[+A, +Repr] extends IndexedSeqLike[A, Repr] { self =>
 
   override /*IterableLike*/
   def slice(from: Int, until: Int): Repr = {
-    var i = from max 0
-    val end = until min length
-    val b = newBuilder
-    b.sizeHint(end - i)
-    while (i < end) {
-      b += this(i)
+    val lo    = math.max(from, 0)
+    val hi    = math.min(until, length)
+    val elems = math.max(hi - lo, 0)
+    val b     = newBuilder
+    b.sizeHint(elems)
+
+    var i = lo
+    while (i < hi) {
+      b += self(i)
       i += 1
     }
     b.result
@@ -151,7 +154,7 @@ trait IndexedSeqOptimized[+A, +Repr] extends IndexedSeqLike[A, Repr] { self =>
   def span(p: A => Boolean): (Repr, Repr) = splitAt(prefixLength(p))
 
   override /*IterableLike*/
-  def sameElements[B >: A](that: Iterable[B]): Boolean = that match {
+  def sameElements[B >: A](that: GenIterable[B]): Boolean = that match {
     case that: IndexedSeq[_] =>
       val len = length
       len == that.length && {
@@ -175,7 +178,6 @@ trait IndexedSeqOptimized[+A, +Repr] extends IndexedSeqLike[A, Repr] { self =>
     }
   }
 
-
   // Overridden methods from Seq
 
   override /*SeqLike*/
@@ -183,14 +185,13 @@ trait IndexedSeqOptimized[+A, +Repr] extends IndexedSeqLike[A, Repr] { self =>
 
   override /*SeqLike*/
   def segmentLength(p: A => Boolean, from: Int): Int = {
-    val start = from
     val len = length
-    var i = start
+    var i = from
     while (i < len && p(this(i))) i += 1
-    i - start
+    i - from
   }
 
-  private def negLength(n: Int) = if (n == length) -1 else n
+  private def negLength(n: Int) = if (n >= length) -1 else n
 
   override /*SeqLike*/
   def indexWhere(p: A => Boolean, from: Int): Int = {
@@ -229,7 +230,7 @@ trait IndexedSeqOptimized[+A, +Repr] extends IndexedSeqLike[A, Repr] { self =>
   }
 
   override /*SeqLike*/
-  def startsWith[B](that: Seq[B], offset: Int): Boolean = that match {
+  def startsWith[B](that: GenSeq[B], offset: Int): Boolean = that match {
     case that: IndexedSeq[_] =>
       var i = offset
       var j = 0
@@ -254,7 +255,7 @@ trait IndexedSeqOptimized[+A, +Repr] extends IndexedSeqLike[A, Repr] { self =>
   }
 
   override /*SeqLike*/
-  def endsWith[B](that: Seq[B]): Boolean = that match {
+  def endsWith[B](that: GenSeq[B]): Boolean = that match {
     case that: IndexedSeq[_] =>
       var i = length - 1
       var j = that.length - 1

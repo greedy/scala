@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -12,7 +12,7 @@ package generic
  *  @param from The first index where defined data are found
  *  @param to   The first index where new data can be written
  */
-class PickleBuffer(data: Array[Byte], from: Int, to: Int) {
+@deprecated("scala.reflect.generic will be removed", "2.9.1") class PickleBuffer(data: Array[Byte], from: Int, to: Int) {
 
   var bytes = data
   var readIndex = from

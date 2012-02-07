@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2007-2010 LAMP/EPFL
+ * Copyright 2007-2011 LAMP/EPFL
  * @author Lex Spoon
  */
 
@@ -111,7 +111,9 @@ object Plugin {
    */
   def loadFrom(jarfile: Path, loader: ClassLoader): Option[AnyClass] =
     loadDescription(jarfile) match {
-      case None => None
+      case None =>
+        println("Warning: could not load descriptor for plugin %s".format(jarfile))
+        None
       case Some(pdesc) =>
         try Some(loader loadClass pdesc.classname) catch {
         case _: Exception =>

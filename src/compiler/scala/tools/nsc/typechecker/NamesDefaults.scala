@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -8,7 +8,8 @@ package typechecker
 
 import symtab.Flags._
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ListBuffer, WeakHashMap}
+import scala.collection.immutable.Set
 
 /**
  *  @author Lukas Rytz
@@ -19,6 +20,10 @@ trait NamesDefaults { self: Analyzer =>
   import global._
   import definitions._
 
+  val defaultParametersOfMethod = new WeakHashMap[Symbol, Set[Symbol]] {
+    override def default(key: Symbol) = Set()
+  }
+
   case class NamedApplyInfo(qual: Option[Tree], targs: List[Tree],
                             vargss: List[List[Tree]], blockTyper: Typer)
   val noApplyInfo = NamedApplyInfo(None, Nil, Nil, null)
@@ -28,7 +33,6 @@ trait NamesDefaults { self: Analyzer =>
     case _ => None
   }
   def isNamed(arg: Tree) = nameOf(arg).isDefined
-
 
   /** @param pos maps indicies from old to new */
   def reorderArgs[T: ClassManifest](args: List[T], pos: Int => Int): List[T] = {
@@ -47,7 +51,7 @@ trait NamesDefaults { self: Analyzer =>
     res.toList
   }
 
-  /** returns `true' if every element is equal to its index */
+  /** returns `true` if every element is equal to its index */
   def isIdentity(a: Array[Int]) = (0 until a.length).forall(i => a(i) == i)
 
   /**
@@ -102,7 +106,7 @@ trait NamesDefaults { self: Analyzer =>
      * Transform a function into a block, and passing context.namedApplyBlockInfo to
      * the new block as side-effect.
      *
-     * `baseFun' is typed, the resulting block must be typed as well.
+     * `baseFun` is typed, the resulting block must be typed as well.
      *
      * Fun is transformed in the following way:
      *  - Ident(f)                                    ==>  Block(Nil, Ident(f))
@@ -110,7 +114,7 @@ trait NamesDefaults { self: Analyzer =>
      *  - Select(qual, f) otherwise                   ==>  Block(ValDef(qual$1, qual), Select(qual$1, f))
      *  - TypeApply(fun, targs)                       ==>  Block(Nil or qual$1, TypeApply(fun, targs))
      *  - Select(New(TypeTree()), <init>)             ==>  Block(Nil, Select(New(TypeTree()), <init>))
-     *  - Select(New(Select(qual, typeName)), <init>) ==>  Block(Nil, Select(...))     NOTE: qual must be stable in a `new'
+     *  - Select(New(Select(qual, typeName)), <init>) ==>  Block(Nil, Select(...))     NOTE: qual must be stable in a `new`
      */
     def baseFunBlock(baseFun: Tree): Tree = {
       val isConstr = baseFun.symbol.isConstructor
@@ -185,7 +189,12 @@ trait NamesDefaults { self: Analyzer =>
         } else {
           val module = companionModuleOf(baseFun.symbol.owner, context)
           if (module == NoSymbol) None
-          else Some(atPos(pos.focus)(gen.mkAttributedRef(pre, module)))
+          else {
+            val ref = atPos(pos.focus)(gen.mkAttributedRef(pre, module))
+            if (module.isStable && pre.isStable)    // fixes #4524. the type checker does the same for
+              ref.setType(singleType(pre, module))  // typedSelect, it calls "stabilize" on the result.
+            Some(ref)
+          }
         }
       }
 
@@ -267,16 +276,21 @@ trait NamesDefaults { self: Analyzer =>
       })
       (symPs, args).zipped map {
         case ((sym, byName, repeated), arg) =>
-          // resetAttrs required for #2290. given a block { val x = 1; x }, when wrapping into a function
-          // () => { val x = 1; x }, the owner of symbol x must change (to the apply method of the function).
-          val body = if (byName) blockTyper.typed(Function(List(), resetLocalAttrs(arg)))
-                     else if (repeated) arg match {
-                       case Typed(expr, Ident(tpnme.WILDCARD_STAR)) =>
-                         expr
-                       case _ =>
-                         val factory = Select(gen.mkAttributedRef(SeqModule), nme.apply)
-                         blockTyper.typed(Apply(factory, List(resetLocalAttrs(arg))))
-                     } else arg
+          val body =
+            if (byName) {
+              val res = blockTyper.typed(Function(List(), arg))
+              new ChangeOwnerTraverser(context.owner, res.symbol) traverse arg // fixes #2290
+              res
+            } else {
+              new ChangeOwnerTraverser(context.owner, sym) traverse arg // fixes #4502
+              if (repeated) arg match {
+                case Typed(expr, Ident(tpnme.WILDCARD_STAR)) =>
+                  expr
+                case _ =>
+                  val factory = Select(gen.mkAttributedRef(SeqModule), nme.apply)
+                  blockTyper.typed(Apply(factory, List(resetLocalAttrs(arg))))
+              } else arg
+            }
           atPos(body.pos)(ValDef(sym, body).setType(NoType))
       }
     }
@@ -285,7 +299,7 @@ trait NamesDefaults { self: Analyzer =>
     if (isNamedApplyBlock(tree)) {
       context.namedApplyBlockInfo.get._1
     } else tree match {
-      // `fun' is typed. `namelessArgs' might be typed or not, if they are types are kept.
+      // `fun` is typed. `namelessArgs` might be typed or not, if they are types are kept.
       case Apply(fun, namelessArgs) =>
         val transformedFun = transformNamedApplication(typer, mode, pt)(fun, x => x)
         if (transformedFun.isErroneous) setError(tree)
@@ -351,7 +365,7 @@ trait NamesDefaults { self: Analyzer =>
   }
 
   /**
-   * Extend the argument list `givenArgs' with default arguments. Defaults are added
+   * Extend the argument list `givenArgs` with default arguments. Defaults are added
    * as named arguments calling the corresponding default getter.
    *
    * Example: given
@@ -365,34 +379,23 @@ trait NamesDefaults { self: Analyzer =>
     if (givenArgs.length < params.length) {
       val (missing, positional) = missingParams(givenArgs, params)
       if (missing forall (_.hasDefaultFlag)) {
-        val defaultArgs = missing map (p => {
-          var default1 = qual match {
-            case Some(q) => gen.mkAttributedSelect(q.duplicate, defaultGetter(p, context))
-            case None =>
-              val dgetter = defaultGetter(p, context)
-              if (dgetter == NoSymbol) {
-                println("no getter for "+p+" in "+p.owner)
-                println(p.owner.paramss)
-                var ctx = context
-                while (ctx.owner != p.owner.owner) {
-                  println("inner scope: "+ctx.scope+ctx.scope.hashCode+" "+ctx.owner)
-                  ctx = ctx.outer
-                }
-                while (ctx.owner == p.owner.owner) {
-                  println("this scope: "+ctx.scope+ctx.scope.hashCode+" "+ctx.owner)
-                  ctx = ctx.outer
-                }
-              }
-              gen.mkAttributedRef(dgetter)
+        val defaultArgs = missing flatMap (p => {
+          val defGetter = defaultGetter(p, context)
+          if (defGetter == NoSymbol) None // prevent crash in erroneous trees, #3649
+          else {
+            var default1 = qual match {
+              case Some(q) => gen.mkAttributedSelect(q.duplicate, defGetter)
+              case None    => gen.mkAttributedRef(defGetter)
 
-          }
-          default1 = if (targs.isEmpty) default1
-                     else TypeApply(default1, targs.map(_.duplicate))
-          val default2 = (default1 /: previousArgss)((tree, args) =>
-            Apply(tree, args.map(_.duplicate)))
-          atPos(pos) {
-            if (positional) default2
-            else AssignOrNamedArg(Ident(p.name), default2)
+            }
+            default1 = if (targs.isEmpty) default1
+                       else TypeApply(default1, targs.map(_.duplicate))
+            val default2 = (default1 /: previousArgss)((tree, args) =>
+              Apply(tree, args.map(_.duplicate)))
+            Some(atPos(pos) {
+              if (positional) default2
+              else AssignOrNamedArg(Ident(p.name), default2)
+            })
           }
         })
         (givenArgs ::: defaultArgs, Nil)
@@ -476,37 +479,62 @@ trait NamesDefaults { self: Analyzer =>
           val reportAmbiguousErrors = typer.context.reportAmbiguousErrors
           typer.context.reportAmbiguousErrors = false
 
+          var variableNameClash = false
           val typedAssign = try {
             typer.silent(_.typed(arg, subst(paramtpe)))
           } catch {
-            // `silent` only catches and returns TypeErrors which are not CyclicReferences
-            // fix for #3685
-            case cr @ CyclicReference(sym, info) if (sym.name == param.name) =>
+            // `silent` only catches and returns TypeErrors which are not
+            // CyclicReferences.  Fix for #3685
+            case cr @ CyclicReference(sym, info) if sym.name == param.name =>
               if (sym.isVariable || sym.isGetter && sym.accessed.isVariable) {
                 // named arg not allowed
-                typer.context.error(sym.pos, "variable definition needs type because the name is used as named argument the definition.")
+                variableNameClash = true
+                typer.context.error(sym.pos,
+                  "%s definition needs %s because '%s' is used as a named argument in its body.".format(
+                    "variable",   // "method"
+                    "type",       // "result type"
+                    sym.name
+                  )
+                )
                 typer.infer.setError(arg)
-              } else cr                                                            // named arg OK
+              }
+              else cr
           }
+
+          def applyNamedArg = {
+            // if the named argument is on the original parameter
+            // position, positional after named is allowed.
+            if (index != pos)
+              positionalAllowed = false
+            argPos(index) = pos
+            rhs
+          }
+
           val res = typedAssign match {
-            case _: TypeError =>
-              // if the named argument is on the original parameter
-              // position, positional after named is allowed.
-              if (index != pos)
-                positionalAllowed = false
-              argPos(index) = pos
-              rhs
+            case _: TypeError => applyNamedArg
+
             case t: Tree =>
-              if (!t.isErroneous) {
-              // this throws an exception that's caught in `tryTypedApply` (as it uses `silent`)
-              // unfortunately, tryTypedApply recovers from the exception if you use errorTree(arg, ...) and conforms is allowed as a view (see tryImplicit in Implicits)
-              // because it tries to produce a new qualifier (if the old one was P, the new one will be conforms.apply(P)), and if that works, it pretends nothing happened
-              // so, to make sure tryTypedApply fails, would like to pass EmptyTree instead of arg, but can't do that because eventually setType(ErrorType) is called, and EmptyTree only accepts NoType as its tpe
-              // thus, we need to disable conforms as a view...
+              if (t.isErroneous && !variableNameClash) {
+                applyNamedArg
+              } else if (t.isErroneous) {
+                t // name clash with variable. error was already reported above.
+              } else {
+                // This throws an exception which is caught in `tryTypedApply` (as it
+                // uses `silent`) - unfortunately, tryTypedApply recovers from the
+                // exception if you use errorTree(arg, ...) and conforms is allowed as
+                // a view (see tryImplicit in Implicits) because it tries to produce a
+                // new qualifier (if the old one was P, the new one will be
+                // conforms.apply(P)), and if that works, it pretends nothing happened.
+                //
+                // To make sure tryTypedApply fails, we would like to pass EmptyTree
+                // instead of arg, but can't do that because eventually setType(ErrorType)
+                // is called, and EmptyTree can only be typed NoType.  Thus we need to
+                // disable conforms as a view...
                 errorTree(arg, "reference to "+ name +" is ambiguous; it is both, a parameter\n"+
-                             "name of the method and the name of a variable currently in scope.")
-              } else t // error was reported above
+                               "name of the method and the name of a variable currently in scope.")
+              }
           }
+
           typer.context.reportAmbiguousErrors = reportAmbiguousErrors
           //@M note that we don't get here when an ambiguity was detected (during the computation of res),
           // as errorTree throws an exception

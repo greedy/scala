@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -21,7 +21,7 @@ package mutable
  *
  *  @since 2.8
  */
-class MapBuilder[A, B, Coll <: scala.collection.Map[A, B] with scala.collection.MapLike[A, B, Coll]](empty: Coll)
+class MapBuilder[A, B, Coll <: scala.collection.GenMap[A, B] with scala.collection.GenMapLike[A, B, Coll]](empty: Coll)
 extends Builder[(A, B), Coll] {
   protected var elems: Coll = empty
   def +=(x: (A, B)): this.type = {

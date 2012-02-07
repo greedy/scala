@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -27,7 +27,7 @@ abstract class ConstantFolder {
     case _ => null
   })
 
-  /** If tree is a constant value that can be converted to type `pt', perform
+  /** If tree is a constant value that can be converted to type `pt`, perform
    *  the conversion.
    *
    *  @param tree ...

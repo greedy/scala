@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -16,7 +16,7 @@ import generic._
 /** This class is used internally to implement data structures that
  *  are based on resizable arrays.
  *
- *  @tparam A    type of the elements contained in this resizeable array.
+ *  @tparam A    type of the elements contained in this resizable array.
  *
  *  @author  Matthias Zenger, Burak Emir
  *  @author Martin Odersky

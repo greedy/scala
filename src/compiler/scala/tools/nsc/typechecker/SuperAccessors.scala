@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Martin Odersky
  */
 
@@ -22,7 +22,7 @@ import symtab.Flags._
  *  @version 1.0
  */
 abstract class SuperAccessors extends transform.Transform with transform.TypingTransformers {
-  // inherits abstract value `global' and class `Phase' from Transform
+  // inherits abstract value `global` and class `Phase` from Transform
 
   import global._
   import definitions.{ UnitClass, isRepeatedParamType, isByNameParamType, Any_asInstanceOf }
@@ -39,7 +39,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
     private var accDefs: List[(Symbol, ListBuffer[Tree])] = List()
 
     private def accDefBuf(clazz: Symbol) =
-      accDefs collectFirst { case (`clazz`, buf) => buf } getOrElse system.error("no acc def buf for "+clazz)
+      accDefs collectFirst { case (`clazz`, buf) => buf } getOrElse sys.error("no acc def buf for "+clazz)
 
     private def transformArgs(args: List[Tree], params: List[Symbol]) =
       ((args, params).zipped map { (arg, param) =>
@@ -103,7 +103,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
             var superAccTpe = clazz.thisType.memberType(sym)
             if (sym.isModule && !sym.isMethod) {
               // the super accessor always needs to be a method. See #231
-              superAccTpe = PolyType(List(), superAccTpe)
+              superAccTpe = NullaryMethodType(superAccTpe)
             }
             superAcc.setInfo(superAccTpe.cloneInfo(superAcc))
             //println("creating super acc "+superAcc+":"+superAcc.tpe)//DEBUG
@@ -125,7 +125,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
     // otherwise lead to either a compiler crash or runtime failure.
     private lazy val isDisallowed = {
       import definitions._
-      Set(Any_isInstanceOf, Object_isInstanceOf, Object_==, Object_!=, Object_##)
+      Set(Any_isInstanceOf, Object_isInstanceOf, Any_asInstanceOf, Object_asInstanceOf, Object_==, Object_!=, Object_##)
     }
 
     override def transform(tree: Tree): Tree = {
@@ -184,16 +184,18 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
           curTree = tree
           val body1 = atOwner(currentOwner) { transformTrees(body) }
           accDefs = accDefs.tail;
-          treeCopy.Template(tree, parents, self, ownAccDefs.toList ::: body1);
+          treeCopy.Template(tree, parents, self, ownAccDefs.toList ::: body1)
 
         case TypeApply(sel @ Select(This(_), name), args) =>
           mayNeedProtectedAccessor(sel, args, false)
 
         case sel @ Select(qual @ This(_), name) =>
+           // direct calls to aliases of param accessors to the superclass in order to avoid
+           // duplicating fields.
            if (sym.isParamAccessor && sym.alias != NoSymbol) {
             val result = localTyper.typed {
                 Select(
-                  Super(qual.symbol, tpnme.EMPTY/*qual.symbol.info.parents.head.symbol.name*/) setPos qual.pos,
+                  Super(qual, tpnme.EMPTY/*qual.symbol.info.parents.head.symbol.name*/) setPos qual.pos,
                   sym.alias) setPos tree.pos
             }
             if (settings.debug.value)
@@ -202,7 +204,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
           }
           else mayNeedProtectedAccessor(sel, List(EmptyTree), false)
 
-        case Select(sup @ Super(_, mix), name) =>
+        case Select(Super(_, mix), name) =>
           if (sym.isValue && !sym.isMethod || sym.hasAccessorFlag) {
             unit.error(tree.pos, "super may be not be used on "+
                        (if (sym.hasAccessorFlag) sym.accessed else sym))
@@ -299,7 +301,6 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
           MethodType(List(protAcc.newSyntheticValueParam(objType)),
                      memberType.cloneInfo(protAcc).asSeenFrom(qual.tpe, sym.owner))
       }
-      if (settings.debug.value) log("accType: " + accType)
 
       var protAcc = clazz.info.decl(accName).suchThat(s => s == NoSymbol || s.tpe =:= accType(s))
       if (protAcc == NoSymbol) {
@@ -401,12 +402,12 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
       res
     }
 
-    /** Does `sym' need an accessor when accessed from `currentOwner'?
+    /** Does `sym` need an accessor when accessed from `currentOwner`?
      *  A special case arises for classes with explicit self-types. If the
      *  self type is a Java class, and a protected accessor is needed, we issue
      *  an error. If the self type is a Scala class, we don't add an accessor.
      *  An accessor is not needed if the access boundary is larger than the
-     *  enclosing package, since that translates to 'public' on the host system.
+     *  enclosing package, since that translates to 'public' on the host sys.
      *  (as Java has no real package nesting).
      *
      * If the access happens inside a 'trait', access is more problematic since

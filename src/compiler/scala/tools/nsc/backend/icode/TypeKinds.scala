@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -271,7 +271,7 @@ trait TypeKinds { self: ICodes =>
            "REFERENCE to NoSymbol not allowed!")
 
     /**
-     * Approximate `lub'. The common type of two references is
+     * Approximate `lub`. The common type of two references is
      * always AnyRef. For 'real' least upper bound wrt to subclassing
      * use method 'lub'.
      */
@@ -307,7 +307,7 @@ trait TypeKinds { self: ICodes =>
     }
 
     /**
-     * Approximate `lub'. The common type of two references is
+     * Approximate `lub`. The common type of two references is
      * always AnyRef. For 'real' least upper bound wrt to subclassing
      * use method 'lub'.
      */
@@ -352,7 +352,7 @@ trait TypeKinds { self: ICodes =>
     override def toString = "ConcatClass"
 
     /**
-     * Approximate `lub'. The common type of two references is
+     * Approximate `lub`. The common type of two references is
      * always AnyRef. For 'real' least upper bound wrt to subclassing
      * use method 'lub'.
      */

@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -14,7 +14,7 @@ package scala
  *
  *  @since 2.0
  */
-@deprecated("use iterator.zipWithIndex instead")
+@deprecated("use iterator.zipWithIndex instead", "2.8.0")
 trait CountedIterator[+A] extends Iterator[A] {
   /** counts the elements in this iterator; counts start at 0
    */

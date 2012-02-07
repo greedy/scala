@@ -1,9 +1,9 @@
 /* NSC -- new scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 /* NSC -- new scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -61,7 +61,7 @@ abstract class ICodes extends AnyRef
 
   /** Print all classes and basic blocks. Used for debugging. */
 
-  def dump {
+  def dump() {
     if (alreadyDumping) return
     else alreadyDumping = true
 

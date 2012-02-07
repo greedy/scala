@@ -1,18 +1,31 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
 package scala.collection.parallel.mutable
-
-
-
 
 import collection.generic._
 import collection.mutable.HashSet
 import collection.mutable.FlatHashTable
 import collection.parallel.Combiner
-import collection.parallel.EnvironmentPassingCombiner
-import collection.parallel.UnrolledBuffer
+import collection.mutable.UnrolledBuffer
 
-
-
-
+/** A parallel hash set.
+ *
+ *  `ParHashSet` is a parallel set which internally keeps elements within a hash table.
+ *  It uses linear probing to resolve collisions.
+ *
+ *  @tparam T        type of the elements in the $coll.
+ *
+ *  @define Coll ParHashSet
+ *  @define coll parallel hash set
+ *
+ *  @author Aleksandar Prokopec
+ */
 @SerialVersionUID(1L)
 class ParHashSet[T] private[collection] (contents: FlatHashTable.Contents[T])
 extends ParSet[T]
@@ -32,11 +45,13 @@ extends ParSet[T]
 
   override def empty = new ParHashSet
 
-  override def iterator = parallelIterator
+  override def iterator = splitter
 
   override def size = tableSize
 
-  def seq = new HashSet(hashTableContents)
+  def clear() = clearTable()
+
+  override def seq = new HashSet(hashTableContents)
 
   def +=(elem: T) = {
     addEntry(elem)
@@ -52,7 +67,7 @@ extends ParSet[T]
 
   def contains(elem: T) = containsEntry(elem)
 
-  def parallelIterator = new ParHashSetIterator(0, table.length, size) with SCPI
+  def splitter = new ParHashSetIterator(0, table.length, size) with SCPI
 
   type SCPI = SignalContextPassingIterator[ParHashSetIterator]
 
@@ -86,8 +101,8 @@ extends ParSet[T]
 
 
 /** $factoryInfo
- *  @define Coll mutable.ParSet
- *  @define coll mutable parallel set
+ *  @define Coll mutable.ParHashSet
+ *  @define coll parallel hash set
  */
 object ParHashSet extends ParSetFactory[ParHashSet] {
   implicit def canBuildFrom[T]: CanCombineFrom[Coll, T, ParHashSet[T]] = new GenericCanCombineFrom[T]
@@ -101,8 +116,8 @@ object ParHashSet extends ParSetFactory[ParHashSet] {
 private[mutable] abstract class ParHashSetCombiner[T](private val tableLoadFactor: Int)
 extends collection.parallel.BucketCombiner[T, ParHashSet[T], Any, ParHashSetCombiner[T]](ParHashSetCombiner.numblocks)
 with collection.mutable.FlatHashTable.HashUtils[T] {
-self: EnvironmentPassingCombiner[T, ParHashSet[T]] =>
-  import tasksupport._
+//self: EnvironmentPassingCombiner[T, ParHashSet[T]] =>
+  import collection.parallel.tasksupport._
   private var mask = ParHashSetCombiner.discriminantmask
   private var nonmasklen = ParHashSetCombiner.nonmasklength
 
@@ -163,6 +178,8 @@ self: EnvironmentPassingCombiner[T, ParHashSet[T]] =>
     threshold = FlatHashTable.newThreshold(_loadFactor, table.length)
     sizeMapInit(table.length)
 
+    override def toString = "AFHT(%s)".format(table.length)
+
     def tableLength = table.length
 
     def setSize(sz: Int) = tableSize = sz
@@ -179,7 +196,7 @@ self: EnvironmentPassingCombiner[T, ParHashSet[T]] =>
      *  the table will try to add the element in such a position if possible. Collisions are resolved
      *  using linear hashing, so the element may actually have to be added to a position
      *  that follows the specified one. In the case that the first unoccupied position
-     *  comes after `comesBefore`, the element is not added and the method simply returns `-1`,
+     *  comes after `comesBefore`, the element is not added and the method simply returns -1,
      *  indicating that it couldn't add the element in a position that comes before the
      *  specified one.
      *  If the element is already present in the hash table, it is not added, and this method
@@ -294,26 +311,12 @@ self: EnvironmentPassingCombiner[T, ParHashSet[T]] =>
 
 }
 
-
 private[parallel] object ParHashSetCombiner {
   private[mutable] val discriminantbits = 5
   private[mutable] val numblocks = 1 << discriminantbits
   private[mutable] val discriminantmask = ((1 << discriminantbits) - 1);
   private[mutable] val nonmasklength = 32 - discriminantbits
 
-  def apply[T] = new ParHashSetCombiner[T](FlatHashTable.defaultLoadFactor) with EnvironmentPassingCombiner[T, ParHashSet[T]]
+  def apply[T] = new ParHashSetCombiner[T](FlatHashTable.defaultLoadFactor) {} //with EnvironmentPassingCombiner[T, ParHashSet[T]]
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 

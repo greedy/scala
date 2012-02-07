@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -32,8 +32,8 @@ trait Publisher[Evt] {
   type Sub = Subscriber[Evt, Pub]
   type Filter = Evt => Boolean
 
-  /** The publisher itself of type `Pub'. Implemented by a cast from `this' here.
-   *  Needs to be overridden if the actual publisher is different from `this'.
+  /** The publisher itself of type `Pub`. Implemented by a cast from `this` here.
+   *  Needs to be overridden if the actual publisher is different from `this`.
    */
   protected val self: Pub = this.asInstanceOf[Pub]
 

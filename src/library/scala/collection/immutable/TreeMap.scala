@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -13,6 +13,7 @@ package immutable
 
 import generic._
 import mutable.Builder
+import annotation.bridge
 
 /** $factoryInfo
  *  @define Coll immutable.TreeMap
@@ -104,6 +105,16 @@ class TreeMap[A, +B](override val size: Int, t: RedBlack[A]#Tree[B])(implicit va
    */
   override def + [B1 >: B] (elem1: (A, B1), elem2: (A, B1), elems: (A, B1) *): TreeMap[A, B1] =
     this + elem1 + elem2 ++ elems
+
+  /** Adds a number of elements provided by a traversable object
+   *  and returns a new collection with the added elements.
+   *
+   *  @param xs     the traversable object.
+   */
+  override def ++[B1 >: B] (xs: GenTraversableOnce[(A, B1)]): TreeMap[A, B1] =
+    ((repr: TreeMap[A, B1]) /: xs.seq) (_ + _)
+
+  @bridge def ++[B1 >: B] (xs: TraversableOnce[(A, B1)]): TreeMap[A, B1] = ++(xs: GenTraversableOnce[(A, B1)])
 
   /** A new TreeMap with the entry added is returned,
    *  assuming that key is <em>not</em> in the TreeMap.

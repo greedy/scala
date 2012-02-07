@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -29,7 +29,7 @@ import generic._
  *  @define thatinfo the class of the returned collection. In the standard library configuration,
  *    `That` is always `LinkedHashSet[B]` because an implicit of type `CanBuildFrom[LinkedHashSet, B, LinkedHashSet[B]]`
  *    is defined in object `LinkedHashSet`.
- *  @define $bfinfo an implicit value of class `CanBuildFrom` which determines the
+ *  @define bfinfo an implicit value of class `CanBuildFrom` which determines the
  *    result class `That` from the current representation type `Repr`
  *    and the new element type `B`. This is usually the `canBuildFrom` value
  *    defined in object `LinkedHashSet`.

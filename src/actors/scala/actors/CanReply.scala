@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -9,10 +9,8 @@
 
 package scala.actors
 
-import scala.annotation.unique.unique
-
 /**
- * The <code>CanReply</code> trait defines result-bearing message send operations.
+ * Defines result-bearing message send operations.
  *
  * @author Philipp Haller
  *
@@ -29,7 +27,7 @@ trait CanReply[-T, +R] {
    * @param  msg the message to be sent
    * @return     the reply
    */
-  def !?(msg: T @unique): R
+  def !?(msg: T): R
 
   /**
    * Sends <code>msg</code> to this $actor and
@@ -41,7 +39,7 @@ trait CanReply[-T, +R] {
    * @return      <code>None</code> in case of timeout, otherwise
    *              <code>Some(x)</code> where <code>x</code> is the reply
    */
-  def !?(msec: Long, msg: T @unique): Option[R]
+  def !?(msec: Long, msg: T): Option[R]
 
   /**
    * Sends <code>msg</code> to this $actor and
@@ -50,7 +48,7 @@ trait CanReply[-T, +R] {
    * @param  msg the message to be sent
    * @return     the future
    */
-  def !!(msg: T @unique): Future[R]
+  def !!(msg: T): Future[R]
 
   /**
    * Sends <code>msg</code> to this $actor and
@@ -63,6 +61,6 @@ trait CanReply[-T, +R] {
    * @param  handler the function to be applied to the response
    * @return         the future
    */
-  def !![P](msg: T @unique, handler: PartialFunction[R, P]): Future[P]
+  def !![P](msg: T, handler: PartialFunction[R, P]): Future[P]
 
 }

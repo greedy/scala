@@ -1,45 +1,22 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
 \*                                                                      */
 
-
-
 package scala.collection
-package immutable;
+package immutable
 
-
-
-import scala.collection.generic.CanBuildFrom
-import scala.collection.mutable.Builder
-import scala.collection.mutable.MapBuilder
-
-
+import scala.collection.generic.{ CanBuildFrom, BitOperations }
+import scala.collection.mutable.{ Builder, MapBuilder }
 
 /** Utility class for integer maps.
  *  @author David MacIver
  */
-private[immutable] object IntMapUtils {
-  def zero(i : Int, mask : Int) = (i & mask) == 0;
-  def mask(i : Int, mask : Int) = i & (complement(mask - 1) ^ mask)
-  def hasMatch(key : Int, prefix : Int, m : Int) = mask(key, m) == prefix;
-  def unsignedCompare(i : Int, j : Int) = (i < j) ^ (i < 0) ^ (j < 0)
-  def shorter(m1 : Int, m2 : Int) = unsignedCompare(m2, m1)
-  def complement(i : Int) = (-1) ^ i;
-  def highestOneBit(j : Int) = {
-    var i = j;
-    i |= (i >>  1);
-    i |= (i >>  2);
-    i |= (i >>  4);
-    i |= (i >>  8);
-    i |= (i >> 16);
-    i - (i >>> 1);
-  }
-
-  def branchMask(i : Int, j : Int) = highestOneBit(i ^ j);
+private[immutable] object IntMapUtils extends BitOperations.Int {
+  def branchMask(i: Int, j: Int) = highestOneBit(i ^ j)
 
   def join[T](p1 : Int, t1 : IntMap[T], p2 : Int, t2 : IntMap[T]) : IntMap[T] = {
     val m = branchMask(p1, p2);
@@ -58,6 +35,11 @@ private[immutable] object IntMapUtils {
 import IntMapUtils._
 
 /** A companion object for integer maps.
+ *
+ *  @define Coll  IntMap
+ *  @define mapCanBuildFromInfo
+ *    The standard `CanBuildFrom` instance for `$Coll` objects.
+ *    The created value is an instance of class `MapCanBuildFrom`.
  *  @since 2.7
  */
 object IntMap {
@@ -78,14 +60,14 @@ object IntMap {
     // develops.  Case objects and custom equality don't mix without
     // careful handling.
     override def equals(that : Any) = that match {
-      case (that : AnyRef) if (this eq that) => true;
-      case (that : IntMap[_]) => false; // The only empty IntMaps are eq Nil
-      case that => super.equals(that);
+      case _: this.type => true
+      case _: IntMap[_] => false // The only empty IntMaps are eq Nil
+      case _            => super.equals(that)
     }
-  };
+  }
 
   private[immutable] case class Tip[+T](key : Int, value : T) extends IntMap[T]{
-    def withValue[S](s : S) =
+    def withValue[S](s: S) =
       if (s.asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) this.asInstanceOf[IntMap.Tip[S]];
       else IntMap.Tip(key, s);
   }
@@ -141,7 +123,7 @@ private[immutable] abstract class IntMapIterator[V, T](it : IntMap[V]) extends I
       case t@IntMap.Tip(_, _) => valueOf(t);
       // This should never happen. We don't allow IntMap.Nil in subtrees of the IntMap
       // and don't return an IntMapIterator for IntMap.Nil.
-      case IntMap.Nil => system.error("Empty maps not allowed as subtrees");
+      case IntMap.Nil => sys.error("Empty maps not allowed as subtrees");
     }
 }
 
@@ -277,8 +259,8 @@ sealed abstract class IntMap[+T] extends Map[Int, T] with MapLike[Int, T, IntMap
 
   final override def apply(key : Int) : T = this match {
     case IntMap.Bin(prefix, mask, left, right) => if (zero(key, mask)) left(key) else right(key);
-    case IntMap.Tip(key2, value) => if (key == key2) value else system.error("Key not found");
-    case IntMap.Nil => system.error("key not found");
+    case IntMap.Tip(key2, value) => if (key == key2) value else sys.error("Key not found");
+    case IntMap.Nil => sys.error("key not found");
   }
 
   def + [S >: T] (kv: (Int, S)): IntMap[S] = updated(kv._1, kv._2)
@@ -291,9 +273,6 @@ sealed abstract class IntMap[+T] extends Map[Int, T] with MapLike[Int, T, IntMap
                              else join(key, IntMap.Tip(key, value), key2, this);
     case IntMap.Nil => IntMap.Tip(key, value);
   }
-
-  @deprecated("use `updated' instead")
-  override def update[S >: T](key: Int, value: S): IntMap[S] = updated(key, value)
 
   /**
    * Updates the map, using the provided function to resolve conflicts if the key is already present.
@@ -440,7 +419,7 @@ sealed abstract class IntMap[+T] extends Map[Int, T] with MapLike[Int, T, IntMap
   final def firstKey : Int = this match {
     case Bin(_, _, l, r) => l.firstKey;
     case Tip(k, v) => k;
-    case IntMap.Nil => system.error("Empty set")
+    case IntMap.Nil => sys.error("Empty set")
   }
 
   /**
@@ -449,6 +428,6 @@ sealed abstract class IntMap[+T] extends Map[Int, T] with MapLike[Int, T, IntMap
   final def lastKey : Int = this match {
     case Bin(_, _, l, r) => r.lastKey;
     case Tip(k, v) => k;
-    case IntMap.Nil => system.error("Empty set")
+    case IntMap.Nil => sys.error("Empty set")
   }
 }

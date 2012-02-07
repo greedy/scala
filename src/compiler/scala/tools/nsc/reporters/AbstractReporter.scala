@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2002-2010 LAMP/EPFL
+ * Copyright 2002-2011 LAMP/EPFL
  * @author Martin Odersky
  */
 
@@ -14,20 +14,20 @@ import scala.tools.nsc.util.Position
  * This reporter implements filtering.
  */
 abstract class AbstractReporter extends Reporter {
+  val settings: Settings
+  def display(pos: Position, msg: String, severity: Severity): Unit
+  def displayPrompt(): Unit
+
   private val positions = new HashMap[Position, Severity]
 
-  override def reset {
+  override def reset() {
     super.reset
     positions.clear
   }
 
-  val settings: Settings
   private def isVerbose   = settings.verbose.value
   private def noWarnings  = settings.nowarnings.value
   private def isPromptSet = settings.prompt.value
-
-  def display(pos: Position, msg: String, severity: Severity): Unit
-  def displayPrompt: Unit
 
   protected def info0(pos: Position, msg: String, _severity: Severity, force: Boolean) {
     val severity =

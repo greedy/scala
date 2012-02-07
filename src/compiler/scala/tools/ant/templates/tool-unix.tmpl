@@ -1,32 +1,46 @@
 #!/bin/bash --posix
 #
 ##############################################################################
-# Copyright 2002-2010, LAMP/EPFL
+# Copyright 2002-2011, LAMP/EPFL
 #
 # This is free software; see the distribution for copying conditions.
 # There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A
 # PARTICULAR PURPOSE.
 ##############################################################################
 
-function onExit() {
-  if [[ -n "$scaladebug" ]]; then
-    echo "scala script runner trapped exit, running handler."
+# Not sure what the right default is here: trying nonzero.
+scala_exit_status=127
+saved_stty=""
+
+# restore stty settings (echo in particular)
+function restoreSttySettings() {
+  if [[ -n $SCALA_RUNNER_DEBUG ]]; then
+    echo "restoring stty: $saved_stty"
   fi
     
-  local exit_status=${1:-$?}
-
-  # reenable echo
-  case "$TERM" in
-      rxvt* | xterm*)
-          stty icanon echo
-          ;;
-  esac
-  
-  exit $exit_status
+  stty $saved_stty
+  saved_stty=""
 }
 
-# install exit handler
-trap onExit EXIT
+function onExit() {
+  if [[ "$saved_stty" != "" ]]; then
+    restoreSttySettings
+    exit $scala_exit_status
+  fi
+}
+
+# to reenable echo if we are interrupted before completing.
+trap onExit INT
+
+# save terminal settings
+saved_stty=$(stty -g 2>/dev/null)
+# clear on error so we don't later try to restore them
+if [[ ! $? ]]; then  
+  saved_stty=""
+fi
+if [[ -n $SCALA_RUNNER_DEBUG ]]; then
+  echo "saved stty: $saved_stty"
+fi
 
 cygwin=false;
 case "`uname`" in
@@ -82,7 +96,7 @@ if $cygwin; then
     case "$TERM" in
         rxvt* | xterm*)
             stty -icanon min 1 -echo
-            CYGWIN_JLINE_TERMINAL="-Djline.terminal=jline.UnixTerminal"
+            CYGWIN_JLINE_TERMINAL="-Djline.terminal=scala.tools.jline.UnixTerminal"
         ;;
     esac
 fi
@@ -95,22 +109,31 @@ fi
 declare -a java_args
 declare -a scala_args
 
+# default to the boot classpath for speed.
+CPSELECT="-Xbootclasspath/a:"
+
 while [ $# -gt 0 ]; do
   case "$1" in
     -D*)
+      # pass to scala as well: otherwise we lose it sometimes when we
+      # need it, e.g. communicating with a server compiler.
       java_args=("${java_args[@@]}" "$1")
+      scala_args=("${scala_args[@@]}" "$1")
+      shift
+      ;;
+    -J*)
+      # as with -D, pass to scala even though it will almost
+      # never be used.
+      java_args=("${java_args[@@]}" "${1:2}")
+      scala_args=("${scala_args[@@]}" "$1")
       shift
       ;;
     -toolcp)
       TOOL_CLASSPATH="$TOOL_CLASSPATH:$2"
-      shift
+      shift 2
       ;;
-    -J*)
-      java_args=("${java_args[@@]}" "${1:2}")
-      shift
-      ;;
-    --usebootcp)
-      CPSWITCH="-Xbootclasspath/a:$TOOL_CLASSPATH"
+    -nobootcp)
+      CPSELECT="-classpath "
       shift
       ;;
     *)
@@ -119,8 +142,6 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
-
-: ${CPSWITCH:="-cp $TOOL_CLASSPATH"}
 
 # reset "$@@" to the remaining args
 set -- "${scala_args[@@]}"
@@ -132,9 +153,14 @@ fi
 "${JAVACMD:=java}" \
   $JAVA_OPTS \
   "${java_args[@@]}" \
-  $CPSWITCH \
+  ${CPSELECT}${TOOL_CLASSPATH} \
   -Dscala.usejavacp=true \
   -Dscala.home="$SCALA_HOME" \
   -Denv.emacs="$EMACS" \
   $CYGWIN_JLINE_TERMINAL \
   @properties@ @class@ @toolflags@ "$@@"
+
+# record the exit status lest it be overwritten:
+# then reenable echo and propagate the code.
+scala_exit_status=$?
+onExit

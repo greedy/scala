@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Martin Odersky
  */
 
@@ -36,6 +36,7 @@ abstract class Flatten extends InfoTransform {
     def apply(tp: Type): Type = tp match {
       case TypeRef(pre, sym, args) if (pre.typeSymbol.isClass && !pre.typeSymbol.isPackageClass) =>
         assert(args.isEmpty)
+        assert(sym.toplevelClass != NoSymbol, sym.ownerChain)
         typeRef(sym.toplevelClass.owner.thisType, sym, args)
       case ClassInfoType(parents, decls, clazz) =>
         var parents1 = parents
@@ -49,9 +50,7 @@ abstract class Flatten extends InfoTransform {
           for (sym <- decls.toList) {
             if (sym.isTerm && !sym.isStaticModule) {
               decls1 enter sym
-              if (sym.isModule) sym.moduleClass setFlag LIFTED  // Only top modules
-              // Nested modules (MODULE flag is reset so we access through lazy):
-              if (sym.isModuleVar && sym.isLazy) sym.lazyAccessor.lazyAccessor setFlag LIFTED
+              if (sym.isModule) sym.moduleClass setFlag LIFTED
             } else if (sym.isClass) {
               liftClass(sym)
               if (sym.needsImplClass) liftClass(erasure.implClass(sym))

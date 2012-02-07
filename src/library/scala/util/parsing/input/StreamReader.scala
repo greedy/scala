@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2006-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -32,7 +32,7 @@ object StreamReader {
  *
  *  NOTE:
  *  StreamReaders do not really fulfill the new contract for readers, which
- *  requires a `source' CharSequence representing the full input.
+ *  requires a `source` CharSequence representing the full input.
  *  Instead source is treated line by line.
  *  As a consequence, regex matching cannot extend beyond a single line
  *  when a StreamReader are used for input.

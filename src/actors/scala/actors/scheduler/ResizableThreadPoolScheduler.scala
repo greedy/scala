@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -181,9 +181,9 @@ class ResizableThreadPoolScheduler(protected val terminate: Boolean,
   def restart() {
     synchronized {
       if (!suspending)
-        system.error("snapshot has not been invoked")
+        sys.error("snapshot has not been invoked")
       else if (isActive)
-        system.error("scheduler is still active")
+        sys.error("scheduler is still active")
       else
         suspending = false
 

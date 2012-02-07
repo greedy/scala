@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -171,6 +171,11 @@ trait Opcodes { self: ICodes =>
 
       override def consumedTypes = if (isStatic) Nil else List(REFERENCE(field.owner));
       override def producedTypes = List(toTypeKind(field.tpe));
+
+      // more precise information about how to load this field
+      // see #4283
+      var hostClass: Symbol = field.owner
+      def setHostClass(cls: Symbol): this.type = { hostClass = cls; this }
     }
 
     case class LOAD_MODULE(module: Symbol) extends Instruction {
@@ -593,7 +598,7 @@ trait Opcodes { self: ICodes =>
      *        then pushes one exception instance.
      */
     case class LOAD_EXCEPTION(clasz: Symbol) extends Instruction {
-      override def consumed = system.error("LOAD_EXCEPTION does clean the whole stack, no idea how many things it consumes!")
+      override def consumed = sys.error("LOAD_EXCEPTION does clean the whole stack, no idea how many things it consumes!")
       override def produced = 1
       override def producedTypes = REFERENCE(clasz) :: Nil
     }

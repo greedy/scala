@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2006-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -45,8 +45,10 @@ trait RegexParsers extends Parsers {
       }
       if (i == s.length)
         Success(source.subSequence(start, j).toString, in.drop(j - offset))
-      else
-        Failure("`"+s+"' expected but `"+in.first+"' found", in.drop(start - offset))
+      else  {
+        val found = if (start == source.length()) "end of source" else "`"+source.charAt(start)+"'"
+        Failure("`"+s+"' expected but "+found+" found", in.drop(start - offset))
+      }
     }
   }
 
@@ -61,15 +63,16 @@ trait RegexParsers extends Parsers {
           Success(source.subSequence(start, start + matched.end).toString,
                   in.drop(start + matched.end - offset))
         case None =>
-          Failure("string matching regex `"+r+"' expected but `"+in.first+"' found", in.drop(start - offset))
+          val found = if (start == source.length()) "end of source" else "`"+source.charAt(start)+"'"
+          Failure("string matching regex `"+r+"' expected but "+found+" found", in.drop(start - offset))
       }
     }
   }
 
-  /** `positioned' decorates a parser's result with the start position of the input it consumed.
+  /** `positioned` decorates a parser's result with the start position of the input it consumed.
    * If whitespace is being skipped, then it is skipped before the start position is recorded.
    *
-   * @param p a `Parser' whose result conforms to `Positional'.
+   * @param p a `Parser` whose result conforms to `Positional'.
    * @return A parser that has the same behaviour as `p', but which marks its result with the
    *         start position of the input it consumed after whitespace has been skipped, if it
    *         didn't already have a position.
@@ -88,27 +91,27 @@ trait RegexParsers extends Parsers {
   override def phrase[T](p: Parser[T]): Parser[T] =
     super.phrase(p <~ opt("""\z""".r))
 
-  /** Parse some prefix of reader `in' with parser `p' */
+  /** Parse some prefix of reader `in` with parser `p`. */
   def parse[T](p: Parser[T], in: Reader[Char]): ParseResult[T] =
     p(in)
 
-  /** Parse some prefix of character sequence `in' with parser `p' */
+  /** Parse some prefix of character sequence `in` with parser `p`. */
   def parse[T](p: Parser[T], in: java.lang.CharSequence): ParseResult[T] =
     p(new CharSequenceReader(in))
 
-  /** Parse some prefix of reader `in' with parser `p' */
+  /** Parse some prefix of reader `in` with parser `p`. */
   def parse[T](p: Parser[T], in: java.io.Reader): ParseResult[T] =
     p(new PagedSeqReader(PagedSeq.fromReader(in)))
 
-  /** Parse all of reader `in' with parser `p' */
+  /** Parse all of reader `in` with parser `p`. */
   def parseAll[T](p: Parser[T], in: Reader[Char]): ParseResult[T] =
     parse(phrase(p), in)
 
-  /** Parse all of reader `in' with parser `p' */
+  /** Parse all of reader `in` with parser `p`. */
   def parseAll[T](p: Parser[T], in: java.io.Reader): ParseResult[T] =
     parse(phrase(p), in)
 
-  /** Parse all of character sequence `in' with parser `p' */
+  /** Parse all of character sequence `in` with parser `p`. */
   def parseAll[T](p: Parser[T], in: java.lang.CharSequence): ParseResult[T] =
     parse(phrase(p), in)
 }

@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -75,7 +75,7 @@ trait Benchmark {
    *  should not be measured. This method is run before each call to the
    *  benchmark payload, 'run'.
    */
-  def setUp {
+  def setUp() {
   }
 
   /** Perform cleanup operations after each 'run'. For micro benchmarks,
@@ -84,7 +84,7 @@ trait Benchmark {
    *  write the results to a file. The execution time of this method is not
    *  measured.
    */
-  def tearDown {
+  def tearDown() {
   }
 
   /** a string that is written at the beginning of the output line

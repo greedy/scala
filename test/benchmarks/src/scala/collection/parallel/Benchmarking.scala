@@ -66,6 +66,7 @@ trait BenchmarkRegister {
   register(parallel_array.AggregateLight)
   register(parallel_array.ScanLight)
   register(parallel_array.ScanMedium)
+  register(parallel_array.GroupByLight)
   register(parallel_array.MatrixMultiplication)
 
   // parallel views
@@ -118,6 +119,9 @@ trait BenchmarkRegister {
   register(hashtables.RefParHashTableBenches.Map)
   register(hashtables.RefParHashTableBenches.Map2)
   register(hashtables.RefParHashTableBenches.HeavyMap)
+  register(hashtables.RefParHashTableBenches.Filter)
+  register(hashtables.RefParHashTableBenches.FlatMap)
+  register(hashtables.RefParHashTableBenches.FlatMap2)
 
   // parallel hash table set benchmarks
   register(hashtables.RefParHashTableSetBenches.Reduce)
@@ -127,9 +131,12 @@ trait BenchmarkRegister {
   register(hashtables.RefParHashTableSetBenches.Map)
   register(hashtables.RefParHashTableSetBenches.Map2)
   register(hashtables.RefParHashTableSetBenches.HeavyMap)
+  register(hashtables.RefParHashTableSetBenches.Filter)
+  register(hashtables.RefParHashTableSetBenches.FlatMap)
 
   // general examples
   register(misc.Coder)
+  register(misc.Loader)
 }
 
 

@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Paul Phillips
  */
 
@@ -213,7 +213,7 @@ class FlagsUtil(flagsObject: AnyRef) {
 }
 
 object FlagsUtil {
-  import reflect.generic.ModifierFlags
+  import reflect.internal.ModifierFlags
 
   trait MarkModifiers extends FlagsUtil {
     lazy val isModifiersFlag = classOf[ModifierFlags].getMethods map (_.getName) filter isFlagName toSet
@@ -230,7 +230,7 @@ object FlagsUtilCompiler extends FlagsUtil(symtab.Flags) with FlagsUtil.MarkModi
   def main(args: Array[String]): Unit = reflectiveAnalyzeFlags()
 }
 
-object FlagsUtilLibrary extends FlagsUtil(reflect.generic.Flags) with FlagsUtil.MarkModifiers {
+object FlagsUtilLibrary extends FlagsUtil(reflect.internal.Flags) with FlagsUtil.MarkModifiers {
   def main(args: Array[String]): Unit = reflectiveAnalyzeFlags()
 }
 

@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2002-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2002-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -49,13 +49,21 @@ self =>
   protected[this] def newBuilder: Builder[Char, Repr]
 
   /** Return element at index `n`
-   *  @throws   IndexOutofBoundsException if the index is not valid
+   *  @throws   IndexOutOfBoundsException if the index is not valid
    */
   def apply(n: Int): Char = toString charAt n
 
   def length: Int = toString.length
 
   override def mkString = toString
+
+  override def slice(from: Int, until: Int): Repr = {
+    val start = from max 0
+    val end   = until min length
+
+    if (start >= end) newBuilder.result
+    else newBuilder ++= toString.substring(start, end) result
+  }
 
   /** Return the current string concatenated `n` times.
    */
@@ -154,6 +162,21 @@ self =>
     if (toString.endsWith(suffix)) toString.substring(0, toString.length() - suffix.length)
     else toString
 
+  /** Replace all literal occurrences of `literal` with the string `replacement`.
+   *  This is equivalent to [[java.lang.String#replaceAll]] except that both arguments
+   *  are appropriately quoted to avoid being interpreted as metacharacters.
+   *
+   *  @param    literal     the string which should be replaced everywhere it occurs
+   *  @param    replacement the replacement string
+   *  @return               the resulting string
+   */
+  def replaceAllLiterally(literal: String, replacement: String): String = {
+    val arg1 = java.util.regex.Pattern.quote(literal)
+    val arg2 = java.util.regex.Matcher.quoteReplacement(replacement)
+
+    toString.replaceAll(arg1, arg2)
+  }
+
   /**
    *    For every line in this string:
    *
@@ -195,10 +218,10 @@ self =>
     toString.split(re)
   }
 
-  /** You can follow a string with `.r', turning
+  /** You can follow a string with `.r`, turning
    *  it into a Regex. E.g.
    *
-   *  """A\w*""".r   is the regular expression for identifiers starting with `A'.
+   *  """A\w*""".r   is the regular expression for identifiers starting with `A`.
    */
   def r: Regex = new Regex(toString)
 
@@ -219,13 +242,8 @@ self =>
     else
       throw new NumberFormatException("For input string: \"null\"")
 
-  /* !!! causes crash?
-  def toArray: Array[Char] = {
-    val result = new Array[Char](length)
-    toString.getChars(0, length, result, 0)
-    result
-  }
-  */
+  override def toArray[B >: Char : ClassManifest]: Array[B] =
+    toString.toCharArray.asInstanceOf[Array[B]]
 
   private def unwrapArg(arg: Any): AnyRef = arg match {
     case x: ScalaNumber => x.underlying

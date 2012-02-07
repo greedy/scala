@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2002-2009, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2002-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -169,7 +169,7 @@ object RemoteRef { /*extends Thread {
   private def warning(msg: String) { Debug.warning("[RemoteRef] "+msg) }
   private def error(msg: String) { Debug.error("[RemoteRef] "+msg) }
 
-  private def printDebugInfos {
+  private def printDebugInfos() {
     def property(name: String): String =
       name+"="+(
       try { System.getProperty(name, "") }

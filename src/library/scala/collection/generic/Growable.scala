@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -45,7 +45,7 @@ trait Growable[-A] {
    *  @param iter  the TraversableOnce producing the elements to $add.
    *  @return  the $coll itself.
    */
-  def ++=(xs: TraversableOnce[A]): this.type = { xs foreach += ; this }
+  def ++=(xs: TraversableOnce[A]): this.type = { xs.seq foreach += ; this }
 
   /** Clears the $coll's contents. After this operation, the
    *  $coll is empty.

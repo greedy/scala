@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Paul Phillips
  */
 
@@ -8,7 +8,7 @@ package cmd
 package program
 
 import nsc._
-import util.Chars.char2uescape
+import scala.reflect.internal.Chars.char2uescape
 import io._
 import ast.parser.Tokens._
 

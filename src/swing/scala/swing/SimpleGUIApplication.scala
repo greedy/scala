@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2007-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2007-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -21,7 +21,7 @@ import javax.swing._
  * the EDT (see Swing.onEDT and Swing.onEDTWait). Lazy values are okay for the same reason
  * if they are initialized on the EDT always.
  */
-@deprecated("Use SimpleSwingApplication instead") abstract class SimpleGUIApplication extends GUIApplication {
+@deprecated("Use SimpleSwingApplication instead", "2.8.0") abstract class SimpleGUIApplication extends GUIApplication {
 
   /**
    * A GUI application's version of the main method. Called by the default

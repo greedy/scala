@@ -1,3 +1,11 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
 package scala.collection.generic
 
 
@@ -44,7 +52,7 @@ trait Signalling {
    *
    * $abortflag
    */
-  def abort: Unit
+  def abort(): Unit
 
   /**
    * Returns the value of the index flag.
@@ -113,7 +121,7 @@ object IdleSignalling extends DefaultSignalling
 trait VolatileAbort extends Signalling {
   @volatile private var abortflag = false
   override def isAborted = abortflag
-  override def abort = abortflag = true
+  override def abort() = abortflag = true
 }
 
 
@@ -155,7 +163,7 @@ trait DelegatedSignalling extends Signalling {
   var signalDelegate: Signalling
 
   def isAborted = signalDelegate.isAborted
-  def abort = signalDelegate.abort
+  def abort() = signalDelegate.abort
 
   def indexFlag = signalDelegate.indexFlag
   def setIndexFlag(f: Int) = signalDelegate.setIndexFlag(f)

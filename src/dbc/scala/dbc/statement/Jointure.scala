@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -13,7 +13,7 @@ package statement
 
 
 /** A jointure between two relations. */
-abstract class Jointure extends Relation {
+@deprecated(DbcIsDeprecated, "2.9.0") abstract class Jointure extends Relation {
 
   /** The relation on the left part of the join. */
   def leftRelation: Relation

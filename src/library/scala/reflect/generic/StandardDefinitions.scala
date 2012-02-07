@@ -1,12 +1,12 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
 package scala.reflect
 package generic
 
-trait StandardDefinitions { self: Universe =>
+@deprecated("scala.reflect.generic will be removed", "2.9.1") trait StandardDefinitions { self: Universe =>
 
   val definitions: AbsDefinitions
 

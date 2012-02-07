@@ -1,17 +1,17 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
 \*                                                                      */
 
-
-
 package scala.collection
 package immutable
 
 import generic._
+import parallel.immutable.ParMap
+import annotation.bridge
 
 /**
  *  A generic template for immutable maps from keys of type `A`
@@ -48,7 +48,10 @@ import generic._
  */
 trait MapLike[A, +B, +This <: MapLike[A, B, This] with Map[A, B]]
   extends scala.collection.MapLike[A, B, This]
+     with Parallelizable[(A, B), ParMap[A, B]]
 { self =>
+
+  protected[this] override def parCombiner = ParMap.newCombiner[A, B]
 
   /** A new immutable map containing updating this map with a given key/value mapping.
    *  @param    key the key
@@ -80,8 +83,10 @@ trait MapLike[A, +B, +This <: MapLike[A, B, This] with Map[A, B]]
    *  @param xs      the traversable object consisting of key-value pairs.
    *  @return        a new immutable map with the bindings of this map and those from `xs`.
    */
-  override def ++[B1 >: B](xs: TraversableOnce[(A, B1)]): immutable.Map[A, B1] =
-    ((repr: immutable.Map[A, B1]) /: xs) (_ + _)
+  override def ++[B1 >: B](xs: GenTraversableOnce[(A, B1)]): immutable.Map[A, B1] =
+    ((repr: immutable.Map[A, B1]) /: xs.seq) (_ + _)
+
+  @bridge def ++[B1 >: B](xs: TraversableOnce[(A, B1)]): immutable.Map[A, B1] = ++(xs: GenTraversableOnce[(A, B1)])
 
   /** Filters this map by retaining only keys satisfying a predicate.
    *  @param  p   the predicate used to test keys
@@ -111,7 +116,16 @@ trait MapLike[A, +B, +This <: MapLike[A, B, This] with Map[A, B]]
   /** Collects all keys of this map in a set.
    *  @return  a set containing all keys of this map.
    */
-  override def keySet: immutable.Set[A] = immutable.Set.empty ++ (this map (_._1))
+  override def keySet: immutable.Set[A] = new ImmutableDefaultKeySet
+
+  protected class ImmutableDefaultKeySet extends super.DefaultKeySet with immutable.Set[A] {
+    override def + (elem: A): immutable.Set[A] =
+      if (this(elem)) this
+      else immutable.Set[A]() ++ this + elem
+    override def - (elem: A): immutable.Set[A] =
+      if (this(elem)) immutable.Set[A]() ++ this - elem
+      else this
+  }
 
   /** This function transforms all the values of mappings contained
    *  in this map with function `f`.
@@ -124,7 +138,5 @@ trait MapLike[A, +B, +This <: MapLike[A, B, This] with Map[A, B]]
     for ((key, value) <- this) b += ((key, f(key, value)))
     b.result
   }
-
-  @deprecated("use `updated' instead")
-  def update[B1 >: B](key: A, value: B1): immutable.Map[A, B1] = updated(key, value).asInstanceOf[immutable.Map[A, B1]]
 }
+

@@ -1,9 +1,8 @@
 import scala.tools.nsc._
-import java.io.{BufferedReader, StringReader, PrintWriter,
-                Writer, OutputStreamWriter}
+import scala.tools.partest.ReplTest
 
-object Test {
-  val testCodeString = <code>
+object Test extends ReplTest {
+  def code = <code>
 // basics
 3+4
 def gcd(x: Int, y: Int): Int = {{
@@ -144,43 +143,9 @@ def f(e: Exp) = e match {{  // non-exhaustive warning here
 
 </code>.text
 
-  /** A writer that skips the first line of text.  The first
-   *  line of interpreter output is skipped because it includes
-   *  a version number. */
-  class Skip1Writer(writer: Writer) extends Writer {
-    var seenNL = false
-
-    def write(cbuf: Array[Char], off: Int, len: Int) {
-      if (seenNL)
-	writer.write(cbuf, off, len)
-      else {
-	val slice : Array[Char] = cbuf.slice(off, off+len)
-	val i = slice.indexOf('\n')
-	if (i >= 0) {
-	  seenNL = true
-	  writer.write(slice, i+1, slice.length-(i+1))
-	} else {
-	  // skip it
-	}
-      }
-    }
-
-    def close() { writer.close() }
-    def flush() { writer.flush() }
-  }
-
-
-  def main(args: Array[String]) {
-    val input = new BufferedReader(new StringReader(testCodeString))
-    val output = new PrintWriter(
-      new Skip1Writer(new OutputStreamWriter(Console.out)))
-    val repl = new InterpreterLoop(input, output)
+  def appendix() = {
     val settings = new Settings
-    // when running that compiler, give it a scala-library to the classpath
-    settings.classpath.value = System.getProperty("java.class.path")
-    repl.main(settings)
-    println()
-
+    settings.classpath.value = sys.props("java.class.path")
     val interp = new Interpreter(settings)
     interp.interpret("def plusOne(x: Int) = x + 1")
     interp.interpret("plusOne(5)")
@@ -188,4 +153,6 @@ def f(e: Exp) = e match {{  // non-exhaustive warning here
     interp.interpret("\"after reset\"")
     interp.interpret("plusOne(5) // should be undefined now")
   }
+
+  appendix()
 }

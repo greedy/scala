@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -11,7 +11,7 @@ package scala.xml
 
 import Utility.sbToString
 import annotation.tailrec
-
+import scala.collection.Iterator
 
 /**
  * Copyright 2008 Google Inc. All Rights Reserved.
@@ -71,8 +71,7 @@ object MetaData {
  * Copyright 2008 Google Inc. All Rights Reserved.
  * @author Burak Emir <bqe@google.com>
  */
-abstract class MetaData extends Iterable[MetaData] with Equality with Serializable
-{
+abstract class MetaData extends Iterable[MetaData] with Equality with Serializable {
   /** Updates this MetaData with the MetaData given as argument. All attributes that occur in updates
    *  are part of the resulting MetaData. If an attribute occurs in both this instance and
    *  updates, only the one in updates is part of the result (avoiding duplicates). For prefixed
@@ -135,10 +134,10 @@ abstract class MetaData extends Iterable[MetaData] with Equality with Serializab
     case _            => false
   }
   override def strict_==(other: Equality) = other match {
-    case m: MetaData  => this.toSet == m.toSet
+    case m: MetaData  => this.asAttrMap == m.asAttrMap
     case _            => false
   }
-  def basisForHashCode: Seq[Any] = List(this.toSet)
+  def basisForHashCode: Seq[Any] = List(this.asAttrMap)
 
   /** Returns an iterator on attributes */
   def iterator: Iterator[MetaData] = Iterator.single(this) ++ next.iterator

@@ -1,18 +1,18 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
 \*                                                                      */
 
 
-
 package scala.collection
 package mutable
 
 import generic._
-import annotation.migration
+import annotation.{migration, bridge}
+import parallel.mutable.ParMap
 
 /** A template trait for mutable maps.
  *  $mapNote
@@ -25,6 +25,7 @@ trait MapLike[A, B, +This <: MapLike[A, B, This] with Map[A, B]]
      with Growable[(A, B)]
      with Shrinkable[A]
      with Cloneable[This]
+     with Parallelizable[(A, B), ParMap[A, B]]
 { self =>
 
   import scala.collection.Traversable
@@ -35,6 +36,8 @@ trait MapLike[A, B, +This <: MapLike[A, B, This] with Map[A, B]]
    *    Overrides `MapLike` implementation for better efficiency.
    */
   override protected[this] def newBuilder: Builder[(A, B), This] = empty
+
+  protected[this] override def parCombiner = ParMap.newCombiner[A, B]
 
   /** Adds a new key/value pair to this map and optionally returns previously bound value.
    *  If the map already contains a
@@ -122,8 +125,10 @@ trait MapLike[A, B, +This <: MapLike[A, B, This] with Map[A, B]]
     "As of 2.8, this operation creates a new map.  To add the elements as a\n"+
     "side effect to an existing map and return that map itself, use ++=."
   )
-  override def ++[B1 >: B](xs: TraversableOnce[(A, B1)]): Map[A, B1] =
-    clone().asInstanceOf[Map[A, B1]] ++= xs
+  override def ++[B1 >: B](xs: GenTraversableOnce[(A, B1)]): Map[A, B1] =
+    clone().asInstanceOf[Map[A, B1]] ++= xs.seq
+
+  @bridge def ++[B1 >: B](xs: TraversableOnce[(A, B1)]): Map[A, B1] = ++(xs: GenTraversableOnce[(A, B1)])
 
   /** Removes a key from this map, returning the value associated previously
    *  with that key as an option.
@@ -159,7 +164,8 @@ trait MapLike[A, B, +This <: MapLike[A, B, This] with Map[A, B]]
    *  If key is not present return None.
    *  @param    key the key to be removed
    */
-  @deprecated("Use `remove' instead") def removeKey(key: A): Option[B] = remove(key)
+  @deprecated("Use `remove` instead", "2.8.0")
+  def removeKey(key: A): Option[B] = remove(key)
 
   /** Removes all bindings from the map. After this operation has completed,
    *  the map will be empty.
@@ -202,7 +208,7 @@ trait MapLike[A, B, +This <: MapLike[A, B, This] with Map[A, B]]
    * @param p  The test predicate
    */
   def retain(p: (A, B) => Boolean): this.type = {
-    for ((k, v) <- this ; if !p(k, v))
+    for ((k, v) <- this.seq ; if !p(k, v))
       this -= k
 
     this
@@ -242,5 +248,7 @@ trait MapLike[A, B, +This <: MapLike[A, B, This] with Map[A, B]]
     "As of 2.8, this operation creates a new map.  To remove the elements as a\n"+
     "side effect to an existing map and return that map itself, use --=."
   )
-  override def --(xs: TraversableOnce[A]): This = clone() --= xs
+  override def --(xs: GenTraversableOnce[A]): This = clone() --= xs.seq
+
+  @bridge def --(xs: TraversableOnce[A]): This =  --(xs: GenTraversableOnce[A])
 }

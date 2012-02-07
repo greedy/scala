@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -12,7 +12,7 @@ package scala.dbc
 package statement
 
 
-abstract class DerivedColumn {
+@deprecated(DbcIsDeprecated, "2.9.0") abstract class DerivedColumn {
 
   /** The value for the column. This value can be of any type but must be
    *  calculated from fields that appear in a relation that takes part

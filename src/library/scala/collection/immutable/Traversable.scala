@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -19,10 +19,12 @@ import mutable.Builder
  *  @define mutability immutable
  */
 trait Traversable[+A] extends scala.collection.Traversable[A]
+//                         with GenTraversable[A]
                          with GenericTraversableTemplate[A, Traversable]
                          with TraversableLike[A, Traversable[A]]
                          with Immutable {
   override def companion: GenericCompanion[Traversable] = Traversable
+  override def seq: Traversable[A] = this
 }
 
 /** $factoryInfo

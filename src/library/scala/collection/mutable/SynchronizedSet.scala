@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -66,7 +66,7 @@ trait SynchronizedSet[A] extends Set[A] {
     super.remove(elem)
   }
 
-  override def intersect(that: scala.collection.Set[A]) = synchronized {
+  override def intersect(that: scala.collection.GenSet[A]) = synchronized {
     super.intersect(that)
   }
 
@@ -74,7 +74,7 @@ trait SynchronizedSet[A] extends Set[A] {
     super.clear
   }
 
-  override def subsetOf(that: scala.collection.Set[A]) = synchronized {
+  override def subsetOf(that: scala.collection.GenSet[A]) = synchronized {
     super.subsetOf(that)
   }
 

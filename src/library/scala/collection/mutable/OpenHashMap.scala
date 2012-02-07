@@ -1,16 +1,13 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
 \*                                                                      */
 
-
-
 package scala.collection
 package mutable
-
 
 /**
  *  @define Coll OpenHashMap
@@ -19,28 +16,15 @@ package mutable
  *  @since 2.7
  */
 object OpenHashMap {
-  def apply[K, V](elems : (K, V)*) = {
-    val dict = new OpenHashMap[K, V];
-    elems.foreach({case (x, y) => dict(x) = y});
-    dict;
-  }
+  import generic.BitOperations.Int.highestOneBit
 
-  def empty[K, V] = new OpenHashMap[K, V];
+  def apply[K, V](elems : (K, V)*) = new OpenHashMap[K, V] ++= elems
+  def empty[K, V] = new OpenHashMap[K, V]
 
   final private class OpenEntry[Key, Value](val key: Key,
                                             val hash: Int,
                                             var value: Option[Value])
                 extends HashEntry[Key, OpenEntry[Key, Value]]
-
-  private[mutable] def highestOneBit(j : Int) = { // This should really go somewhere central as we're now code sharing by cut and paste. :(
-    var i = j;
-    i |= (i >>  1);
-    i |= (i >>  2);
-    i |= (i >>  4);
-    i |= (i >>  8);
-    i |= (i >> 16);
-    i - (i >>> 1);
-  }
 
   private[mutable] def nextPowerOfTwo(i : Int) = highestOneBit(i) << 1;
 }
@@ -67,7 +51,7 @@ extends Map[Key, Value]
    with MapLike[Key, Value, OpenHashMap[Key, Value]] {
 
   import OpenHashMap.OpenEntry
-  type Entry = OpenEntry[Key, Value]
+  private type Entry = OpenEntry[Key, Value]
 
   /**
    * A default constructor creates a hashmap with initial size 8.
@@ -96,7 +80,7 @@ extends Map[Key, Value]
     h ^ (h >>> 7) ^ (h >>> 4);
   }
 
-  private[this] def growTable = {
+  private[this] def growTable() = {
     val oldSize = mask + 1;
     val newSize = 4 * oldSize;
     val oldTable = table;
@@ -195,8 +179,8 @@ extends Map[Key, Value]
     var index = 0;
     val initialModCount = modCount;
 
-    private[this] def advance {
-      if (initialModCount != modCount) system.error("Concurrent modification");
+    private[this] def advance() {
+      if (initialModCount != modCount) sys.error("Concurrent modification");
       while((index <= mask) && (table(index) == null || table(index).value == None)) index+=1;
     }
 
@@ -233,7 +217,7 @@ extends Map[Key, Value]
   override def foreach[U](f : ((Key, Value)) => U) {
     val startModCount = modCount;
     foreachUndeletedEntry(entry => {
-      if (modCount != startModCount) system.error("Concurrent Modification")
+      if (modCount != startModCount) sys.error("Concurrent Modification")
       f((entry.key, entry.value.get))}
     );
   }

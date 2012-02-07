@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2002-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2002-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -17,8 +17,7 @@ package scala.xml
  * Copyright 2008 Google Inc. All Rights Reserved.
  * @author Burak Emir <bqe@google.com>
  */
-object Elem
-{
+object Elem {
   def apply(prefix: String,label: String, attributes: MetaData, scope: NamespaceBinding, child: Node*) =
     new Elem(prefix,label,attributes,scope,child:_*)
 

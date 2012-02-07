@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -9,7 +9,8 @@ package classfile
 
 import java.lang.Float.floatToIntBits
 import java.lang.Double.doubleToLongBits
-import reflect.generic.{ PickleBuffer, PickleFormat }
+import scala.io.Codec
+import scala.reflect.internal.pickling.{ PickleBuffer, PickleFormat }
 import scala.collection.mutable.LinkedHashMap
 import PickleFormat._
 import Flags._
@@ -28,6 +29,8 @@ abstract class Pickler extends SubComponent {
   private final val showSig = false
 
   val phaseName = "pickler"
+
+  currentRun
 
   def newPhase(prev: Phase): StdPhase = new PicklePhase(prev)
 
@@ -55,6 +58,15 @@ abstract class Pickler extends SubComponent {
           case _ =>
         }
       }
+      // If there are any erroneous types in the tree, then we will crash
+      // when we pickle it: so let's report an erorr instead.  We know next
+      // to nothing about what happened, but our supposition is a lot better
+      // than "bad type: <error>" in terms of explanatory power.
+      for (t <- unit.body ; if t.isErroneous) {
+        unit.error(t.pos, "erroneous or inaccessible type")
+        return
+      }
+
       pickle(unit.body)
     }
   }
@@ -65,6 +77,7 @@ abstract class Pickler extends SubComponent {
     private var entries   = new Array[AnyRef](256)
     private var ep        = 0
     private val index     = new LinkedHashMap[AnyRef, Int]
+    private lazy val nonClassRoot = root.ownersIterator.find(! _.isClass) getOrElse NoSymbol
 
     private def isRootSym(sym: Symbol) =
       sym.name.toTermName == rootName && sym.owner == rootOwner
@@ -74,7 +87,11 @@ abstract class Pickler extends SubComponent {
      *  Question: Should this be done for refinement class symbols as well?
      */
     private def localizedOwner(sym: Symbol) =
-      if (isLocal(sym) && !isRootSym(sym) && !isLocal(sym.owner)) root
+      if (isLocal(sym) && !isRootSym(sym) && !isLocal(sym.owner))
+        // don't use a class as the localized owner for type parameters that are not owned by a class: those are not instantiated by asSeenFrom
+        // however, they would suddenly be considered by asSeenFrom if their localized owner became a class (causing the crashes of #4079, #2741)
+        (if(sym.isTypeParameter && !sym.owner.isClass) nonClassRoot
+         else root)
       else sym.owner
 
     /** Is root in symbol.owner*, or should it be treated as a local symbol
@@ -129,15 +146,15 @@ abstract class Pickler extends SubComponent {
             putType(sym.typeOfThis);
           putSymbol(sym.alias)
           if (!sym.children.isEmpty) {
-            val (locals, globals) = sym.children.toList.partition(_.isLocalClass)
+            val (locals, globals) = sym.children partition (_.isLocalClass)
             val children =
               if (locals.isEmpty) globals
               else {
                 val localChildDummy = sym.newClass(sym.pos, tpnme.LOCAL_CHILD)
                 localChildDummy.setInfo(ClassInfoType(List(sym.tpe), EmptyScope, localChildDummy))
-                localChildDummy :: globals
+                globals + localChildDummy
               }
-            putChildren(sym, children sortBy (_.sealedSortName))
+            putChildren(sym, children.toList sortBy (_.sealedSortName))
           }
           for (annot <- staticAnnotations(sym.annotations.reverse))
             putAnnotation(sym, annot)
@@ -182,6 +199,8 @@ abstract class Pickler extends SubComponent {
           putSymbol(clazz); putTypes(parents); putSymbols(decls.toList)
         case MethodType(params, restpe) =>
           putType(restpe); putSymbols(params)
+        case NullaryMethodType(restpe) =>
+          putType(restpe)
         case PolyType(tparams, restpe) =>
           /** no longer needed since all params are now local
           tparams foreach { tparam =>
@@ -350,7 +369,7 @@ abstract class Pickler extends SubComponent {
           putTrees(args)
 
         case Super(qual, mix) =>
-          putEntry(qual:Name)
+          putTree(qual)
           putEntry(mix:Name)
 
         case This(qual) =>
@@ -491,7 +510,9 @@ abstract class Pickler extends SubComponent {
     /** Write a name in UTF8 format. */
     private def writeName(name: Name) {
       ensureCapacity(name.length * 3)
-      writeIndex = name.copyUTF8(bytes, writeIndex)
+      val utfBytes = Codec toUTF8 name.toString
+      compat.Platform.arraycopy(utfBytes, 0, bytes, writeIndex, utfBytes.length)
+      writeIndex += utfBytes.length
     }
 
     /** Write an annotation */
@@ -572,10 +593,14 @@ abstract class Pickler extends SubComponent {
         case ClassInfoType(parents, decls, clazz) =>
           writeRef(clazz); writeRefs(parents); CLASSINFOtpe
         case mt @ MethodType(formals, restpe) =>
-          writeRef(restpe); writeRefs(formals)
-          if (mt.isImplicit) IMPLICITMETHODtpe
-          else METHODtpe
-        case PolyType(tparams, restpe) =>
+          writeRef(restpe); writeRefs(formals) ; METHODtpe
+        case mt @ NullaryMethodType(restpe) =>
+          // reuse POLYtpe since those can never have an empty list of tparams.
+          // TODO: is there any way this can come back and bite us in the bottom?
+          // ugliness and thrift aside, this should make this somewhat more backward compatible
+          // (I'm not sure how old scalac's would deal with nested PolyTypes, as these used to be folded into one)
+          writeRef(restpe); writeRefs(Nil); POLYtpe
+        case PolyType(tparams, restpe) => // invar: tparams nonEmpty
           writeRef(restpe); writeRefs(tparams); POLYtpe
         case ExistentialType(tparams, restpe) =>
           writeRef(restpe); writeRefs(tparams); EXISTENTIALtpe
@@ -1023,8 +1048,7 @@ abstract class Pickler extends SubComponent {
         case ClassInfoType(parents, decls, clazz) =>
           print("CLASSINFOtpe "); printRef(clazz); printRefs(parents);
         case mt @ MethodType(formals, restpe) =>
-          print(if (mt.isImplicit) "IMPLICITMETHODtpe " else "METHODtpe ");
-          printRef(restpe); printRefs(formals)
+          print("METHODtpe"); printRef(restpe); printRefs(formals)
         case PolyType(tparams, restpe) =>
           print("POLYtpe "); printRef(restpe); printRefs(tparams);
         case ExistentialType(tparams, restpe) =>

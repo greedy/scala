@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -135,10 +135,10 @@ abstract class DeVirtualize /* extends InfoTransform with TypingTransformers {
   protected def factoryName(clazz: Symbol) =
     atPhase(ownPhase) { newTermName("new$"+clazz.name) }
 
-  /** Does `clazz' contain virtual classes? */
+  /** Does `clazz` contain virtual classes? */
   protected def containsVirtuals(clazz: Symbol) = clazz.info.decls.toList exists (_.isVirtualClass)
 
-  /** The inner classes that need factory methods in `clazz'
+  /** The inner classes that need factory methods in `clazz`
    *  This is intended to catch situations like the following
    *
    *  abstract class C {
@@ -197,10 +197,10 @@ abstract class DeVirtualize /* extends InfoTransform with TypingTransformers {
   protected def mkPolyType(tparams: List[Symbol], tp: Type) =
     if (tparams.isEmpty) tp else PolyType(tparams, tp)
 
-  /** A lazy type to complete `sym', which is is generated for virtual class
-   *  `clazz'.
-   *  The info of the symbol is computed by method `getInfo'.
-   *  It is wrapped in copies of the type parameters of `clazz'.
+  /** A lazy type to complete `sym`, which is is generated for virtual class
+   *  `clazz`.
+   *  The info of the symbol is computed by method `getInfo`.
+   *  It is wrapped in copies of the type parameters of `clazz`.
    */
   abstract class PolyTypeCompleter(sym: Symbol, clazz: Symbol) extends LazyType {
     def getInfo: Type
@@ -232,7 +232,7 @@ abstract class DeVirtualize /* extends InfoTransform with TypingTransformers {
     val param = clazz.newMethod(clazz.pos, paramFieldName(clazz, index))
       .setFlag(PROTECTED | LOCAL | DEFERRED | EXPANDEDNAME | SYNTHETIC | STABLE)
     atPhase(ownPhase.next) {
-      param.setInfo(PolyType(List(), tpe))
+      param.setInfo(NullaryMethodType(tpe))
     }
     param
   }
@@ -294,7 +294,7 @@ abstract class DeVirtualize /* extends InfoTransform with TypingTransformers {
     factory setInfo new PolyTypeCompleter(factory, clazz) {
       private def copyType(tpe: Type): Type = tpe match {
         case MethodType(formals, restpe) => MethodType(formals, copyType(restpe))
-        case PolyType(List(), restpe) => PolyType(List(), copyType(restpe))
+        case NullaryMethodType(restpe) => NullaryMethodType(copyType(restpe))
         case PolyType(_, _) => abort("bad case: "+tpe)
         case _ => owner.thisType.memberType(abstractType(clazz))
       }
@@ -359,7 +359,7 @@ abstract class DeVirtualize /* extends InfoTransform with TypingTransformers {
     // all code is executed at phase ownPhase.next
 
     /** Add trees for abstract types, worker traits, and factories (@see mkFactory)
-     *  to template body `stats'
+     *  to template body `stats`
      */
     override def transformStats(stats: List[Tree], exprOwner: Symbol): List[Tree] = {
       val stats1 = stats flatMap transformStat
@@ -394,7 +394,7 @@ abstract class DeVirtualize /* extends InfoTransform with TypingTransformers {
           case (pt, i) =>
             val pfield = cclazz.newMethod(cclazz.pos, paramFieldName(clazz, i))
               .setFlag(PROTECTED | LOCAL | EXPANDEDNAME | SYNTHETIC | STABLE)
-              .setInfo(PolyType(List(), pt))
+              .setInfo(NullaryMethodType(pt))
             cclazz.info.decls enter pfield
             atPos(factory.pos) {
               DefDef(pfield, Ident(fixParamName(i)))
@@ -408,7 +408,7 @@ abstract class DeVirtualize /* extends InfoTransform with TypingTransformers {
     }
 
 
-    /** The factory definition for virtual class `clazz' (@see mkFactory)
+    /** The factory definition for virtual class `clazz` (@see mkFactory)
      *  For a virtual class
      *
      *  attrs mods class VC[Ts] <: Ps { decls }
@@ -454,7 +454,7 @@ abstract class DeVirtualize /* extends InfoTransform with TypingTransformers {
       }
     }
 
-    /** Create an override bridge for method `meth' in concrete class `cclazz'.
+    /** Create an override bridge for method `meth` in concrete class `cclazz`.
      *  An override bridge has the form
      *
      *   override f(xs1)...(xsN) = super.f(xs)...(xsN)

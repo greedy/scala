@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -78,8 +78,6 @@ object BitSet extends BitSetFactory[BitSet] {
     else if (len == 2) new BitSet2(elems(0), elems(1))
     else new BitSetN(elems)
   }
-
-  private val hashSeed = "BitSet".hashCode
 
   class BitSet1(val elems: Long) extends BitSet {
     protected def nwords = 1

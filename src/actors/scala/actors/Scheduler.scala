@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -13,7 +13,7 @@ import java.util.concurrent._
 import scheduler.{DelegatingScheduler, ForkJoinScheduler, ResizableThreadPoolScheduler, ThreadPoolConfig}
 
 /**
- * The <code>Scheduler</code> object is used by <code>Actor</code> to
+ * Used by [[scala.actors.Actor]] instances to
  * execute tasks of an actor execution.
  *
  * @author Philipp Haller
@@ -40,22 +40,22 @@ object Scheduler extends DelegatingScheduler {
 
   /* Only <code>ForkJoinScheduler</code> implements this method.
    */
-  @deprecated("snapshot will be removed")
+  @deprecated("snapshot will be removed", "2.8.0")
   def snapshot() {
     if (sched.isInstanceOf[ForkJoinScheduler]) {
       sched.asInstanceOf[ForkJoinScheduler].snapshot()
     } else
-      system.error("scheduler does not implement snapshot")
+      sys.error("scheduler does not implement snapshot")
   }
 
   /* Only <code>ForkJoinScheduler</code> implements this method.
    */
-  @deprecated("restart will be removed")
+  @deprecated("restart will be removed", "2.8.0")
   def restart() {
     if (sched.isInstanceOf[ForkJoinScheduler]) {
       sched.asInstanceOf[ForkJoinScheduler].restart()
     } else
-      system.error("scheduler does not implement restart")
+      sys.error("scheduler does not implement restart")
   }
 
 }

@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -16,6 +16,7 @@ package scala.concurrent
  *  @version 1.0, 12/03/2003
  */
 //class MailBox with Monitor with LinkedListQueueCreator {
+@deprecated("use actors instead", "2.8.0")
 class MailBox extends AnyRef with ListQueueCreator {
 
   type Message = AnyRef
@@ -102,11 +103,12 @@ class MailBox extends AnyRef with ListQueueCreator {
 
 }
 
-/////////////////////////////////////////////////////////////////
+
 
 /**
 * Module for dealing with queues.
 */
+@deprecated("use actors instead", "2.8.0")
 trait QueueModule[A] {
   /** Type of queues. */
   type T
@@ -119,6 +121,7 @@ trait QueueModule[A] {
 }
 
 /** Inefficient but simple queue module creator. */
+@deprecated("use actors instead", "2.8.0")
 trait ListQueueCreator {
   def queueCreate[A]: QueueModule[A] = new QueueModule[A] {
     type T = List[A]
@@ -140,6 +143,7 @@ trait ListQueueCreator {
 }
 
 /** Efficient queue module creator based on linked lists. */
+@deprecated("use actors instead", "2.8.0")
 trait LinkedListQueueCreator {
   import scala.collection.mutable.LinkedList
   def queueCreate[A >: Null <: AnyRef]: QueueModule[A] = new QueueModule[A] {

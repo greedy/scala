@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -16,7 +16,7 @@ import java.sql.Types._;
 import java.math.BigInteger;
 import java.math.BigDecimal;
 
-object Factory {
+@deprecated(DbcIsDeprecated, "2.9.0") object Factory {
 
   final val java_lang_Integer_SIZE = 32;
   final val java_lang_Long_SIZE    = 64;
@@ -234,17 +234,17 @@ object Factory {
       }
       /* Unsupported data types. */
       case REF | ARRAY | STRUCT =>
-        system.error ("I don't support composite data types yet.");
+        sys.error ("I don't support composite data types yet.");
       case DATALINK | DISTINCT | JAVA_OBJECT | NULL =>
-        system.error ("I won't support strange data types.");
+        sys.error ("I won't support strange data types.");
       /* Unsupported binary string data types. */
       case BINARY | BLOB | LONGVARBINARY | VARBINARY =>
-        system.error ("I don't support binary string data types yet.");
+        sys.error ("I don't support binary string data types yet.");
       /* Unsupported date and time data types. */
       case DATE | TIME | TIMESTAMP =>
-        system.error ("I don't support date and time data types yet.");
+        sys.error ("I don't support date and time data types yet.");
       /* Default case */
-      case x => system.error ("I don't know about this ("+metadata.getColumnTypeName(index)+") JDBC type.")
+      case x => sys.error ("I don't know about this ("+metadata.getColumnTypeName(index)+") JDBC type.")
     }
   }
 }

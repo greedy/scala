@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * Author: Paul Phillips
  */
 
@@ -23,9 +23,9 @@ trait Matrix extends MatrixAdditions {
 
   /** Translation of match expressions.
    *
-   *  `p':  pattern
-   *  `g':  guard
-   *  `bx': body index
+   *  `p`:  pattern
+   *  `g`:  guard
+   *  `bx`: body index
    *
    *   internal representation is (tvars:List[Symbol], rows:List[Row])
    *
@@ -88,21 +88,18 @@ trait Matrix extends MatrixAdditions {
     context: MatrixContext): Tree =
   {
     import context._
-    // log("handlePattern: selector.tpe = " + selector.tpe)
+    TRACE("handlePattern", "(%s: %s) match { %s cases }", selector, selector.tpe, cases.size)
 
-    // sets up top level match
     val matrixInit: MatrixInit = {
       val v = copyVar(selector, isChecked, selector.tpe, "temp")
       MatrixInit(List(v), cases, atPos(selector.pos)(MATCHERROR(v.ident)))
     }
-
-    val matrix  = new MatchMatrix(context) { lazy val data = matrixInit }
-    val rep     = matrix.expansion                            // expands casedefs and assigns name
-    val mch     = typer typed rep.toTree                      // executes algorithm, converts tree to DFA
-    val dfatree = typer typed Block(matrixInit.valDefs, mch)  // packages into a code block
+    val matrix = new MatchMatrix(context) { lazy val data = matrixInit }
+    val mch     = typer typed matrix.expansion.toTree
+    val dfatree = typer typed Block(matrix.data.valDefs, mch)
 
     // redundancy check
-    matrix.targets filter (_.isNotReached) foreach (cs => cunit.error(cs.body.pos, "unreachable code"))
+    matrix.targets filter (_.unreached) foreach (cs => cunit.error(cs.body.pos, "unreachable code"))
     // optimize performs squeezing and resets any remaining NO_EXHAUSTIVE
     tracing("handlePattern")(matrix optimize dfatree)
   }
@@ -125,11 +122,16 @@ trait Matrix extends MatrixAdditions {
     private val _syntheticSyms = mutable.HashSet[Symbol]()
     def clearSyntheticSyms() = {
       _syntheticSyms foreach (_ resetFlag (NO_EXHAUSTIVE|MUTABLE))
-      log("Cleared NO_EXHAUSTIVE/MUTABLE on " + _syntheticSyms.size + " synthetic symbols.")
+      if (settings.debug.value)
+        log("Cleared NO_EXHAUSTIVE/MUTABLE on " + _syntheticSyms.size + " synthetic symbols.")
       _syntheticSyms.clear()
     }
     def recordSyntheticSym(sym: Symbol): Symbol = {
       _syntheticSyms += sym
+      if (_syntheticSyms.size > 25000) {
+        cunit.error(owner.pos, "Sanity check failed: over 25000 symbols created for pattern match.")
+        abort("This is a bug in the pattern matcher.")
+      }
       sym
     }
 
@@ -167,9 +169,9 @@ trait Matrix extends MatrixAdditions {
 
     val emptyPatternVarGroup = PatternVarGroup()
     class PatternVarGroup(val pvs: List[PatternVar]) {
-      def syms = pvs map (_.sym)
+      def syms    = pvs map (_.sym)
       def valDefs = pvs map (_.valDef)
-      def idents = pvs map (_.ident)
+      def idents  = pvs map (_.ident)
 
       def extractIndex(index: Int): (PatternVar, PatternVarGroup) = {
         val (t, ts) = self.extractIndex(pvs, index)
@@ -196,16 +198,14 @@ trait Matrix extends MatrixAdditions {
      */
     class PatternVar(val lhs: Symbol, val rhs: Tree, val checked: Boolean) {
       def sym = lhs
-      def valsym = valDef.symbol
-      // XXX how will valsym.tpe differ from sym.tpe ?
-      def tpe = valsym.tpe
+      def tpe = lhs.tpe
 
       // See #1427 for an example of a crash which occurs unless we retype:
       // in that instance there is an existential in the pattern.
-      lazy val ident  = typer typed { ID(lhs) setType null }
-      lazy val valDef = typer typed { (VAL(lhs) withType ident.tpe) === rhs }
+      lazy val ident  = typer typed Ident(lhs)
+      lazy val valDef = typer typedValDef ValDef(lhs, rhs)
 
-      override def toString() = "%s: %s = %s".format(lhs, lhs.info, rhs)
+      override def toString() = "%s: %s = %s".format(lhs, tpe, rhs)
     }
 
     /** Sets the rhs to EmptyTree, which makes the valDef ignored in Scrutinee.
@@ -238,6 +238,12 @@ trait Matrix extends MatrixAdditions {
 
       tracing("create")(new PatternVar(lhs, rhs, checked))
     }
+    def createLazy(tpe: Type, f: Symbol => Tree, checked: Boolean) = {
+      val lhs = newVar(owner.pos, tpe, Flags.LAZY :: flags(checked))
+      val rhs = f(lhs)
+
+      tracing("createLazy")(new PatternVar(lhs, rhs, checked))
+    }
 
     private def newVar(
       pos: Position,
@@ -249,8 +255,5 @@ trait Matrix extends MatrixAdditions {
       // careful: pos has special meaning
       recordSyntheticSym(owner.newVariable(pos, n) setInfo tpe setFlag (SYNTHETIC.toLong /: flags)(_|_))
     }
-
-    def typedValDef(x: Symbol, rhs: Tree) =
-      tracing("typedVal")(typer typedValDef (VAL(x) === rhs))
   }
 }

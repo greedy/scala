@@ -1,19 +1,18 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
 \*                                                                      */
 
-
 package scala.xml
 package pull
 
+import scala.io.Source
+import java.lang.Thread
 import java.util.concurrent.LinkedBlockingQueue
 import java.nio.channels.ClosedChannelException
-
-import scala.io.Source
 import scala.xml.parsing.{ ExternalSources, MarkupHandler, MarkupParser }
 
 /**
@@ -24,8 +23,7 @@ import scala.xml.parsing.{ ExternalSources, MarkupHandler, MarkupParser }
  *  @author Burak Emir
  *  @author Paul Phillips
  */
-class XMLEventReader(src: Source) extends ProducerConsumerIterator[XMLEvent]
-{
+class XMLEventReader(src: Source) extends ProducerConsumerIterator[XMLEvent] {
   // We implement a pull parser as an iterator, but since we may be operating on
   // a stream (e.g. XML over a network) there may be arbitrarily long periods when
   // the queue is empty.  Fortunately the ProducerConsumerIterator is ideally
@@ -50,7 +48,7 @@ class XMLEventReader(src: Source) extends ProducerConsumerIterator[XMLEvent]
   // fails for whatever reason the iterator correctness is not impacted,
   // only performance (because it will finish the entire XML document,
   // or at least as much as it can fit in the queue.)
-  def stop = {
+  def stop() = {
     produce(POISON)
     parserThread.interrupt()
   }
@@ -105,8 +103,7 @@ class XMLEventReader(src: Source) extends ProducerConsumerIterator[XMLEvent]
 // the next call hasNext is guaranteed not to block.
 //
 // This is not thread-safe for multiple consumers!
-trait ProducerConsumerIterator[T >: Null] extends Iterator[T]
-{
+trait ProducerConsumerIterator[T >: Null] extends Iterator[T] {
   // abstract - iterator-specific distinguished object for marking eos
   val EndOfStream: T
 

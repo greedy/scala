@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala Ant Tasks                      **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -19,8 +19,8 @@ class Break extends Task {
 
   private var id: Option[String] = None
 
-  override def execute {
-    if (id.isEmpty) system.error("Attribute 'id' is not set")
+  override def execute() {
+    if (id.isEmpty) sys.error("Attribute 'id' is not set")
     Compilers.break(id.get)
   }
 

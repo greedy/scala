@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2006-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -46,13 +46,13 @@ final class RichChar(val self: Char) extends IntegralProxy[Char] {
   // public static boolean isJavaIdentifierStart(char ch)
   // public static boolean isJavaIdentifierPart(char ch)
 
-  @deprecated("Use ch.toLower instead")
+  @deprecated("Use ch.toLower instead", "2.8.0")
   def toLowerCase: Char = toLower
-  @deprecated("Use ch.toUpper instead")
+  @deprecated("Use ch.toUpper instead", "2.8.0")
   def toUpperCase: Char = toUpper
 
-  @deprecated("Use ch.isLower instead")
+  @deprecated("Use ch.isLower instead", "2.8.0")
   def isLowerCase: Boolean = isLower
-  @deprecated("Use ch.isUpper instead")
+  @deprecated("Use ch.isUpper instead", "2.8.0")
   def isUpperCase: Boolean = isUpper
 }

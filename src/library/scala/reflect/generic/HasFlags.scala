@@ -76,7 +76,7 @@ import Flags._
 /** Common code utilized by Modifiers (which carry the flags associated
  *  with Trees) and Symbol.
  */
-trait HasFlags {
+@deprecated("scala.reflect.generic will be removed", "2.9.1") trait HasFlags {
   type FlagsType
   type AccessBoundaryType
   type AnnotationType
@@ -211,7 +211,8 @@ trait HasFlags {
 
   // Keeping some potentially ambiguous names around so as not to break
   // the rest of the world
-  @deprecated("") def isAbstract = hasFlag(ABSTRACT)
+  @deprecated("", "2.9.0")
+  def isAbstract = hasFlag(ABSTRACT)
   // Problematic:
   // ABSTRACT and DEFERRED too easy to confuse, and
   // ABSTRACT + OVERRIDE ==> ABSOVERRIDE adds to it.

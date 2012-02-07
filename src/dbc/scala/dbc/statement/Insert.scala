@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -15,7 +15,7 @@ package statement
 import scala.dbc.statement.expression._
 
 /** An insertion of values into a table. */
-case class Insert(insertionTarget: String, insertionData: InsertionData)
+@deprecated(DbcIsDeprecated, "2.9.0") case class Insert(insertionTarget: String, insertionData: InsertionData)
     extends Status {
 
   /** A SQL-99 compliant string representation of the select statement. */

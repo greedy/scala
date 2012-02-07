@@ -1,14 +1,12 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Paul Phillips
  */
 
 package scala.tools.nsc
 package interpreter
 
-import java.io.File
 import java.lang.reflect
-import java.util.jar.{ JarEntry, JarFile }
 import java.util.concurrent.ConcurrentHashMap
 import util.ScalaClassLoader
 import ScalaClassLoader.getSystemLoader
@@ -21,7 +19,7 @@ object ByteCode {
     for (clazz <- getSystemLoader.tryToLoadClass[AnyRef]("scala.tools.scalap.Decode$")) yield
       clazz.getField("MODULE$").get()
 
-  private def decoderMethod(name: String, args: Class[_]*): Option[reflect.Method] = {
+  private def decoderMethod(name: String, args: JClass*): Option[reflect.Method] = {
     for (decoder <- DECODER ; m <- Option(decoder.getClass.getMethod(name, args: _*))) yield m
   }
 

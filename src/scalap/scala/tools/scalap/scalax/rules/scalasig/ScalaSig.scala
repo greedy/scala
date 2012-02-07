@@ -1,6 +1,6 @@
 /*     ___ ____ ___   __   ___   ___
 **    / _// __// _ | / /  / _ | / _ \    Scala classfile decoder
-**  __\ \/ /__/ __ |/ /__/ __ |/ ___/    (c) 2003-2010, LAMP/EPFL
+**  __\ \/ /__/ __ |/ /__/ __ |/ ___/    (c) 2003-2011, LAMP/EPFL
 ** /____/\___/_/ |_/____/_/ |_/_/        http://scala-lang.org/
 **
 */
@@ -72,7 +72,7 @@ object ScalaSigAttributeParsers extends ByteCodeReader  {
   val symtab = nat >> entry.times
   val scalaSig = nat ~ nat ~ symtab ^~~^ ScalaSig
 
-  val utf8 = read(x => x.toUTF8StringAndBytes.string)
+  val utf8 = read(x => x.fromUTF8StringAndBytes.string)
   val longValue = read(_ toLong)
 }
 
@@ -253,8 +253,11 @@ object ScalaSigEntryParsers extends RulesWithState with MemoisableRules {
       18 -~ classSymRef ~ (typeRef*) ^~^ RefinedType,
       19 -~ symbolRef ~ (typeRef*) ^~^ ClassInfoType,
       20 -~ typeRef ~ (symbolRef*) ^~^ MethodType,
-      21 -~ typeRef ~ (refTo(typeSymbol)*) ^~^ PolyType,
-      22 -~ typeRef ~ (symbolRef*) ^~^ ImplicitMethodType,
+      21 -~ typeRef ~ (refTo(typeSymbol)+) ^~^ PolyType,
+      // TODO: make future safe for past by doing the same transformation as in the
+      // full unpickler in case we're reading pre-2.9 classfiles
+      21 -~ typeRef ^^ NullaryMethodType,
+      22 -~ typeRef ~ (symbolRef*) ^~^ MethodType,
       42 -~ typeRef ~ (attribTreeRef*) ^~^ AnnotatedType,
       51 -~ typeRef ~ symbolRef ~ (attribTreeRef*) ^~~^ AnnotatedWithSelfType,
       47 -~ typeLevel ~ typeIndex ^~^ DeBruijnIndexType,
@@ -347,5 +350,5 @@ object ScalaSigEntryParsers extends RulesWithState with MemoisableRules {
    *   AnnotArg       = Tree | Constant
    *   ConstAnnotArg  = Constant | AnnotInfo | AnnotArgArray
    *
-   *   len is remaining length after `len'.
+   *   len is remaining length after `len`.
    */

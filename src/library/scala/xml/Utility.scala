@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -22,6 +22,8 @@ import parsing.XhtmlEntities
  */
 object Utility extends AnyRef with parsing.TokenTests
 {
+  final val SU = '\u001A'
+
   implicit def implicitSbToString(sb: StringBuilder) = sb.toString()
 
   // helper for the extremely oft-repeated sequence of creating a
@@ -260,18 +262,14 @@ object Utility extends AnyRef with parsing.TokenTests
    * @param attribHashCode
    * @param children
    */
-  def hashCode(pre: String, label: String, attribHashCode: Int, scpeHash: Int, children: Seq[Node]) = (
-    ( if(pre ne null) {41 * pre.## % 7} else {0})
-    + label.## * 53
-    + attribHashCode * 7
-    + scpeHash * 31
-    + {
-      var c = 0
-      val i = children.iterator
-      while(i.hasNext) c = c * 41 + i.next.##
-      c
-    }
-  )
+  def hashCode(pre: String, label: String, attribHashCode: Int, scpeHash: Int, children: Seq[Node]) = {
+    val h = new util.MurmurHash[Node](pre.##)
+    h.append(label.##)
+    h.append(attribHashCode)
+    h.append(scpeHash)
+    children.foreach(h)
+    h.hash
+  }
 
   def appendQuoted(s: String): String = sbToString(appendQuoted(s, _))
 
@@ -364,7 +362,7 @@ object Utility extends AnyRef with parsing.TokenTests
         c = it.next
         if (c == '#') {
           c = it.next
-          val theChar = parseCharRef ({ ()=> c },{ () => c = it.next },{s => throw new RuntimeException(s)})
+          val theChar = parseCharRef ({ ()=> c },{ () => c = it.next },{s => throw new RuntimeException(s)}, {s => throw new RuntimeException(s)})
           sb.append(theChar)
         }
         else {
@@ -414,7 +412,7 @@ object Utility extends AnyRef with parsing.TokenTests
    * @param reportSyntaxError ...
    * @return                  ...
    */
-  def parseCharRef(ch: () => Char, nextch: () => Unit, reportSyntaxError: String => Unit): String = {
+  def parseCharRef(ch: () => Char, nextch: () => Unit, reportSyntaxError: String => Unit, reportTruncatedError: String => Unit): String = {
     val hex  = (ch() == 'x') && { nextch(); true }
     val base = if (hex) 16 else 10
     var i = 0
@@ -429,6 +427,8 @@ object Utility extends AnyRef with parsing.TokenTests
                               "Did you mean to write &#x ?")
           else
             i = i * base + ch().asDigit
+        case SU =>
+          reportTruncatedError("")
         case _ =>
           reportSyntaxError("character '" + ch() + "' not allowed in char ref\n")
       }

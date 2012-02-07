@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -12,9 +12,8 @@ package scala.actors
 import scala.actors.scheduler.DaemonScheduler
 import scala.concurrent.SyncVar
 
-/** A `Future[T]` is a function of arity 0 that returns
- *  a value of type `T`.
- *  Applying a future blocks the current actor (`Actor.self`)
+/** A function of arity 0, returing a value of type `T` that,
+ *  when applied, blocks the current actor (`Actor.self`)
  *  until the future's value is available.
  *
  *  A future can be queried to find out whether its value
@@ -28,12 +27,12 @@ abstract class Future[+T] extends Responder[T] with Function0[T] {
   private[actors] var fvalue: Option[Any] = None
   private[actors] def fvalueTyped = fvalue.get.asInstanceOf[T]
 
-  @deprecated("this member is going to be removed in a future release")
+  @deprecated("this member is going to be removed in a future release", "2.8.0")
   def ch: InputChannel[Any] = inputChannel
 
-  @deprecated("this member is going to be removed in a future release")
+  @deprecated("this member is going to be removed in a future release", "2.8.0")
   protected def value: Option[Any] = fvalue
-  @deprecated("this member is going to be removed in a future release")
+  @deprecated("this member is going to be removed in a future release", "2.8.0")
   protected def value_=(x: Option[Any]) { fvalue = x }
 
   /** Tests whether the future's result is available.
@@ -110,7 +109,7 @@ private class FutureActor[T](fun: SyncVar[T] => Unit, channel: Channel[T]) exten
   }
 }
 
-/** The `Futures` object contains methods that operate on futures.
+/** Methods that operate on futures.
  *
  *  @author Philipp Haller
  */

@@ -4,7 +4,6 @@ package io
 import util.ClassPath
 import java.util.concurrent.{ Future, ConcurrentHashMap, ExecutionException }
 import java.util.zip.ZipException
-import Path.{ isJarOrZip, locateJarByName }
 import collection.JavaConverters._
 import Properties.{ envOrElse, propOrElse }
 
@@ -20,7 +19,7 @@ class Sources(val path: String) {
   private val partitioned = ClassPath toPaths expandedPath partition (_.isDirectory)
 
   val dirs   = partitioned._1 map (_.toDirectory)
-  val jars   = partitioned._2 filter isJarOrZip map (_.toFile)
+  val jars   = partitioned._2 filter Jar.isJarOrZip map (_.toFile)
   val (isDone, force) = {
     val f1  = spawn(calculateDirs())
     val f2  = spawn(calculateJars())
@@ -39,7 +38,7 @@ class Sources(val path: String) {
     dirs foreach { d => dbg(d) ; catchZip(addSources(d.deepFiles map (x => Fileish(x)))) }
 
   private def calculateJars() =
-    jars foreach { j => dbg(j) ; catchZip(addSources(new SourceJar(j).iterator)) }
+    jars foreach { j => dbg(j) ; catchZip(addSources(new Jar(j).fileishIterator)) }
 
   private def addSources(fs: TraversableOnce[Fileish]) =
     fs foreach { f => if (f.isSourceFile) add(f.name, f) }
@@ -62,12 +61,13 @@ trait LowPrioritySourcesImplicits {
   implicit def fallbackSources: Sources = defaultSources
 }
 
-
 object Sources extends LowPrioritySourcesImplicits {
-  val scalaSourceJars     = List("scala-library-src.jar", "scala-compiler-src.jar")
-  val sourcePathEnv       = envOrElse("SOURCEPATH", "")
-  val scalaLibraryJarPath = (scalaSourceJars map locateJarByName).flatten map (_.path)
-  val defaultSources      = apply(scalaLibraryJarPath :+ sourcePathEnv: _*)
+  private def libraryInits      = ClassPath.scalaLibrary.toList flatMap (_.toAbsolute.parents)
+  private def librarySourceDir  = libraryInits map (_ / "src") find (_.isDirectory)
+  private def expandedSourceDir = librarySourceDir.toList flatMap (ClassPath expandDir _.path)
+
+  val sourcePathProp = sys.props.traceSourcePath.value
+  val defaultSources = apply(expandedSourceDir :+ sourcePathProp: _*)
 
   def apply(paths: String*): Sources = new Sources(ClassPath.join(paths: _*))
 }

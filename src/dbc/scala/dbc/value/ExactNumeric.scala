@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -15,7 +15,7 @@ package value;
 import java.math.BigInteger;
 import java.math.BigDecimal;
 
-abstract class ExactNumeric [Type] extends Value {
+@deprecated(DbcIsDeprecated, "2.9.0") abstract class ExactNumeric [Type] extends Value {
 
   val dataType: datatype.ExactNumeric[Type];
 
@@ -23,7 +23,7 @@ abstract class ExactNumeric [Type] extends Value {
 
 }
 
-object ExactNumeric {
+@deprecated(DbcIsDeprecated, "2.9.0") object ExactNumeric {
 
   implicit def exactNumericToByte (obj:value.ExactNumeric[Byte]): Byte = obj.nativeValue;
   implicit def exactNumericToShort (obj:value.ExactNumeric[Short]): Short = obj.nativeValue;

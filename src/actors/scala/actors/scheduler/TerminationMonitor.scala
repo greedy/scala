@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -66,7 +66,7 @@ private[scheduler] trait TerminationMonitor {
   }
 
   /** Deprecated non-actor-private version */
-  @deprecated("this method is going to be removed in a future release")
+  @deprecated("this method is going to be removed in a future release", "2.7.7")
   def allTerminated: Boolean = allActorsTerminated
 
   /** Checks for actors that have become garbage. */

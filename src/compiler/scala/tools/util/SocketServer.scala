@@ -1,99 +1,100 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2002-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2002-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
 \*                                                                      */
 
-
 package scala.tools.util
 
-import java.io.{ PrintWriter, BufferedOutputStream, BufferedReader, InputStreamReader, IOException }
-import java.net.{ Socket, ServerSocket, SocketException, SocketTimeoutException }
+import java.net.{ ServerSocket, SocketException, SocketTimeoutException }
+import java.io.{ PrintWriter, BufferedReader }
+import scala.tools.nsc.io.Socket
 
-object SocketServer
-{
-  // After 30 idle minutes, politely exit.
-  // Should the port file disappear, and the clients
-  // therefore unable to contact this server instance,
-  // the process will just eventually terminate by itself.
-  val IdleTimeout = 1800000
-  val BufferSize  = 10240
+trait CompileOutputCommon {
+  def verbose: Boolean
 
-  def bufferedReader(s: Socket) = new BufferedReader(new InputStreamReader(s.getInputStream()))
-  def bufferedOutput(s: Socket) = new BufferedOutputStream(s.getOutputStream, BufferSize)
+  def info(msg: String)  = if (verbose) echo(msg)
+  def echo(msg: String)  = Console println msg
+  def warn(msg: String)  = System.err println msg
+  def fatal(msg: String) = { warn(msg) ; sys.exit(1) }
 }
-import SocketServer._
 
-/** The abstract class <code>SocketServer</code> implements the server
+/** The abstract class SocketServer implements the server
  *  communication for the fast Scala compiler.
  *
  *  @author  Martin Odersky
  *  @version 1.0
  */
-abstract class SocketServer
-{
-  def shutDown: Boolean
-  def session()
+abstract class SocketServer extends CompileOutputCommon {
+  def shutdown: Boolean
+  def session(): Unit
+  def timeout(): Unit = ()  // called after a timeout is detected for subclasses to cleanup
+  // a hook for subclasses
+  protected def createServerSocket(): ServerSocket = new ServerSocket(0)
 
-  var out: PrintWriter = _
   var in: BufferedReader = _
+  var out: PrintWriter   = _
+  val BufferSize         = 10240
+  lazy val serverSocket  = createServerSocket()
+  lazy val port          = serverSocket.getLocalPort()
 
-  def fatal(msg: String): Nothing = {
-    System.err.println(msg)
-    system.exit(1)
+  // Default to 30 minute idle timeout, settable with -max-idle
+  protected var idleMinutes = 30
+  private var savedTimeout = 0
+  private val acceptBox = new Socket.Box(() => {
+    // update the timeout if it has changed
+    if (savedTimeout != idleMinutes) {
+      savedTimeout = idleMinutes
+      setTimeoutOnSocket(savedTimeout)
+    }
+    new Socket(serverSocket.accept())
+  })
+  private def setTimeoutOnSocket(mins: Int) = {
+    try {
+      serverSocket setSoTimeout (mins * 60 * 1000)
+      info("Set socket timeout to " + mins + " minutes.")
+      true
+    }
+    catch {
+      case ex: SocketException =>
+        warn("Failed to set socket timeout: " + ex)
+        false
+    }
   }
 
-  private def warn(msg: String) {
-    System.err.println(msg)
-  }
-
-  // called after a timeout is detected,
-  // for SocketServer subclasses to perform
-  // some cleanup, if any
-  def timeout() {}
-
-  val serverSocket =
-    try new ServerSocket(0)
-    catch { case e: IOException => fatal("Could not listen on any port; exiting.") }
-
-  val port: Int = serverSocket.getLocalPort()
-
-  // @todo: this is going to be a prime candidate for ARM
   def doSession(clientSocket: Socket) = {
-    out = new PrintWriter(clientSocket.getOutputStream(), true)
-    in = bufferedReader(clientSocket)
-    val bufout = bufferedOutput(clientSocket)
+    clientSocket.applyReaderAndWriter { (in, out) =>
+      this.in    = in
+      this.out   = out
+      val bufout = clientSocket.bufferedOutput(BufferSize)
 
-    scala.Console.withOut(bufout) { session() }
-
-    bufout.close()
-    out.close()
-    in.close()
+      try scala.Console.withOut(bufout)(session())
+      finally bufout.close()
+    }
   }
 
   def run() {
-    def fail(s: String) = fatal(s format port)
+    info("Starting SocketServer run() loop.")
 
-    try serverSocket setSoTimeout IdleTimeout catch {
-      case e: SocketException => fail("Could not set timeout on port: %d; exiting.")
-    }
-
-    try {
-      while (!shutDown) {
-        val clientSocket = try serverSocket.accept() catch {
-          case e: IOException => fail("Accept on port %d failed; exiting.")
-        }
-        doSession(clientSocket)
-        clientSocket.close()
+    def loop() {
+      acceptBox.either match {
+        case Right(clientSocket) =>
+          try doSession(clientSocket)
+          finally clientSocket.close()
+        case Left(_: SocketTimeoutException) =>
+          warn("Idle timeout exceeded on port %d; exiting" format port)
+          timeout()
+          return
+        case _ =>
+          warn("Accept on port %d failed")
       }
+      if (!shutdown)
+        loop()
     }
-    catch {
-      case e: SocketTimeoutException =>
-        warn("Timeout elapsed with no requests from clients on port %d; exiting" format port)
-        timeout()
-    }
-    serverSocket.close()
+    try loop()
+    catch { case ex: SocketException => fatal("Compile server caught fatal exception: " + ex) }
+    finally serverSocket.close()
   }
 }

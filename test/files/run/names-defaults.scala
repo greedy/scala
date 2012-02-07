@@ -1,4 +1,4 @@
-object Test extends Application {
+object Test extends App {
   def get[T](x: T) = { println("get: "+ x); x }
 
   // TESTS
@@ -384,6 +384,19 @@ object Test extends Application {
   println(t3697.b(a = 1, b = 2, Seq(3, 4): _*))
   println(t3697.b(b = 1, a = 2, c = Seq(3, 4): _*))
 
+
+  // #4041
+  object t4041 {
+    def _1 = (0, 0) copy (_1 = 1)
+    def _2 = (1, 1) copy (_2 = 2)
+  }
+  println(""+ t4041._1 +", "+ t4041._2)
+
+  // #4441
+  case class C4441a()
+  case class C4441b()()
+  C4441a().copy()
+  C4441b()().copy()()
 
   // DEFINITIONS
   def test1(a: Int, b: String) = println(a +": "+ b)

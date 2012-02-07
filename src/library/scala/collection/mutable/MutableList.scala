@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -17,8 +17,7 @@ import immutable.{List, Nil}
 // !!! todo: convert to LinkedListBuffer?
 /**
  *  This class is used internally to represent mutable lists. It is the
- *  basis for the implementation of the classes
- *  `Stack`, and `Queue`.
+ *  basis for the implementation of the class `Queue`.
  *
  *  @author  Matthias Zenger
  *  @author  Martin Odersky
@@ -74,12 +73,12 @@ extends LinearSeq[A]
   override def length: Int = len
 
   /** Returns the <code>n</code>th element of this list.
-   *  @throws IndexOutofBoundsException if index does not exist.
+   *  @throws IndexOutOfBoundsException if index does not exist.
    */
   override def apply(n: Int): A = first0.apply(n)
 
   /** Updates the <code>n</code>th element of this list to a new value.
-   *  @throws IndexOutofBoundsException if index does not exist.
+   *  @throws IndexOutOfBoundsException if index does not exist.
    */
   def update(n: Int, x: A): Unit = first0.update(n, x)
 
@@ -101,11 +100,11 @@ extends LinearSeq[A]
       last0.next = new LinkedList[A]
       last0 = last0.next
       last0.elem = elem
-      last0.next = new LinkedList[A] // for performance, use sentinel `object' instead?
+      last0.next = new LinkedList[A] // for performance, use sentinel `object` instead?
       len = len + 1
     }
 
-  @deprecated("use clear instead")
+  @deprecated("use clear() instead", "2.8.0")
   def reset() { clear() }
 
   /** Returns an iterator over all elements of this list.

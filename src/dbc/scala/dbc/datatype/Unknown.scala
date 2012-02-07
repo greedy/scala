@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -13,7 +13,7 @@ package datatype;
 
 
 /** The SQL type for a truth value. */
-class Unknown extends DataType {
+@deprecated(DbcIsDeprecated, "2.9.0") class Unknown extends DataType {
 
   def isEquivalent(datatype: DataType) = datatype match {
     case dt: Unknown =>
@@ -29,6 +29,6 @@ class Unknown extends DataType {
 
   /** A SQL-99 compliant string representation of the type. */
   override def sqlString: java.lang.String =
-    system.error("The 'UNKNOWN' data type cannot be represented.");
+    sys.error("The 'UNKNOWN' data type cannot be represented.");
 
 }

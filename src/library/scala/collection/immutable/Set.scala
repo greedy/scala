@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -12,24 +12,29 @@ package scala.collection
 package immutable
 
 import generic._
+import parallel.immutable.ParSet
 
 /** A generic trait for immutable sets.
+ *  $setNote
+ *  $setTags
  *
- *  $setnote
- *
+ *  @since 1.0
  *  @author Matthias Zenger
  *  @author Martin Odersky
- *  @version 2.8
- *  @since   1
  *  @define Coll immutable.Set
  *  @define coll immutable set
  */
 trait Set[A] extends Iterable[A]
+//                with GenSet[A]
                 with scala.collection.Set[A]
                 with GenericSetTemplate[A, Set]
-                with SetLike[A, Set[A]] {
+                with SetLike[A, Set[A]]
+                with Parallelizable[A, ParSet[A]]
+{
   override def companion: GenericCompanion[Set] = Set
   override def toSet[B >: A]: Set[B] = this.asInstanceOf[Set[B]]
+  override def seq: Set[A] = this
+  protected override def parCombiner = ParSet.newCombiner[A] // if `immutable.SetLike` gets introduced, please move this there!
 }
 
 /** $factoryInfo
@@ -53,7 +58,7 @@ object Set extends ImmutableSetFactory[Set] {
     override def foreach[U](f: Any =>  U): Unit = {}
   }
 
-  @deprecated("use `Set.empty' instead")
+  @deprecated("use `Set.empty` instead", "2.8.0")
   class EmptySet[A] extends Set[A] with Serializable {
     override def size: Int = 0
     def contains(elem: A): Boolean = false
@@ -65,7 +70,7 @@ object Set extends ImmutableSetFactory[Set] {
 
   /** An optimized representation for immutable sets of size 1 */
   @SerialVersionUID(1233385750652442003L)
-  class Set1[A](elem1: A) extends Set[A] with Serializable {
+  class Set1[A] private[collection] (elem1: A) extends Set[A] with Serializable {
     override def size: Int = 1
     def contains(elem: A): Boolean =
       elem == elem1
@@ -84,7 +89,7 @@ object Set extends ImmutableSetFactory[Set] {
 
   /** An optimized representation for immutable sets of size 2 */
   @SerialVersionUID(-6443011234944830092L)
-  class Set2[A](elem1: A, elem2: A) extends Set[A] with Serializable {
+  class Set2[A] private[collection] (elem1: A, elem2: A) extends Set[A] with Serializable {
     override def size: Int = 2
     def contains(elem: A): Boolean =
       elem == elem1 || elem == elem2
@@ -104,7 +109,7 @@ object Set extends ImmutableSetFactory[Set] {
 
   /** An optimized representation for immutable sets of size 3 */
   @SerialVersionUID(-3590273538119220064L)
-  class Set3[A](elem1: A, elem2: A, elem3: A) extends Set[A] with Serializable {
+  class Set3[A] private[collection] (elem1: A, elem2: A, elem3: A) extends Set[A] with Serializable {
     override def size: Int = 3
     def contains(elem: A): Boolean =
       elem == elem1 || elem == elem2 || elem == elem3
@@ -125,7 +130,7 @@ object Set extends ImmutableSetFactory[Set] {
 
   /** An optimized representation for immutable sets of size 4 */
   @SerialVersionUID(-3622399588156184395L)
-  class Set4[A](elem1: A, elem2: A, elem3: A, elem4: A) extends Set[A] with Serializable {
+  class Set4[A] private[collection] (elem1: A, elem2: A, elem3: A, elem4: A) extends Set[A] with Serializable {
     override def size: Int = 4
     def contains(elem: A): Boolean =
       elem == elem1 || elem == elem2 || elem == elem3 || elem == elem4

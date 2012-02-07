@@ -1,23 +1,26 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
 package scala.collection.generic
-
-
 
 import scala.collection.parallel.ParMap
 import scala.collection.parallel.ParMapLike
 import scala.collection.parallel.Combiner
 import scala.collection.mutable.Builder
 
-
-
-
 /** A template class for companion objects of `ParMap` and subclasses thereof.
  *  This class extends `TraversableFactory` and provides a set of operations to create `$Coll` objects.
  *
- *  @define $coll parallel map
- *  @define $Coll ParMap
+ *  @define coll parallel map
+ *  @define Coll ParMap
  */
 abstract class ParMapFactory[CC[X, Y] <: ParMap[X, Y] with ParMapLike[X, Y, CC[X, Y], _]]
-extends MapFactory[CC]
+extends GenMapFactory[CC]
    with GenericParMapCompanion[CC] {
 
   type MapColl = CC[_, _]
@@ -40,3 +43,4 @@ extends MapFactory[CC]
   }
 
 }
+

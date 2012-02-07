@@ -1,18 +1,28 @@
+/* NSC -- new Scala compiler
+ * Copyright 2009-2011 Scala Solutions and LAMP/EPFL
+ * @author Martin Odersky
+ */
 package scala.tools.nsc
 package interactive
 
-import util.{SourceFile, BatchSourceFile}
+import util.{SourceFile, BatchSourceFile, InterruptReq}
 import io.{AbstractFile, PlainFile}
 
-import util.{Position, RangePosition, NoPosition, OffsetPosition, TransparentPosition}
+import util.{Position, RangePosition, NoPosition, OffsetPosition, TransparentPosition, EmptyAction}
 import io.{Pickler, CondPickler}
 import io.Pickler._
 import collection.mutable
+import mutable.ListBuffer
 
 trait Picklers { self: Global =>
 
-  lazy val freshRunReq = singletonPickler(FreshRunReq)
-  lazy val shutdownReq = singletonPickler(ShutdownReq)
+  lazy val freshRunReq =
+    unitPickler
+      .wrapped { _ => new FreshRunReq } { x => () }
+      .labelled ("FreshRunReq")
+      .cond (_.isInstanceOf[FreshRunReq])
+
+      lazy val shutdownReq = singletonPickler(ShutdownReq)
 
   def defaultThrowable[T <: Throwable]: CondPickler[T] = javaInstancePickler[T] cond { _ => true }
 
@@ -74,6 +84,50 @@ trait Picklers { self: Global =>
 
   implicit lazy val position: Pickler[Position] = transparentPosition | rangePosition | offsetPosition | noPosition
 
+  implicit lazy val namePickler: Pickler[Name] =
+    pkl[String] .wrapped {
+      str => if ((str.length > 1) && (str endsWith "!")) newTypeName(str.init) else newTermName(str)
+    } {
+      name => if (name.isTypeName) name.toString+"!" else name.toString
+    }
+
+  implicit lazy val symPickler: Pickler[Symbol] = {
+    def ownerNames(sym: Symbol, buf: ListBuffer[Name]): ListBuffer[Name] = {
+      if (!sym.isRoot) {
+        ownerNames(sym.owner, buf)
+        buf += (if (sym.isModuleClass) sym.sourceModule else sym).name
+        if (!sym.isType && !sym.isStable) {
+          val sym1 = sym.owner.info.decl(sym.name)
+          if (sym1.isOverloaded) {
+            val index = sym1.alternatives.indexOf(sym)
+            assert(index >= 0, sym1+" not found in alternatives "+sym1.alternatives)
+            buf += index.toString
+          }
+        }
+      }
+      buf
+    }
+    def makeSymbol(root: Symbol, names: List[Name]): Symbol = names match {
+      case List() =>
+        root
+      case name :: rest =>
+        val sym = root.info.decl(name)
+        if (sym.isOverloaded) makeSymbol(sym.alternatives(rest.head.toString.toInt), rest.tail)
+        else makeSymbol(sym, rest)
+    }
+    pkl[List[Name]] .wrapped { makeSymbol(definitions.RootClass, _) } { ownerNames(_, new ListBuffer).toList }
+  }
+
+  implicit def workEvent: Pickler[WorkEvent] = {
+    (pkl[Int] ~ pkl[Long])
+      .wrapped { case id ~ ms => WorkEvent(id, ms) } { w => w.atNode ~ w.atMillis }
+  }
+
+  implicit def interruptReq: Pickler[InterruptReq] = {
+    val emptyIR: InterruptReq = new InterruptReq { type R = Unit; val todo = () => () }
+    pkl[Unit] .wrapped { _ =>  emptyIR } { _ => () }
+  }
+
   implicit def reloadItem: CondPickler[ReloadItem] =
     pkl[List[SourceFile]]
       .wrapped { ReloadItem(_, new Response) } { _.sources }
@@ -88,11 +142,6 @@ trait Picklers { self: Global =>
     (pkl[SourceFile] ~ pkl[Boolean])
       .wrapped { case source ~ forceReload => new AskTypeItem(source, forceReload, new Response) } { w => w.source ~ w.forceReload }
       .asClass (classOf[AskTypeItem])
-
-  implicit def askLastTypeItem: CondPickler[AskLastTypeItem] =
-    pkl[SourceFile]
-      .wrapped { new AskLastTypeItem(_, new Response) } { _.source }
-      .asClass (classOf[AskLastTypeItem])
 
   implicit def askTypeCompletionItem: CondPickler[AskTypeCompletionItem] =
     pkl[Position]
@@ -109,6 +158,27 @@ trait Picklers { self: Global =>
       .wrapped { new AskToDoFirstItem(_) } { _.source }
       .asClass (classOf[AskToDoFirstItem])
 
+  implicit def askLinkPosItem: CondPickler[AskLinkPosItem] =
+    (pkl[Symbol] ~ pkl[SourceFile])
+      .wrapped { case sym ~ source => new AskLinkPosItem(sym, source, new Response) } { item => item.sym ~ item.source }
+      .asClass (classOf[AskLinkPosItem])
+
+  implicit def askLoadedTypedItem: CondPickler[AskLoadedTypedItem] =
+    pkl[SourceFile]
+      .wrapped { source => new AskLoadedTypedItem(source, new Response) } { _.source }
+      .asClass (classOf[AskLoadedTypedItem])
+
+  implicit def askParsedEnteredItem: CondPickler[AskParsedEnteredItem] =
+    (pkl[SourceFile] ~ pkl[Boolean])
+      .wrapped { case source ~ keepLoaded => new AskParsedEnteredItem(source, keepLoaded, new Response) } { w => w.source ~ w.keepLoaded }
+      .asClass (classOf[AskParsedEnteredItem])
+
+  implicit def emptyAction: CondPickler[EmptyAction] =
+    pkl[Unit]
+      .wrapped { _ => new EmptyAction } { _ => () }
+      .asClass (classOf[EmptyAction])
+
   implicit def action: Pickler[() => Unit] =
-    reloadItem | askTypeAtItem | askTypeItem | askLastTypeItem | askTypeCompletionItem | askScopeCompletionItem | askToDoFirstItem
+    reloadItem | askTypeAtItem | askTypeItem | askTypeCompletionItem | askScopeCompletionItem |
+    askToDoFirstItem | askLinkPosItem | askLoadedTypedItem | askParsedEnteredItem | emptyAction
 }

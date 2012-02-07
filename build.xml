@@ -178,7 +178,7 @@ PROPERTIES
 
   <property name="dists.dir" value="${basedir}/dists"/>
 
-  <property name="copyright.string" value="Copyright 2002-2010, LAMP/EPFL"/>
+  <property name="copyright.string" value="Copyright 2002-2011, LAMP/EPFL"/>
   <property name="partest.version.number" value="0.9.2"/>
 
   <!-- These are NOT the flags used to run SuperSabbus, but the ones written
@@ -376,7 +376,7 @@ LOCAL REFERENCE BUILD (LOCKER)
         <include name="**/*.properties"/>
         <include name="**/*.swf"/>
         <include name="**/*.png"/>
-
+        <include name="**/*.gif"/>
       </fileset>
     </copy>
     <touch file="${build-locker.dir}/compiler.complete" verbose="no"/>
@@ -593,6 +593,7 @@ QUICK BUILD (QUICK)
         <include name="**/*.properties"/>
         <include name="**/*.swf"/>
         <include name="**/*.png"/>
+        <include name="**/*.gif"/>        
       </fileset>
     </copy>
     <touch file="${build-quick.dir}/compiler.complete" verbose="no"/>
@@ -1105,6 +1106,7 @@ BOOTSTRAPPING BUILD (STRAP)
         <include name="**/*.properties"/>
         <include name="**/*.swf"/>
         <include name="**/*.png"/>
+        <include name="**/*.gif"/>        
        </fileset>
     </copy>
     <touch file="${build-strap.dir}/compiler.complete" verbose="no"/>
@@ -1466,6 +1468,7 @@ DOCUMENTATION
       doctitle="Scala Standard Library"
       docversion="${version.number}"
       docsourceurl="https://lampsvn.epfl.ch/trac/scala/browser/scala/trunk/src/€{FILE_PATH}.scala#L1"
+      docUncompilable="${src.dir}/library-aux"
       sourcepath="${src.dir}"
       classpathref="pack.classpath">
       <src>
@@ -1476,16 +1479,12 @@ DOCUMENTATION
       </src>
       <include name="**/*.scala"/>
       <exclude name="reflect/Code.scala"/>
-      <exclude name="reflect/Manifest.scala"/>
       <exclude name="reflect/Print.scala"/>
       <exclude name="reflect/Symbol.scala"/>
       <exclude name="reflect/Tree.scala"/>
       <exclude name="reflect/Type.scala"/>
-      <exclude name="reflect/TypedCode.scala"/>
-      <exclude name="runtime/*Array.scala"/>
       <exclude name="runtime/*$.scala"/>
       <exclude name="runtime/ScalaRunTime.scala"/>
-      <exclude name="runtime/StreamCons.scala"/>
       <exclude name="runtime/StringAdd.scala"/>
       <exclude name="scala/swing/test/**"/>
     </scaladoc>
@@ -1624,8 +1623,14 @@ BOOTRAPING TEST AND TEST SUITE
       <buildmanagertests dir="${partest.dir}/${partest.srcdir}/buildmanager" includes="*"/>
       <scalaptests dir="${partest.dir}/${partest.srcdir}/scalap" includes="**/*.scala"/>
       <scalachecktests dir="${partest.dir}/${partest.srcdir}/scalacheck">
-	<include name="*.scala"/>
+        <include name="*.scala"/>
       </scalachecktests>
+      <specializedtests dir="${partest.dir}/${partest.srcdir}/specialized">
+        <include name="*.scala"/>
+      </specializedtests>
+      <presentationtests dir="${partest.dir}/${partest.srcdir}/presentation">
+        <include name="*/*.scala"/>
+      </presentationtests>
       <!-- <scripttests dir="${partest.dir}/${partest.srcdir}/script" includes="*.scala"/> -->
     </partest>
   </target>
@@ -1650,8 +1655,8 @@ BOOTRAPING TEST AND TEST SUITE
       <compilationpath>
         <path refid="pack.classpath"/>
       </compilationpath>
-      <scalachecktests dir="test/scaladoc">
-	<include name="*.scala"/>
+      <scalachecktests dir="test/scaladoc/scala">
+        <include name="*.scala"/>
       </scalachecktests>
     </partest>
   </target>

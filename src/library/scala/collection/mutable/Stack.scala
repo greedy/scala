@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -15,7 +15,6 @@ import generic._
 import collection.immutable.{List, Nil}
 import collection.Iterator
 import annotation.migration
-
 
 /** Factory object for the `mutable.Stack` class.
  *
@@ -122,9 +121,9 @@ extends Seq[A]
    *  @param xs the traversable object.
    *  @return the stack with the new elements on top.
    */
-  def pushAll(xs: TraversableOnce[A]): this.type = { xs foreach push ; this }
+  def pushAll(xs: TraversableOnce[A]): this.type = { xs.seq foreach push ; this }
 
-  @deprecated("use pushAll")
+  @deprecated("use pushAll", "2.8.0")
   @migration(2, 8, "Stack ++= now pushes arguments on the stack from left to right.")
   def ++=(xs: TraversableOnce[A]): this.type = pushAll(xs)
 

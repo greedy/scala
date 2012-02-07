@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2007-2010 LAMP/EPFL
+ * Copyright 2007-2011 LAMP/EPFL
  * @author Lex Spoon
  * Updated by Anders Bach Nielsen
  */
@@ -105,16 +105,12 @@ trait Plugins {
    * Extract all phases supplied by plugins and add them to the phasesSet.
    * @see phasesSet
    */
-  protected def computePluginPhases(): Unit = {
-    // For reasons not yet apparent to me, plugins started appearing
-    // as null when I added phaseTimings to global.
-    if (plugins != null)
-      phasesSet ++= (plugins flatMap (_.components))
-  }
+  protected def computePluginPhases(): Unit =
+    phasesSet ++= (plugins flatMap (_.components))
 
   /** Summary of the options for all loaded plugins */
   def pluginOptionsHelp: String =
     (for (plug <- roughPluginsList ; help <- plug.optionsHelp) yield {
-      "Options for plugin %s:\n%s\n".format(plug.name, help)
+      "\nOptions for plugin '%s':\n%s\n".format(plug.name, help)
     }) mkString
 }

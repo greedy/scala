@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -18,6 +18,7 @@ import annotation.switch
 /** @author Martin Odersky
  *  @version 1.0
  */
+@deprecated("scala.reflect.generic will be removed", "2.9.1")
 abstract class UnPickler {
 
   val global: Universe
@@ -60,7 +61,7 @@ abstract class UnPickler {
     /** A map from entry numbers to symbols, types, or annotations */
     private val entries = new Array[AnyRef](index.length)
 
-    /** A map from symbols to their associated `decls' scopes */
+    /** A map from symbols to their associated `decls` scopes */
     private val symScopes = new HashMap[Symbol, Scope]
 
     //println("unpickled " + classRoot + ":" + classRoot.rawInfo + ", " + moduleRoot + ":" + moduleRoot.rawInfo);//debug
@@ -96,7 +97,7 @@ abstract class UnPickler {
                               " in "+filename)
     }
 
-    /** The `decls' scope associated with given symbol */
+    /** The `decls` scope associated with given symbol */
     protected def symScope(sym: Symbol) = symScopes.getOrElseUpdate(sym, newScope)
 
     /** Does entry represent an (internal) symbol */
@@ -281,7 +282,7 @@ abstract class UnPickler {
 
           sym
         case MODULEsym =>
-          val clazz = at(inforef, readType).typeSymbol
+          val clazz = at(inforef, () => readType()).typeSymbol // after the NMT_TRANSITION period, we can leave off the () => ... ()
           if (isModuleRoot) moduleRoot
           else {
             val m = owner.newModule(name, clazz)
@@ -298,8 +299,13 @@ abstract class UnPickler {
       })
     }
 
-    /** Read a type */
-    protected def readType(): Type = {
+    /** Read a type
+     *
+     * @param forceProperType is used to ease the transition to NullaryMethodTypes (commentmarker: NMT_TRANSITION)
+     *        the flag say that a type of kind * is expected, so that PolyType(tps, restpe) can be disambiguated to PolyType(tps, NullaryMethodType(restpe))
+     *        (if restpe is not a ClassInfoType, a MethodType or a NullaryMethodType, which leaves TypeRef/SingletonType -- the latter would make the polytype a type constructor)
+     */
+    protected def readType(forceProperType: Boolean = false): Type = {
       val tag = readByte()
       val end = readNat() + readIndex
       (tag: @switch) match {
@@ -341,7 +347,19 @@ abstract class UnPickler {
         case POLYtpe =>
           val restpe = readTypeRef()
           val typeParams = until(end, readSymbolRef)
-          PolyType(typeParams, restpe)
+          if(typeParams nonEmpty) {
+            // NMT_TRANSITION: old class files denoted a polymorphic nullary method as PolyType(tps, restpe), we now require PolyType(tps, NullaryMethodType(restpe))
+            // when a type of kind * is expected (forceProperType is true), we know restpe should be wrapped in a NullaryMethodType (if it wasn't suitably wrapped yet)
+            def transitionNMT(restpe: Type) = {
+              val resTpeCls = restpe.getClass.toString // what's uglier than isInstanceOf? right! -- isInstanceOf does not work since the concrete types are defined in the compiler (not in scope here)
+              if(forceProperType /*&& pickleformat < 2.9 */ && !(resTpeCls.endsWith("MethodType"))) { assert(!resTpeCls.contains("ClassInfoType"))
+                  NullaryMethodType(restpe) }
+                else restpe
+            }
+            PolyType(typeParams, transitionNMT(restpe))
+          }
+          else
+            NullaryMethodType(restpe)
         case EXISTENTIALtpe =>
           val restpe = readTypeRef()
           ExistentialType(until(end, readSymbolRef), restpe)
@@ -352,7 +370,7 @@ abstract class UnPickler {
             typeRef = readNat()
             s
           } else NoSymbol // selfsym can go.
-          val tp = at(typeRef, readType)
+          val tp = at(typeRef, () => readType(forceProperType)) // NMT_TRANSITION
           val annots = until(end, readAnnotationRef)
           if (selfsym == NoSymbol) AnnotatedType(annots, tp, selfsym)
           else tp
@@ -657,7 +675,7 @@ abstract class UnPickler {
 
         case SUPERtree =>
           setSym()
-          val qual = readTypeNameRef()
+          val qual = readTreeRef()
           val mix = readTypeNameRef()
           Super(qual, mix)
 
@@ -739,7 +757,7 @@ abstract class UnPickler {
     /* Read a reference to a pickled item */
     protected def readNameRef(): Name                 = at(readNat(), readName)
     protected def readSymbolRef(): Symbol             = at(readNat(), readSymbol)
-    protected def readTypeRef(): Type                 = at(readNat(), readType)
+    protected def readTypeRef(): Type                 = at(readNat(), () => readType()) // after the NMT_TRANSITION period, we can leave off the () => ... ()
     protected def readConstantRef(): Constant         = at(readNat(), readConstant)
     protected def readAnnotationRef(): AnnotationInfo = at(readNat(), readAnnotation)
     protected def readModifiersRef(): Modifiers       = at(readNat(), readModifiers)

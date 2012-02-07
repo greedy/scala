@@ -1,3 +1,12 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
+
 package scala.collection.parallel
 
 
@@ -8,17 +17,20 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.IterableLike
 import scala.collection.Parallel
 import scala.collection.Parallelizable
-import scala.collection.Sequentializable
+import scala.collection.CustomParallelizable
 import scala.collection.generic._
-
+import scala.collection.GenIterableLike
+import scala.collection.GenIterable
+import scala.collection.GenTraversableOnce
+import scala.collection.GenTraversable
+import immutable.HashMapCombiner
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import annotation.unchecked.uncheckedVariance
 
-import annotation.unchecked.uncheckedStable
 
 
-// TODO update docs!!
 /** A template trait for parallel collections of type `ParIterable[T]`.
  *
  *  $paralleliterableinfo
@@ -30,80 +42,106 @@ import annotation.unchecked.uncheckedStable
  *
  *  @define paralleliterableinfo
  *  This is a base trait for Scala parallel collections. It defines behaviour
- *  common to all parallel collections. The actual parallel operation implementation
- *  is found in the `ParallelIterableFJImpl` trait extending this trait. Concrete
- *  parallel collections should inherit both this and that trait.
+ *  common to all parallel collections. Concrete parallel collections should
+ *  inherit this trait and `ParIterable` if they want to define specific combiner
+ *  factories.
  *
  *  Parallel operations are implemented with divide and conquer style algorithms that
  *  parallelize well. The basic idea is to split the collection into smaller parts until
  *  they are small enough to be operated on sequentially.
  *
- *  All of the parallel operations are implemented in terms of several methods. The first is:
- *  {{{
- *     def split: Seq[Repr]
- *  }}}
- *  which splits the collection into a sequence of disjunct views. This is typically a
- *  very fast operation which simply creates wrappers around the receiver collection.
- *  These views can then be split recursively into smaller views and so on. Each of
- *  the views is still a parallel collection.
+ *  All of the parallel operations are implemented as tasks within this trait. Tasks rely
+ *  on the concept of splitters, which extend iterators. Every parallel collection defines:
  *
- *  The next method is:
  *  {{{
- *     def combine[OtherRepr >: Repr](other: OtherRepr): OtherRepr
+ *     def splitter: IterableSplitter[T]
  *  }}}
- *  which combines this collection with the argument collection and returns a collection
- *  containing both the elements of this collection and the argument collection. This behaviour
- *  may be implemented by producing a view that iterates over both collections, by aggressively
- *  copying all the elements into the new collection or by lazily creating a wrapper over both
- *  collections that gets evaluated once it's needed. It is recommended to avoid copying all of
+ *
+ *  which returns an instance of `IterableSplitter[T]`, which is a subtype of `Splitter[T]`.
+ *  Parallel iterators have a method `remaining` to check the remaining number of elements,
+ *  and method `split` which is defined by splitters. Method `split` divides the splitters
+ *  iterate over into disjunct subsets:
+ *
+ *  {{{
+ *     def split: Seq[Splitter]
+ *  }}}
+ *
+ *  which splits the splitter into a sequence of disjunct subsplitters. This is typically a
+ *  very fast operation which simply creates wrappers around the receiver collection.
+ *  This can be repeated recursively.
+ *
+ *  Method `newCombiner` produces a new combiner. Combiners are an extension of builders.
+ *  They provide a method `combine` which combines two combiners and returns a combiner
+ *  containing elements of both combiners.
+ *  This method can be implemented by aggressively copying all the elements into the new combiner
+ *  or by lazily binding their results. It is recommended to avoid copying all of
  *  the elements for performance reasons, although that cost might be negligible depending on
- *  the use case.
+ *  the use case. Standard parallel collection combiners avoid copying when merging results,
+ *  relying either on a two-step lazy construction or specific data-structure properties.
  *
  *  Methods:
+ *
  *  {{{
- *     def seq: Repr
- *  }}}
- *  and
- *  {{{
+ *     def seq: Sequential
  *     def par: Repr
  *  }}}
- *  produce a view of the collection that has sequential or parallel operations, respectively.
+ *
+ *  produce the sequential or parallel implementation of the collection, respectively.
+ *  Method `par` just returns a reference to this parallel collection.
+ *  Method `seq` is efficient - it will not copy the elements. Instead,
+ *  it will create a sequential version of the collection using the same underlying data structure.
+ *  Note that this is not the case for sequential collections in general - they may copy the elements
+ *  and produce a different underlying data structure.
+ *
+ *  The combination of methods `toMap`, `toSeq` or `toSet` along with `par` and `seq` is a flexible
+ *  way to change between different collection types.
  *
  *  The method:
+ *
  *  {{{
  *     def threshold(sz: Int, p: Int): Int
  *  }}}
+ *
  *  provides an estimate on the minimum number of elements the collection has before
  *  the splitting stops and depends on the number of elements in the collection. A rule of the
  *  thumb is the number of elements divided by 8 times the parallelism level. This method may
  *  be overridden in concrete implementations if necessary.
  *
- *  Finally, method `newCombiner` produces a new parallel builder.
- *
- *  Since this trait extends the `Iterable` trait, methods like `size` and `iterator` must also
- *  be implemented.
+ *  Since this trait extends the `Iterable` trait, methods like `size` must also
+ *  be implemented in concrete collections, while `iterator` forwards to `splitter` by
+ *  default.
  *
  *  Each parallel collection is bound to a specific fork/join pool, on which dormant worker
- *  threads are kept. One can change a fork/join pool of a collection any time except during
- *  some method being invoked. The fork/join pool contains other information such as the parallelism
+ *  threads are kept. The fork/join pool contains other information such as the parallelism
  *  level, that is, the number of processors used. When a collection is created, it is assigned the
- *  default fork/join pool found in the `scala.collection.parallel` package object.
+ *  default fork/join pool found in the `scala.parallel` package object.
  *
- *  Parallel collections may or may not be strict, and they are not ordered in terms of the `foreach`
- *  operation (see `Traversable`). In terms of the iterator of the collection, some collections
- *  are ordered (for instance, parallel sequences).
+ *  Parallel collections are not necessarily ordered in terms of the `foreach`
+ *  operation (see `Traversable`). Parallel sequences have a well defined order for iterators - creating
+ *  an iterator and traversing the elements linearly will always yield the same order.
+ *  However, bulk operations such as `foreach`, `map` or `filter` always occur in undefined orders for all
+ *  parallel collections.
  *
- *  @author prokopec
- *  @since 2.8
+ *  Existing parallel collection implementations provide strict parallel iterators. Strict parallel iterators are aware
+ *  of the number of elements they have yet to traverse. It's also possible to provide non-strict parallel iterators,
+ *  which do not know the number of elements remaining. To do this, the new collection implementation must override
+ *  `isStrictSplitterCollection` to `false`. This will make some operations unavailable.
+ *
+ *  To create a new parallel collection, extend the `ParIterable` trait, and implement `size`, `parallelIterator`,
+ *  `newCombiner` and `seq`. Having an implicit combiner factory requires extending this trait in addition, as
+ *  well as providing a companion object, as with regular collections.
+ *
+ *  Method `size` is implemented as a constant time operation for parallel collections, and parallel collection
+ *  operations rely on this assumption.
+ *
+ *  @author Aleksandar Prokopec
+ *  @since 2.9
  *
  *  @define sideeffects
  *  The higher-order functions passed to certain operations may contain side-effects. Since implementations
- *  of operations may not be sequential, this means that side-effects may not be predictable and may
+ *  of bulk operations may not be sequential, this means that side-effects may not be predictable and may
  *  produce data-races, deadlocks or invalidation of state if care is not taken. It is up to the programmer
  *  to either avoid using side-effects or to use some form of synchronization when accessing mutable data.
- *
- *  @define undefinedorder
- *  The order in which the operations on elements are performed is unspecified and may be nondeterministic.
  *
  *  @define pbfinfo
  *  An implicit value of class `CanCombineFrom` which determines the
@@ -112,23 +150,27 @@ import annotation.unchecked.uncheckedStable
  *  builder for the resulting collection.
  *
  *  @define abortsignalling
- *  This method will provide sequential views it produces with `abort` signalling capabilities. This means
- *  that sequential views may send and read `abort` signals.
+ *  This method will use `abort` signalling capabilities. This means
+ *  that splitters may send and read `abort` signals.
  *
  *  @define indexsignalling
- *  This method will provide sequential views it produces with `indexFlag` signalling capabilities. This means
- *  that sequential views may set and read `indexFlag` state.
+ *  This method will use `indexFlag` signalling capabilities. This means
+ *  that splitters may set and read the `indexFlag` state.
+ *
  */
-trait ParIterableLike[+T, +Repr <: Parallel, +Sequential <: Iterable[T] with IterableLike[T, Sequential]]
-extends IterableLike[T, Repr]
-   with Parallelizable[Repr]
-   with Sequentializable[T, Sequential]
+trait ParIterableLike[+T, +Repr <: ParIterable[T], +Sequential <: Iterable[T] with IterableLike[T, Sequential]]
+extends GenIterableLike[T, Repr]
+   with CustomParallelizable[T, Repr]
    with Parallel
    with HasNewCombiner[T, Repr]
 {
-self =>
+self: ParIterableLike[T, Repr, Sequential] =>
 
   import tasksupport._
+
+  def seq: Sequential
+
+  def repr: Repr = this.asInstanceOf[Repr]
 
   /** Parallel iterators are split iterators that have additional accessor and
    *  transformer methods defined in terms of methods `next` and `hasNext`.
@@ -141,11 +183,11 @@ self =>
    *  The self-type ensures that signal context passing behaviour gets mixed in
    *  a concrete object instance.
    */
-  trait ParIterator extends ParIterableIterator[T] {
+  trait ParIterator extends IterableSplitter[T] {
     me: SignalContextPassingIterator[ParIterator] =>
     var signalDelegate: Signalling = IdleSignalling
     def repr = self.repr
-    def split: Seq[ParIterableIterator[T]]
+    def split: Seq[IterableSplitter[T]]
   }
 
   /** A stackable modification that ensures signal contexts get passed along the iterators.
@@ -166,23 +208,27 @@ self =>
     }
   }
 
+  def hasDefiniteSize = true
+
+  def nonEmpty = size != 0
+
   /** Creates a new parallel iterator used to traverse the elements of this parallel collection.
    *  This iterator is more specific than the iterator of the returned by `iterator`, and augmented
    *  with additional accessor and transformer methods.
    *
    *  @return          a parallel iterator
    */
-  def parallelIterator: ParIterableIterator[T]
+  protected[parallel] def splitter: IterableSplitter[T]
 
   /** Creates a new split iterator used to traverse the elements of this collection.
    *
-   *  By default, this method is implemented in terms of the protected `parallelIterator` method.
+   *  By default, this method is implemented in terms of the protected `splitter` method.
    *
    *  @return         a split iterator
    */
-  def iterator: Splitter[T] = parallelIterator
+  def iterator: Splitter[T] = splitter
 
-  def par = repr
+  override def par: Repr = repr
 
   /** Denotes whether this parallel collection has strict splitters.
    *
@@ -211,9 +257,9 @@ self =>
   /** The `newBuilder` operation returns a parallel builder assigned to this collection's fork/join pool.
    *  This method forwards the call to `newCombiner`.
    */
-  protected[this] override def newBuilder: collection.mutable.Builder[T, Repr] = newCombiner
+  //protected[this] def newBuilder: collection.mutable.Builder[T, Repr] = newCombiner
 
-  /** Optionally reuses existing combiner for better performance. By default it doesn't - subclasses may override this behaviour.
+  /** Optionally reuses an existing combiner for better performance. By default it doesn't - subclasses may override this behaviour.
    *  The provided combiner `oldc` that can potentially be reused will be either some combiner from the previous computational task, or `None` if there
    *  was no previous phase (in which case this method must return `newc`).
    *
@@ -281,13 +327,22 @@ self =>
     }
   }
 
-  override def mkString(start: String, sep: String, end: String): String = seq.mkString(start, sep, end)
+  protected[this] def bf2seq[S, That](bf: CanBuildFrom[Repr, S, That]) = new CanBuildFrom[Sequential, S, That] {
+    def apply(from: Sequential) = bf.apply(from.par.asInstanceOf[Repr]) // !!! we only use this on `this.seq`, and know that `this.seq.par.getClass == this.getClass`
+    def apply() = bf.apply()
+  }
 
-  override def mkString(sep: String): String = seq.mkString("", sep, "")
+  protected[this] def sequentially[S, That <: Parallel](b: Sequential => Parallelizable[S, That]) = b(seq).par.asInstanceOf[Repr]
 
-  override def mkString: String = seq.mkString("")
+  def mkString(start: String, sep: String, end: String): String = seq.mkString(start, sep, end)
+
+  def mkString(sep: String): String = seq.mkString("", sep, "")
+
+  def mkString: String = seq.mkString("")
 
   override def toString = seq.mkString(stringPrefix + "(", ", ", ")")
+
+  def canEqual(other: Any) = true
 
   /** Reduces the elements of this sequence using the specified associative binary operator.
    *
@@ -305,7 +360,7 @@ self =>
    *  if this $coll is empty.
    */
   def reduce[U >: T](op: (U, U) => U): U = {
-    executeAndWaitResult(new Reduce(op, parallelIterator) mapResult { _.get })
+    executeAndWaitResult(new Reduce(op, splitter) mapResult { _.get })
   }
 
   /** Optionally reduces the elements of this sequence using the specified associative binary operator.
@@ -324,10 +379,6 @@ self =>
    */
   def reduceOption[U >: T](op: (U, U) => U): Option[U] = if (isEmpty) None else Some(reduce(op))
 
-  override def reduceLeft[U >: T](op: (U, T) => U): U = iterator.reduceLeft(op)
-
-  override def reduceRight[U >: T](op: (T, U) => U): U = iterator.reduceRight(op)
-
   /** Folds the elements of this sequence using the specified associative binary operator.
    *  The order in which the elements are reduced is unspecified and may be nondeterministic.
    *
@@ -344,12 +395,8 @@ self =>
    *  @return        the result of applying fold operator `op` between all the elements and `z`
    */
   def fold[U >: T](z: U)(op: (U, U) => U): U = {
-    executeAndWaitResult(new Fold(z, op, parallelIterator))
+    executeAndWaitResult(new Fold(z, op, splitter))
   }
-
-  override def foldLeft[S](z: S)(op: (S, T) => S): S = iterator.foldLeft(z)(op)
-
-  override def foldRight[S](z: S)(op: (T, S) => S): S = iterator.foldRight(z)(op)
 
   /** Aggregates the results of applying an operator to subsequent elements.
    *
@@ -380,51 +427,91 @@ self =>
    *  @param combop    an associative operator used to combine results from different partitions
    */
   def aggregate[S](z: S)(seqop: (S, T) => S, combop: (S, S) => S): S = {
-    executeAndWaitResult(new Aggregate(z, seqop, combop, parallelIterator))
+    executeAndWaitResult(new Aggregate(z, seqop, combop, splitter))
   }
 
-  /** Applies a function `f` to all the elements of the receiver.
+  def /:[S](z: S)(op: (S, T) => S): S = foldLeft(z)(op)
+
+  def :\[S](z: S)(op: (T, S) => S): S = foldRight(z)(op)
+
+  def foldLeft[S](z: S)(op: (S, T) => S): S = seq.foldLeft(z)(op)
+
+  def foldRight[S](z: S)(op: (T, S) => S): S = seq.foldRight(z)(op)
+
+  def reduceLeft[U >: T](op: (U, T) => U): U = seq.reduceLeft(op)
+
+  def reduceRight[U >: T](op: (T, U) => U): U = seq.reduceRight(op)
+
+  def reduceLeftOption[U >: T](op: (U, T) => U): Option[U] = seq.reduceLeftOption(op)
+
+  def reduceRightOption[U >: T](op: (T, U) => U): Option[U] = seq.reduceRightOption(op)
+
+  /*
+  /** Applies a function `f` to all the elements of $coll. Does so in a nondefined order,
+   *  and in parallel.
    *
    *  $undefinedorder
    *
    *  @tparam U    the result type of the function applied to each element, which is always discarded
-   *  @param f     function that's applied to each element
+   *  @param f     function applied to each element
    */
-  override def foreach[U](f: T => U): Unit = {
-    executeAndWaitResult(new Foreach(f, parallelIterator))
+  def pareach[U](f: T => U): Unit = {
+    executeAndWaitResult(new Foreach(f, splitter))
+  }
+  */
+
+  /** Applies a function `f` to all the elements of $coll in a sequential order.
+   *
+   *  @tparam U    the result type of the function applied to each element, which is always discarded
+   *  @param f     function applied to each element
+   */
+  def foreach[U](f: T => U) = {
+    executeAndWaitResult(new Foreach(f, splitter))
   }
 
-  override def count(p: T => Boolean): Int = {
-    executeAndWaitResult(new Count(p, parallelIterator))
+  def count(p: T => Boolean): Int = {
+    executeAndWaitResult(new Count(p, splitter))
   }
 
-  override def sum[U >: T](implicit num: Numeric[U]): U = {
-    executeAndWaitResult(new Sum[U](num, parallelIterator))
+  def sum[U >: T](implicit num: Numeric[U]): U = {
+    executeAndWaitResult(new Sum[U](num, splitter))
   }
 
-  override def product[U >: T](implicit num: Numeric[U]): U = {
-    executeAndWaitResult(new Product[U](num, parallelIterator))
+  def product[U >: T](implicit num: Numeric[U]): U = {
+    executeAndWaitResult(new Product[U](num, splitter))
   }
 
-  override def min[U >: T](implicit ord: Ordering[U]): T = {
-    executeAndWaitResult(new Min(ord, parallelIterator) mapResult { _.get }).asInstanceOf[T]
+  def min[U >: T](implicit ord: Ordering[U]): T = {
+    executeAndWaitResult(new Min(ord, splitter) mapResult { _.get }).asInstanceOf[T]
   }
 
-  override def max[U >: T](implicit ord: Ordering[U]): T = {
-    executeAndWaitResult(new Max(ord, parallelIterator) mapResult { _.get }).asInstanceOf[T]
+  def max[U >: T](implicit ord: Ordering[U]): T = {
+    executeAndWaitResult(new Max(ord, splitter) mapResult { _.get }).asInstanceOf[T]
   }
 
-  override def map[S, That](f: T => S)(implicit bf: CanBuildFrom[Repr, S, That]): That = bf ifParallel { pbf =>
-    executeAndWaitResult(new Map[S, That](f, pbf, parallelIterator) mapResult { _.result })
-  } otherwise super.map(f)(bf)
+  def maxBy[S](f: T => S)(implicit cmp: Ordering[S]): T = {
+    if (isEmpty) throw new UnsupportedOperationException("empty.maxBy")
 
-  override def collect[S, That](pf: PartialFunction[T, S])(implicit bf: CanBuildFrom[Repr, S, That]): That = bf ifParallel { pbf =>
-    executeAndWaitResult(new Collect[S, That](pf, pbf, parallelIterator) mapResult { _.result })
-  } otherwise super.collect(pf)(bf)
+    reduce((x, y) => if (cmp.gteq(f(x), f(y))) x else y)
+  }
 
-  override def flatMap[S, That](f: T => TraversableOnce[S])(implicit bf: CanBuildFrom[Repr, S, That]): That = bf ifParallel { pbf =>
-    executeAndWaitResult(new FlatMap[S, That](f, pbf, parallelIterator) mapResult { _.result })
-  } otherwise super.flatMap(f)(bf)
+  def minBy[S](f: T => S)(implicit cmp: Ordering[S]): T = {
+    if (isEmpty) throw new UnsupportedOperationException("empty.minBy")
+
+    reduce((x, y) => if (cmp.lteq(f(x), f(y))) x else y)
+  }
+
+  def map[S, That](f: T => S)(implicit bf: CanBuildFrom[Repr, S, That]): That = bf ifParallel { pbf =>
+    executeAndWaitResult(new Map[S, That](f, pbf, splitter) mapResult { _.result })
+  } otherwise seq.map(f)(bf2seq(bf))
+
+  def collect[S, That](pf: PartialFunction[T, S])(implicit bf: CanBuildFrom[Repr, S, That]): That = bf ifParallel { pbf =>
+    executeAndWaitResult(new Collect[S, That](pf, pbf, splitter) mapResult { _.result })
+  } otherwise seq.collect(pf)(bf2seq(bf))
+
+  def flatMap[S, That](f: T => GenTraversableOnce[S])(implicit bf: CanBuildFrom[Repr, S, That]): That = bf ifParallel { pbf =>
+    executeAndWaitResult(new FlatMap[S, That](f, pbf, splitter) mapResult { _.result })
+  } otherwise seq.flatMap(f)(bf2seq(bf))
 
   /** Tests whether a predicate holds for all elements of this $coll.
    *
@@ -433,8 +520,8 @@ self =>
    *  @param p    a predicate used to test elements
    *  @return     true if `p` holds for all elements, false otherwise
    */
-  override def forall(pred: T => Boolean): Boolean = {
-    executeAndWaitResult(new Forall(pred, parallelIterator assign new DefaultSignalling with VolatileAbort))
+  def forall(pred: T => Boolean): Boolean = {
+    executeAndWaitResult(new Forall(pred, splitter assign new DefaultSignalling with VolatileAbort))
   }
 
   /** Tests whether a predicate holds for some element of this $coll.
@@ -444,8 +531,8 @@ self =>
    *  @param p    a predicate used to test elements
    *  @return     true if `p` holds for some element, false otherwise
    */
-  override def exists(pred: T => Boolean): Boolean = {
-    executeAndWaitResult(new Exists(pred, parallelIterator assign new DefaultSignalling with VolatileAbort))
+  def exists(pred: T => Boolean): Boolean = {
+    executeAndWaitResult(new Exists(pred, splitter assign new DefaultSignalling with VolatileAbort))
   }
 
   /** Finds some element in the collection for which the predicate holds, if such
@@ -459,30 +546,30 @@ self =>
    *  @param p     predicate used to test the elements
    *  @return      an option value with the element if such an element exists, or `None` otherwise
    */
-  override def find(pred: T => Boolean): Option[T] = {
-    executeAndWaitResult(new Find(pred, parallelIterator assign new DefaultSignalling with VolatileAbort))
+  def find(pred: T => Boolean): Option[T] = {
+    executeAndWaitResult(new Find(pred, splitter assign new DefaultSignalling with VolatileAbort))
   }
 
   protected[this] def cbfactory ={
     () => newCombiner
   }
 
-  override def filter(pred: T => Boolean): Repr = {
-    executeAndWaitResult(new Filter(pred, cbfactory, parallelIterator) mapResult { _.result })
+  def filter(pred: T => Boolean): Repr = {
+    executeAndWaitResult(new Filter(pred, cbfactory, splitter) mapResult { _.result })
   }
 
-  override def filterNot(pred: T => Boolean): Repr = {
-    executeAndWaitResult(new FilterNot(pred, cbfactory, parallelIterator) mapResult { _.result })
+  def filterNot(pred: T => Boolean): Repr = {
+    executeAndWaitResult(new FilterNot(pred, cbfactory, splitter) mapResult { _.result })
   }
 
-  override def ++[U >: T, That](that: TraversableOnce[U])(implicit bf: CanBuildFrom[Repr, U, That]): That = {
+  def ++[U >: T, That](that: GenTraversableOnce[U])(implicit bf: CanBuildFrom[Repr, U, That]): That = {
     if (that.isParallel && bf.isParallel) {
       // println("case both are parallel")
       val other = that.asParIterable
       val pbf = bf.asParallel
-      val copythis = new Copy(() => pbf(repr), parallelIterator)
+      val copythis = new Copy(() => pbf(repr), splitter)
       val copythat = wrap {
-        val othtask = new other.Copy(() => pbf(self.repr), other.parallelIterator)
+        val othtask = new other.Copy(() => pbf(self.repr), other.splitter)
         tasksupport.executeAndWaitResult(othtask)
       }
       val task = (copythis parallel copythat) { _ combine _ } mapResult {
@@ -492,31 +579,36 @@ self =>
     } else if (bf.isParallel) {
       // println("case parallel builder, `that` not parallel")
       val pbf = bf.asParallel
-      val copythis = new Copy(() => pbf(repr), parallelIterator)
+      val copythis = new Copy(() => pbf(repr), splitter)
       val copythat = wrap {
         val cb = pbf(repr)
-        for (elem <- that) cb += elem
+        for (elem <- that.seq) cb += elem
         cb
       }
       executeAndWaitResult((copythis parallel copythat) { _ combine _ } mapResult { _.result })
     } else {
       // println("case not a parallel builder")
       val b = bf(repr)
-      this.parallelIterator.copy2builder[U, That, Builder[U, That]](b)
-      if (that.isInstanceOf[Parallel]) for (elem <- that.asInstanceOf[Iterable[U]].iterator) b += elem
-      else for (elem <- that) b += elem
+      this.splitter.copy2builder[U, That, Builder[U, That]](b)
+      for (elem <- that.seq) b += elem
       b.result
     }
   }
 
-  override def partition(pred: T => Boolean): (Repr, Repr) = {
-    executeAndWaitResult(new Partition(pred, cbfactory, parallelIterator) mapResult { p => (p._1.result, p._2.result) })
+  def partition(pred: T => Boolean): (Repr, Repr) = {
+    executeAndWaitResult(new Partition(pred, cbfactory, splitter) mapResult { p => (p._1.result, p._2.result) })
   }
 
-  override def take(n: Int): Repr = {
+  def groupBy[K](f: T => K): immutable.ParMap[K, Repr] = {
+    executeAndWaitResult(new GroupBy(f, () => HashMapCombiner[K, T], splitter) mapResult {
+      rcb => rcb.groupByKey(cbfactory)
+    })
+  }
+
+  def take(n: Int): Repr = {
     val actualn = if (size > n) n else size
     if (actualn < MIN_FOR_COPY) take_sequential(actualn)
-    else executeAndWaitResult(new Take(actualn, cbfactory, parallelIterator) mapResult {
+    else executeAndWaitResult(new Take(actualn, cbfactory, splitter) mapResult {
       _.result
     })
   }
@@ -524,7 +616,7 @@ self =>
   private def take_sequential(n: Int) = {
     val cb = newCombiner
     cb.sizeHint(n)
-    val it = parallelIterator
+    val it = splitter
     var left = n
     while (left > 0) {
       cb += it.next
@@ -533,14 +625,14 @@ self =>
     cb.result
   }
 
-  override def drop(n: Int): Repr = {
+  def drop(n: Int): Repr = {
     val actualn = if (size > n) n else size
     if ((size - actualn) < MIN_FOR_COPY) drop_sequential(actualn)
-    else executeAndWaitResult(new Drop(actualn, cbfactory, parallelIterator) mapResult { _.result })
+    else executeAndWaitResult(new Drop(actualn, cbfactory, splitter) mapResult { _.result })
   }
 
   private def drop_sequential(n: Int) = {
-    val it = parallelIterator drop n
+    val it = splitter drop n
     val cb = newCombiner
     cb.sizeHint(size - n)
     while (it.hasNext) cb += it.next
@@ -551,13 +643,13 @@ self =>
     val from = unc_from min size max 0
     val until = unc_until min size max from
     if ((until - from) <= MIN_FOR_COPY) slice_sequential(from, until)
-    else executeAndWaitResult(new Slice(from, until, cbfactory, parallelIterator) mapResult { _.result })
+    else executeAndWaitResult(new Slice(from, until, cbfactory, splitter) mapResult { _.result })
   }
 
   private def slice_sequential(from: Int, until: Int): Repr = {
     val cb = newCombiner
     var left = until - from
-    val it = parallelIterator drop from
+    val it = splitter drop from
     while (left > 0) {
       cb += it.next
       left -= 1
@@ -565,8 +657,8 @@ self =>
     cb.result
   }
 
-  override def splitAt(n: Int): (Repr, Repr) = {
-    executeAndWaitResult(new SplitAt(n, cbfactory, parallelIterator) mapResult { p => (p._1.result, p._2.result) })
+  def splitAt(n: Int): (Repr, Repr) = {
+    executeAndWaitResult(new SplitAt(n, cbfactory, splitter) mapResult { p => (p._1.result, p._2.result) })
   }
 
   /** Computes a prefix scan of the elements of the collection.
@@ -584,13 +676,20 @@ self =>
    *
    *  @return           a new $coll containing the prefix scan of the elements in this $coll
    */
-  def scan[U >: T, That](z: U)(op: (U, U) => U)(implicit cbf: CanCombineFrom[Repr, U, That]): That = if (parallelismLevel > 1) {
-    if (size > 0) executeAndWaitResult(new CreateScanTree(0, size, z, op, parallelIterator) mapResult {
-      tree => executeAndWaitResult(new FromScanTree(tree, z, op, cbf) mapResult {
-        cb => cb.result
-      })
-    }) else (cbf(self.repr) += z).result
-  } else super.scanLeft(z)(op)(cbf)
+  def scan[U >: T, That](z: U)(op: (U, U) => U)(implicit bf: CanBuildFrom[Repr, U, That]): That = if (bf.isParallel) {
+    val cbf = bf.asParallel
+    if (parallelismLevel > 1) {
+      if (size > 0) executeAndWaitResult(new CreateScanTree(0, size, z, op, splitter) mapResult {
+        tree => executeAndWaitResult(new FromScanTree(tree, z, op, cbf) mapResult {
+          cb => cb.result
+        })
+      }) else (cbf(self.repr) += z).result
+    } else seq.scan(z)(op)(bf2seq(bf))
+  } else seq.scan(z)(op)(bf2seq(bf))
+
+  def scanLeft[S, That](z: S)(op: (S, T) => S)(implicit bf: CanBuildFrom[Repr, S, That]) = seq.scanLeft(z)(op)(bf2seq(bf))
+
+  def scanRight[S, That](z: S)(op: (T, S) => S)(implicit bf: CanBuildFrom[Repr, S, That]) = seq.scanRight(z)(op)(bf2seq(bf))
 
   /** Takes the longest prefix of elements that satisfy the predicate.
    *
@@ -600,10 +699,10 @@ self =>
    *  @param pred   the predicate used to test the elements
    *  @return       the longest prefix of this $coll of elements that satisy the predicate `pred`
    */
-  override def takeWhile(pred: T => Boolean): Repr = {
+  def takeWhile(pred: T => Boolean): Repr = {
     val cntx = new DefaultSignalling with AtomicIndexFlag
     cntx.setIndexFlag(Int.MaxValue)
-    executeAndWaitResult(new TakeWhile(0, pred, cbfactory, parallelIterator assign cntx) mapResult { _._1.result })
+    executeAndWaitResult(new TakeWhile(0, pred, cbfactory, splitter assign cntx) mapResult { _._1.result })
   }
 
   /** Splits this $coll into a prefix/suffix pair according to a predicate.
@@ -615,10 +714,10 @@ self =>
    *  @return       a pair consisting of the longest prefix of the collection for which all
    *                the elements satisfy `pred`, and the rest of the collection
    */
-  override def span(pred: T => Boolean): (Repr, Repr) = {
+  def span(pred: T => Boolean): (Repr, Repr) = {
     val cntx = new DefaultSignalling with AtomicIndexFlag
     cntx.setIndexFlag(Int.MaxValue)
-    executeAndWaitResult(new Span(0, pred, cbfactory, parallelIterator assign cntx) mapResult {
+    executeAndWaitResult(new Span(0, pred, cbfactory, splitter assign cntx) mapResult {
       p => (p._1.result, p._2.result)
     })
   }
@@ -633,45 +732,52 @@ self =>
    *  @return       a collection composed of all the elements after the longest prefix of elements
    *                in this $coll that satisfy the predicate `pred`
    */
-  override def dropWhile(pred: T => Boolean): Repr = {
+  def dropWhile(pred: T => Boolean): Repr = {
     val cntx = new DefaultSignalling with AtomicIndexFlag
     cntx.setIndexFlag(Int.MaxValue)
-    executeAndWaitResult(new Span(0, pred, cbfactory, parallelIterator assign cntx) mapResult { _._2.result })
+    executeAndWaitResult(new Span(0, pred, cbfactory, splitter assign cntx) mapResult { _._2.result })
   }
 
-  override def copyToArray[U >: T](xs: Array[U], start: Int, len: Int) = if (len > 0) {
-    executeAndWaitResult(new CopyToArray(start, len, xs, parallelIterator))
+  def copyToArray[U >: T](xs: Array[U]) = copyToArray(xs, 0)
+
+  def copyToArray[U >: T](xs: Array[U], start: Int) = copyToArray(xs, start, xs.length - start)
+
+  def copyToArray[U >: T](xs: Array[U], start: Int, len: Int) = if (len > 0) {
+    executeAndWaitResult(new CopyToArray(start, len, xs, splitter))
   }
 
-  override def zip[U >: T, S, That](that: Iterable[S])(implicit bf: CanBuildFrom[Repr, (U, S), That]): That = if (bf.isParallel && that.isParSeq) {
+  def sameElements[U >: T](that: GenIterable[U]) = seq.sameElements(that)
+
+  def zip[U >: T, S, That](that: GenIterable[S])(implicit bf: CanBuildFrom[Repr, (U, S), That]): That = if (bf.isParallel && that.isParSeq) {
     val pbf = bf.asParallel
     val thatseq = that.asParSeq
-    executeAndWaitResult(new Zip(pbf, parallelIterator, thatseq.parallelIterator) mapResult { _.result });
-  } else super.zip(that)(bf)
+    executeAndWaitResult(new Zip(pbf, splitter, thatseq.splitter) mapResult { _.result });
+  } else seq.zip(that)(bf2seq(bf))
 
-  override def zipWithIndex[U >: T, That](implicit bf: CanBuildFrom[Repr, (U, Int), That]): That = this zip immutable.ParRange(0, size, 1, false)
+  def zipWithIndex[U >: T, That](implicit bf: CanBuildFrom[Repr, (U, Int), That]): That = this zip immutable.ParRange(0, size, 1, false)
 
-  override def zipAll[S, U >: T, That](that: Iterable[S], thisElem: U, thatElem: S)(implicit bf: CanBuildFrom[Repr, (U, S), That]): That = if (bf.isParallel && that.isParSeq) {
+  def zipAll[S, U >: T, That](that: GenIterable[S], thisElem: U, thatElem: S)(implicit bf: CanBuildFrom[Repr, (U, S), That]): That = if (bf.isParallel && that.isParSeq) {
     val pbf = bf.asParallel
     val thatseq = that.asParSeq
-    executeAndWaitResult(new ZipAll(size max thatseq.length, thisElem, thatElem, pbf, parallelIterator, thatseq.parallelIterator) mapResult { _.result });
-  } else super.zipAll(that, thisElem, thatElem)(bf)
+    executeAndWaitResult(new ZipAll(size max thatseq.length, thisElem, thatElem, pbf, splitter, thatseq.splitter) mapResult { _.result });
+  } else seq.zipAll(that, thisElem, thatElem)(bf2seq(bf))
 
   protected def toParCollection[U >: T, That](cbf: () => Combiner[U, That]): That = {
-    executeAndWaitResult(new ToParCollection(cbf, parallelIterator) mapResult { _.result });
+    executeAndWaitResult(new ToParCollection(cbf, splitter) mapResult { _.result });
   }
 
   protected def toParMap[K, V, That](cbf: () => Combiner[(K, V), That])(implicit ev: T <:< (K, V)): That = {
-    executeAndWaitResult(new ToParMap(cbf, parallelIterator)(ev) mapResult { _.result })
+    executeAndWaitResult(new ToParMap(cbf, splitter)(ev) mapResult { _.result })
   }
 
-  override def view = new ParIterableView[T, Repr, Sequential] {
+  def view = new ParIterableView[T, Repr, Sequential] {
     protected lazy val underlying = self.repr
-    def seq = self.seq.view
-    def parallelIterator = self.parallelIterator
+    protected[this] def viewIdentifier = ""
+    protected[this] def viewIdString = ""
+    override def seq = self.seq.view
+    def splitter = self.splitter
+    def size = splitter.remaining
   }
-
-  override def toIterable: Iterable[T] = seq.drop(0).asInstanceOf[Iterable[T]]
 
   override def toArray[U >: T: ClassManifest]: Array[U] = {
     val arr = new Array[U](size)
@@ -685,25 +791,21 @@ self =>
 
   override def toStream: Stream[T] = seq.toStream
 
-  override def toSet[U >: T]: collection.immutable.Set[U] = seq.toSet
+  override def toIterator: Iterator[T] = splitter
 
-  override def toSeq: Seq[T] = seq.toSeq
+  // the methods below are overridden
 
-  override def toIterator: Iterator[T] = seq.toIterator
+  override def toBuffer[U >: T]: collection.mutable.Buffer[U] = seq.toBuffer // have additional, parallel buffers?
 
-  override def toTraversable: Traversable[T] = seq.toTraversable
+  override def toTraversable: GenTraversable[T] = this.asInstanceOf[GenTraversable[T]] // TODO add ParTraversable[T]
 
-  override def toBuffer[U >: T]: collection.mutable.Buffer[U] = seq.toBuffer
+  override def toIterable: ParIterable[T] = this.asInstanceOf[ParIterable[T]]
 
-  override def toMap[K, V](implicit ev: T <:< (K, V)): collection.immutable.Map[K, V] = seq.toMap
+  override def toSeq: ParSeq[T] = toParCollection[T, ParSeq[T]](() => ParSeq.newCombiner[T])
 
-  override def toParIterable: ParIterable[T] = this.asInstanceOf[ParIterable[T]]
+  override def toSet[U >: T]: immutable.ParSet[U] = toParCollection[U, immutable.ParSet[U]](() => immutable.ParSet.newCombiner[U])
 
-  override def toParSeq: ParSeq[T] = toParCollection[T, ParSeq[T]](() => mutable.ParArrayCombiner[T]())
-
-  override def toParSet[U >: T]: ParSet[U] = toParCollection[U, ParSet[U]](() => mutable.ParHashSetCombiner[U])
-
-  override def toParMap[K, V](implicit ev: T <:< (K, V)): ParMap[K, V] = toParMap[K, V, mutable.ParHashMap[K, V]](() => mutable.ParHashMapCombiner[K, V])
+  override def toMap[K, V](implicit ev: T <:< (K, V)): immutable.ParMap[K, V] = toParMap[K, V, immutable.ParMap[K, V]](() => immutable.ParMap.newCombiner[K, V])
 
   /* tasks */
 
@@ -720,8 +822,8 @@ self =>
    */
   protected trait Accessor[R, Tp]
   extends StrictSplitterCheckTask[R, Tp] {
-    protected[this] val pit: ParIterableIterator[T]
-    protected[this] def newSubtask(p: ParIterableIterator[T]): Accessor[R, Tp]
+    protected[this] val pit: IterableSplitter[T]
+    protected[this] def newSubtask(p: IterableSplitter[T]): Accessor[R, Tp]
     def shouldSplitFurther = pit.remaining > threshold(size, parallelismLevel)
     def split = pit.split.map(newSubtask(_)) // default split procedure
     private[parallel] override def signalAbort = pit.abort
@@ -740,11 +842,11 @@ self =>
   extends NonDivisibleTask[R, Composite[FR, SR, R, First, Second]] {
     def combineResults(fr: FR, sr: SR): R
     @volatile var result: R = null.asInstanceOf[R]
-    private[parallel] override def signalAbort {
+    private[parallel] override def signalAbort() {
       ft.signalAbort
       st.signalAbort
     }
-    protected def mergeSubtasks {
+    protected def mergeSubtasks() {
       ft mergeThrowables st
       if (throwable eq null) result = combineResults(ft.result, st.result)
     }
@@ -781,7 +883,7 @@ self =>
     def leaf(prevr: Option[R1]) = {
       result = map(executeAndWaitResult(inner))
     }
-    private[parallel] override def signalAbort {
+    private[parallel] override def signalAbort() {
       inner.signalAbort
     }
     override def requiresStrictSplitters = inner.requiresStrictSplitters
@@ -789,173 +891,196 @@ self =>
 
   protected trait Transformer[R, Tp] extends Accessor[R, Tp]
 
-  protected[this] class Foreach[S](op: T => S, protected[this] val pit: ParIterableIterator[T]) extends Accessor[Unit, Foreach[S]] {
+  protected[this] class Foreach[S](op: T => S, protected[this] val pit: IterableSplitter[T]) extends Accessor[Unit, Foreach[S]] {
     @volatile var result: Unit = ()
     def leaf(prevr: Option[Unit]) = pit.foreach(op)
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Foreach[S](op, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Foreach[S](op, p)
   }
 
-  protected[this] class Count(pred: T => Boolean, protected[this] val pit: ParIterableIterator[T]) extends Accessor[Int, Count] {
+  protected[this] class Count(pred: T => Boolean, protected[this] val pit: IterableSplitter[T]) extends Accessor[Int, Count] {
     // val pittxt = pit.toString
     @volatile var result: Int = 0
     def leaf(prevr: Option[Int]) = result = pit.count(pred)
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Count(pred, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Count(pred, p)
     override def merge(that: Count) = result = result + that.result
     // override def toString = "CountTask(" + pittxt + ")"
   }
 
-  protected[this] class Reduce[U >: T](op: (U, U) => U, protected[this] val pit: ParIterableIterator[T]) extends Accessor[Option[U], Reduce[U]] {
+  protected[this] class Reduce[U >: T](op: (U, U) => U, protected[this] val pit: IterableSplitter[T]) extends Accessor[Option[U], Reduce[U]] {
     @volatile var result: Option[U] = None
     def leaf(prevr: Option[Option[U]]) = if (pit.remaining > 0) result = Some(pit.reduce(op))
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Reduce(op, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Reduce(op, p)
     override def merge(that: Reduce[U]) =
       if (this.result == None) result = that.result
       else if (that.result != None) result = Some(op(result.get, that.result.get))
     override def requiresStrictSplitters = true
   }
 
-  protected[this] class Fold[U >: T](z: U, op: (U, U) => U, protected[this] val pit: ParIterableIterator[T]) extends Accessor[U, Fold[U]] {
+  protected[this] class Fold[U >: T](z: U, op: (U, U) => U, protected[this] val pit: IterableSplitter[T]) extends Accessor[U, Fold[U]] {
     @volatile var result: U = null.asInstanceOf[U]
     def leaf(prevr: Option[U]) = result = pit.fold(z)(op)
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Fold(z, op, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Fold(z, op, p)
     override def merge(that: Fold[U]) = result = op(result, that.result)
   }
 
-  protected[this] class Aggregate[S](z: S, seqop: (S, T) => S, combop: (S, S) => S, protected[this] val pit: ParIterableIterator[T])
+  protected[this] class Aggregate[S](z: S, seqop: (S, T) => S, combop: (S, S) => S, protected[this] val pit: IterableSplitter[T])
   extends Accessor[S, Aggregate[S]] {
     @volatile var result: S = null.asInstanceOf[S]
     def leaf(prevr: Option[S]) = result = pit.foldLeft(z)(seqop)
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Aggregate(z, seqop, combop, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Aggregate(z, seqop, combop, p)
     override def merge(that: Aggregate[S]) = result = combop(result, that.result)
   }
 
-  protected[this] class Sum[U >: T](num: Numeric[U], protected[this] val pit: ParIterableIterator[T]) extends Accessor[U, Sum[U]] {
+  protected[this] class Sum[U >: T](num: Numeric[U], protected[this] val pit: IterableSplitter[T]) extends Accessor[U, Sum[U]] {
     @volatile var result: U = null.asInstanceOf[U]
     def leaf(prevr: Option[U]) = result = pit.sum(num)
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Sum(num, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Sum(num, p)
     override def merge(that: Sum[U]) = result = num.plus(result, that.result)
   }
 
-  protected[this] class Product[U >: T](num: Numeric[U], protected[this] val pit: ParIterableIterator[T]) extends Accessor[U, Product[U]] {
+  protected[this] class Product[U >: T](num: Numeric[U], protected[this] val pit: IterableSplitter[T]) extends Accessor[U, Product[U]] {
     @volatile var result: U = null.asInstanceOf[U]
     def leaf(prevr: Option[U]) = result = pit.product(num)
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Product(num, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Product(num, p)
     override def merge(that: Product[U]) = result = num.times(result, that.result)
   }
 
-  protected[this] class Min[U >: T](ord: Ordering[U], protected[this] val pit: ParIterableIterator[T]) extends Accessor[Option[U], Min[U]] {
+  protected[this] class Min[U >: T](ord: Ordering[U], protected[this] val pit: IterableSplitter[T]) extends Accessor[Option[U], Min[U]] {
     @volatile var result: Option[U] = None
     def leaf(prevr: Option[Option[U]]) = if (pit.remaining > 0) result = Some(pit.min(ord))
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Min(ord, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Min(ord, p)
     override def merge(that: Min[U]) =
       if (this.result == None) result = that.result
       else if (that.result != None) result = if (ord.lteq(result.get, that.result.get)) result else that.result
     override def requiresStrictSplitters = true
   }
 
-  protected[this] class Max[U >: T](ord: Ordering[U], protected[this] val pit: ParIterableIterator[T]) extends Accessor[Option[U], Max[U]] {
+  protected[this] class Max[U >: T](ord: Ordering[U], protected[this] val pit: IterableSplitter[T]) extends Accessor[Option[U], Max[U]] {
     @volatile var result: Option[U] = None
     def leaf(prevr: Option[Option[U]]) = if (pit.remaining > 0) result = Some(pit.max(ord))
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Max(ord, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Max(ord, p)
     override def merge(that: Max[U]) =
       if (this.result == None) result = that.result
       else if (that.result != None) result = if (ord.gteq(result.get, that.result.get)) result else that.result
     override def requiresStrictSplitters = true
   }
 
-  protected[this] class Map[S, That](f: T => S, pbf: CanCombineFrom[Repr, S, That], protected[this] val pit: ParIterableIterator[T])
+  protected[this] class Map[S, That](f: T => S, pbf: CanCombineFrom[Repr, S, That], protected[this] val pit: IterableSplitter[T])
   extends Transformer[Combiner[S, That], Map[S, That]] {
     @volatile var result: Combiner[S, That] = null
     def leaf(prev: Option[Combiner[S, That]]) = result = pit.map2combiner(f, reuse(prev, pbf(self.repr)))
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Map(f, pbf, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Map(f, pbf, p)
     override def merge(that: Map[S, That]) = result = result combine that.result
   }
 
   protected[this] class Collect[S, That]
-  (pf: PartialFunction[T, S], pbf: CanCombineFrom[Repr, S, That], protected[this] val pit: ParIterableIterator[T])
+  (pf: PartialFunction[T, S], pbf: CanCombineFrom[Repr, S, That], protected[this] val pit: IterableSplitter[T])
   extends Transformer[Combiner[S, That], Collect[S, That]] {
     @volatile var result: Combiner[S, That] = null
     def leaf(prev: Option[Combiner[S, That]]) = result = pit.collect2combiner[S, That](pf, pbf(self.repr))
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Collect(pf, pbf, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Collect(pf, pbf, p)
     override def merge(that: Collect[S, That]) = result = result combine that.result
   }
 
-  protected[this] class FlatMap[S, That](f: T => TraversableOnce[S], pbf: CanCombineFrom[Repr, S, That], protected[this] val pit: ParIterableIterator[T])
+  protected[this] class FlatMap[S, That](f: T => GenTraversableOnce[S], pbf: CanCombineFrom[Repr, S, That], protected[this] val pit: IterableSplitter[T])
   extends Transformer[Combiner[S, That], FlatMap[S, That]] {
     @volatile var result: Combiner[S, That] = null
     def leaf(prev: Option[Combiner[S, That]]) = result = pit.flatmap2combiner(f, pbf(self.repr))
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new FlatMap(f, pbf, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new FlatMap(f, pbf, p)
     override def merge(that: FlatMap[S, That]) = {
-      debuglog("merging " + result + " and " + that.result)
+      //debuglog("merging " + result + " and " + that.result)
       result = result combine that.result
-      debuglog("merged into " + result)
+      //debuglog("merged into " + result)
     }
   }
 
-  protected[this] class Forall(pred: T => Boolean, protected[this] val pit: ParIterableIterator[T]) extends Accessor[Boolean, Forall] {
+  protected[this] class Forall(pred: T => Boolean, protected[this] val pit: IterableSplitter[T]) extends Accessor[Boolean, Forall] {
     @volatile var result: Boolean = true
     def leaf(prev: Option[Boolean]) = { if (!pit.isAborted) result = pit.forall(pred); if (result == false) pit.abort }
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Forall(pred, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Forall(pred, p)
     override def merge(that: Forall) = result = result && that.result
   }
 
-  protected[this] class Exists(pred: T => Boolean, protected[this] val pit: ParIterableIterator[T]) extends Accessor[Boolean, Exists] {
+  protected[this] class Exists(pred: T => Boolean, protected[this] val pit: IterableSplitter[T]) extends Accessor[Boolean, Exists] {
     @volatile var result: Boolean = false
     def leaf(prev: Option[Boolean]) = { if (!pit.isAborted) result = pit.exists(pred); if (result == true) pit.abort }
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Exists(pred, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Exists(pred, p)
     override def merge(that: Exists) = result = result || that.result
   }
 
-  protected[this] class Find[U >: T](pred: T => Boolean, protected[this] val pit: ParIterableIterator[T]) extends Accessor[Option[U], Find[U]] {
+  protected[this] class Find[U >: T](pred: T => Boolean, protected[this] val pit: IterableSplitter[T]) extends Accessor[Option[U], Find[U]] {
     @volatile var result: Option[U] = None
     def leaf(prev: Option[Option[U]]) = { if (!pit.isAborted) result = pit.find(pred); if (result != None) pit.abort }
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Find(pred, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Find(pred, p)
     override def merge(that: Find[U]) = if (this.result == None) result = that.result
   }
 
-  protected[this] class Filter[U >: T, This >: Repr](pred: T => Boolean, cbf: () => Combiner[U, This], protected[this] val pit: ParIterableIterator[T])
+  protected[this] class Filter[U >: T, This >: Repr](pred: T => Boolean, cbf: () => Combiner[U, This], protected[this] val pit: IterableSplitter[T])
   extends Transformer[Combiner[U, This], Filter[U, This]] {
     @volatile var result: Combiner[U, This] = null
     def leaf(prev: Option[Combiner[U, This]]) = {
       result = pit.filter2combiner(pred, reuse(prev, cbf()))
     }
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Filter(pred, cbf, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Filter(pred, cbf, p)
     override def merge(that: Filter[U, This]) = result = result combine that.result
   }
 
-  protected[this] class FilterNot[U >: T, This >: Repr](pred: T => Boolean, cbf: () => Combiner[U, This], protected[this] val pit: ParIterableIterator[T])
+  protected[this] class FilterNot[U >: T, This >: Repr](pred: T => Boolean, cbf: () => Combiner[U, This], protected[this] val pit: IterableSplitter[T])
   extends Transformer[Combiner[U, This], FilterNot[U, This]] {
     @volatile var result: Combiner[U, This] = null
     def leaf(prev: Option[Combiner[U, This]]) = {
       result = pit.filterNot2combiner(pred, reuse(prev, cbf()))
     }
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new FilterNot(pred, cbf, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new FilterNot(pred, cbf, p)
     override def merge(that: FilterNot[U, This]) = result = result combine that.result
   }
 
-  protected class Copy[U >: T, That](cfactory: () => Combiner[U, That], protected[this] val pit: ParIterableIterator[T])
+  protected class Copy[U >: T, That](cfactory: () => Combiner[U, That], protected[this] val pit: IterableSplitter[T])
   extends Transformer[Combiner[U, That], Copy[U, That]] {
     @volatile var result: Combiner[U, That] = null
     def leaf(prev: Option[Combiner[U, That]]) = result = pit.copy2builder[U, That, Combiner[U, That]](reuse(prev, cfactory()))
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Copy[U, That](cfactory, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Copy[U, That](cfactory, p)
     override def merge(that: Copy[U, That]) = result = result combine that.result
   }
 
-  protected[this] class Partition[U >: T, This >: Repr](pred: T => Boolean, cbf: () => Combiner[U, This], protected[this] val pit: ParIterableIterator[T])
+  protected[this] class Partition[U >: T, This >: Repr](pred: T => Boolean, cbf: () => Combiner[U, This], protected[this] val pit: IterableSplitter[T])
   extends Transformer[(Combiner[U, This], Combiner[U, This]), Partition[U, This]] {
     @volatile var result: (Combiner[U, This], Combiner[U, This]) = null
     def leaf(prev: Option[(Combiner[U, This], Combiner[U, This])]) = result = pit.partition2combiners(pred, reuse(prev.map(_._1), cbf()), reuse(prev.map(_._2), cbf()))
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new Partition(pred, cbf, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new Partition(pred, cbf, p)
     override def merge(that: Partition[U, This]) = result = (result._1 combine that.result._1, result._2 combine that.result._2)
   }
 
-  protected[this] class Take[U >: T, This >: Repr](n: Int, cbf: () => Combiner[U, This], protected[this] val pit: ParIterableIterator[T])
+  protected[this] class GroupBy[K, U >: T](
+    f: U => K,
+    mcf: () => HashMapCombiner[K, U],
+    protected[this] val pit: IterableSplitter[T]
+  ) extends Transformer[HashMapCombiner[K, U], GroupBy[K, U]] {
+    @volatile var result: Result = null
+    final def leaf(prev: Option[Result]) = {
+      // note: HashMapCombiner doesn't merge same keys until evaluation
+      val cb = mcf()
+      while (pit.hasNext) {
+        val elem = pit.next
+        cb += f(elem) -> elem
+      }
+      result = cb
+    }
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new GroupBy(f, mcf, p)
+    override def merge(that: GroupBy[K, U]) = {
+      // note: this works because we know that a HashMapCombiner doesn't merge same keys until evaluation
+      // --> we know we're not dropping any mappings
+      result = (result combine that.result).asInstanceOf[HashMapCombiner[K, U]]
+    }
+  }
+
+  protected[this] class Take[U >: T, This >: Repr](n: Int, cbf: () => Combiner[U, This], protected[this] val pit: IterableSplitter[T])
   extends Transformer[Combiner[U, This], Take[U, This]] {
     @volatile var result: Combiner[U, This] = null
     def leaf(prev: Option[Combiner[U, This]]) = {
       result = pit.take2combiner(n, reuse(prev, cbf()))
     }
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = throw new UnsupportedOperationException
+    protected[this] def newSubtask(p: IterableSplitter[T]) = throw new UnsupportedOperationException
     override def split = {
       val pits = pit.split
       val sizes = pits.scanLeft(0)(_ + _.remaining)
@@ -968,11 +1093,11 @@ self =>
     override def requiresStrictSplitters = true
   }
 
-  protected[this] class Drop[U >: T, This >: Repr](n: Int, cbf: () => Combiner[U, This], protected[this] val pit: ParIterableIterator[T])
+  protected[this] class Drop[U >: T, This >: Repr](n: Int, cbf: () => Combiner[U, This], protected[this] val pit: IterableSplitter[T])
   extends Transformer[Combiner[U, This], Drop[U, This]] {
     @volatile var result: Combiner[U, This] = null
     def leaf(prev: Option[Combiner[U, This]]) = result = pit.drop2combiner(n, reuse(prev, cbf()))
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = throw new UnsupportedOperationException
+    protected[this] def newSubtask(p: IterableSplitter[T]) = throw new UnsupportedOperationException
     override def split = {
       val pits = pit.split
       val sizes = pits.scanLeft(0)(_ + _.remaining)
@@ -985,11 +1110,11 @@ self =>
     override def requiresStrictSplitters = true
   }
 
-  protected[this] class Slice[U >: T, This >: Repr](from: Int, until: Int, cbf: () => Combiner[U, This], protected[this] val pit: ParIterableIterator[T])
+  protected[this] class Slice[U >: T, This >: Repr](from: Int, until: Int, cbf: () => Combiner[U, This], protected[this] val pit: IterableSplitter[T])
   extends Transformer[Combiner[U, This], Slice[U, This]] {
     @volatile var result: Combiner[U, This] = null
     def leaf(prev: Option[Combiner[U, This]]) = result = pit.slice2combiner(from, until, reuse(prev, cbf()))
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = throw new UnsupportedOperationException
+    protected[this] def newSubtask(p: IterableSplitter[T]) = throw new UnsupportedOperationException
     override def split = {
       val pits = pit.split
       val sizes = pits.scanLeft(0)(_ + _.remaining)
@@ -1003,11 +1128,11 @@ self =>
     override def requiresStrictSplitters = true
   }
 
-  protected[this] class SplitAt[U >: T, This >: Repr](at: Int, cbf: () => Combiner[U, This], protected[this] val pit: ParIterableIterator[T])
+  protected[this] class SplitAt[U >: T, This >: Repr](at: Int, cbf: () => Combiner[U, This], protected[this] val pit: IterableSplitter[T])
   extends Transformer[(Combiner[U, This], Combiner[U, This]), SplitAt[U, This]] {
     @volatile var result: (Combiner[U, This], Combiner[U, This]) = null
     def leaf(prev: Option[(Combiner[U, This], Combiner[U, This])]) = result = pit.splitAt2combiners(at, reuse(prev.map(_._1), cbf()), reuse(prev.map(_._2), cbf()))
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = throw new UnsupportedOperationException
+    protected[this] def newSubtask(p: IterableSplitter[T]) = throw new UnsupportedOperationException
     override def split = {
       val pits = pit.split
       val sizes = pits.scanLeft(0)(_ + _.remaining)
@@ -1018,14 +1143,14 @@ self =>
   }
 
   protected[this] class TakeWhile[U >: T, This >: Repr]
-  (pos: Int, pred: T => Boolean, cbf: () => Combiner[U, This], protected[this] val pit: ParIterableIterator[T])
+  (pos: Int, pred: T => Boolean, cbf: () => Combiner[U, This], protected[this] val pit: IterableSplitter[T])
   extends Transformer[(Combiner[U, This], Boolean), TakeWhile[U, This]] {
     @volatile var result: (Combiner[U, This], Boolean) = null
     def leaf(prev: Option[(Combiner[U, This], Boolean)]) = if (pos < pit.indexFlag) {
       result = pit.takeWhile2combiner(pred, reuse(prev.map(_._1), cbf()))
       if (!result._2) pit.setIndexFlagIfLesser(pos)
     } else result = (reuse(prev.map(_._1), cbf()), false)
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = throw new UnsupportedOperationException
+    protected[this] def newSubtask(p: IterableSplitter[T]) = throw new UnsupportedOperationException
     override def split = {
       val pits = pit.split
       for ((p, untilp) <- pits zip pits.scanLeft(0)(_ + _.remaining)) yield new TakeWhile(pos + untilp, pred, cbf, p)
@@ -1037,20 +1162,20 @@ self =>
   }
 
   protected[this] class Span[U >: T, This >: Repr]
-  (pos: Int, pred: T => Boolean, cbf: () => Combiner[U, This], protected[this] val pit: ParIterableIterator[T])
+  (pos: Int, pred: T => Boolean, cbf: () => Combiner[U, This], protected[this] val pit: IterableSplitter[T])
   extends Transformer[(Combiner[U, This], Combiner[U, This]), Span[U, This]] {
     @volatile var result: (Combiner[U, This], Combiner[U, This]) = null
     def leaf(prev: Option[(Combiner[U, This], Combiner[U, This])]) = if (pos < pit.indexFlag) {
       // val lst = pit.toList
       // val pa = mutable.ParArray(lst: _*)
-      // val str = "At leaf we will iterate: " + pa.parallelIterator.toList
+      // val str = "At leaf we will iterate: " + pa.splitter.toList
       result = pit.span2combiners(pred, cbf(), cbf()) // do NOT reuse old combiners here, lest ye be surprised
       // println("\nAt leaf result is: " + result)
       if (result._2.size > 0) pit.setIndexFlagIfLesser(pos)
     } else {
       result = (reuse(prev.map(_._2), cbf()), pit.copy2builder[U, This, Combiner[U, This]](reuse(prev.map(_._2), cbf())))
     }
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = throw new UnsupportedOperationException
+    protected[this] def newSubtask(p: IterableSplitter[T]) = throw new UnsupportedOperationException
     override def split = {
       val pits = pit.split
       for ((p, untilp) <- pits zip pits.scanLeft(0)(_ + _.remaining)) yield new Span(pos + untilp, pred, cbf, p)
@@ -1063,11 +1188,11 @@ self =>
     override def requiresStrictSplitters = true
   }
 
-  protected[this] class Zip[U >: T, S, That](pbf: CanCombineFrom[Repr, (U, S), That], protected[this] val pit: ParIterableIterator[T], val othpit: ParSeqIterator[S])
+  protected[this] class Zip[U >: T, S, That](pbf: CanCombineFrom[Repr, (U, S), That], protected[this] val pit: IterableSplitter[T], val othpit: SeqSplitter[S])
   extends Transformer[Combiner[(U, S), That], Zip[U, S, That]] {
     @volatile var result: Result = null
     def leaf(prev: Option[Result]) = result = pit.zip2combiner[U, S, That](othpit, pbf(self.repr))
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = unsupported
+    protected[this] def newSubtask(p: IterableSplitter[T]) = unsupported
     override def split = {
       val pits = pit.split
       val sizes = pits.map(_.remaining)
@@ -1079,11 +1204,11 @@ self =>
   }
 
   protected[this] class ZipAll[U >: T, S, That]
-    (len: Int, thiselem: U, thatelem: S, pbf: CanCombineFrom[Repr, (U, S), That], protected[this] val pit: ParIterableIterator[T], val othpit: ParSeqIterator[S])
+    (len: Int, thiselem: U, thatelem: S, pbf: CanCombineFrom[Repr, (U, S), That], protected[this] val pit: IterableSplitter[T], val othpit: SeqSplitter[S])
   extends Transformer[Combiner[(U, S), That], ZipAll[U, S, That]] {
     @volatile var result: Result = null
     def leaf(prev: Option[Result]) = result = pit.zipAll2combiner[U, S, That](othpit, thiselem, thatelem, pbf(self.repr))
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = unsupported
+    protected[this] def newSubtask(p: IterableSplitter[T]) = unsupported
     override def split = if (pit.remaining <= len) {
       val pits = pit.split
       val sizes = pits.map(_.remaining)
@@ -1094,18 +1219,18 @@ self =>
       val diff = len - pit.remaining
       Seq(
         new ZipAll(pit.remaining, thiselem, thatelem, pbf, pit, opits(0)), // nothing wrong will happen with the cast below - elem T is never accessed
-        new ZipAll(diff, thiselem, thatelem, pbf, immutable.repetition(thiselem, diff).parallelIterator.asInstanceOf[ParIterableIterator[T]], opits(1))
+        new ZipAll(diff, thiselem, thatelem, pbf, immutable.repetition(thiselem, diff).splitter.asInstanceOf[IterableSplitter[T]], opits(1))
       )
     }
     override def merge(that: ZipAll[U, S, That]) = result = result combine that.result
     override def requiresStrictSplitters = true
   }
 
-  protected[this] class CopyToArray[U >: T, This >: Repr](from: Int, len: Int, array: Array[U], protected[this] val pit: ParIterableIterator[T])
+  protected[this] class CopyToArray[U >: T, This >: Repr](from: Int, len: Int, array: Array[U], protected[this] val pit: IterableSplitter[T])
   extends Accessor[Unit, CopyToArray[U, This]] {
     @volatile var result: Unit = ()
     def leaf(prev: Option[Unit]) = pit.copyToArray(array, from, len)
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = unsupported
+    protected[this] def newSubtask(p: IterableSplitter[T]) = unsupported
     override def split = {
       val pits = pit.split
       for ((p, untilp) <- pits zip pits.scanLeft(0)(_ + _.remaining); if untilp < len) yield {
@@ -1116,29 +1241,29 @@ self =>
     override def requiresStrictSplitters = true
   }
 
-  protected[this] class ToParCollection[U >: T, That](cbf: () => Combiner[U, That], protected[this] val pit: ParIterableIterator[T])
+  protected[this] class ToParCollection[U >: T, That](cbf: () => Combiner[U, That], protected[this] val pit: IterableSplitter[T])
   extends Transformer[Combiner[U, That], ToParCollection[U, That]] {
     @volatile var result: Result = null
     def leaf(prev: Option[Combiner[U, That]]) {
       result = cbf()
       while (pit.hasNext) result += pit.next
     }
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new ToParCollection[U, That](cbf, p)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new ToParCollection[U, That](cbf, p)
     override def merge(that: ToParCollection[U, That]) = result = result combine that.result
   }
 
-  protected[this] class ToParMap[K, V, That](cbf: () => Combiner[(K, V), That], protected[this] val pit: ParIterableIterator[T])(implicit ev: T <:< (K, V))
+  protected[this] class ToParMap[K, V, That](cbf: () => Combiner[(K, V), That], protected[this] val pit: IterableSplitter[T])(implicit ev: T <:< (K, V))
   extends Transformer[Combiner[(K, V), That], ToParMap[K, V, That]] {
     @volatile var result: Result = null
     def leaf(prev: Option[Combiner[(K, V), That]]) {
       result = cbf()
       while (pit.hasNext) result += pit.next
     }
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = new ToParMap[K, V, That](cbf, p)(ev)
+    protected[this] def newSubtask(p: IterableSplitter[T]) = new ToParMap[K, V, That](cbf, p)(ev)
     override def merge(that: ToParMap[K, V, That]) = result = result combine that.result
   }
 
-  protected[this] class CreateScanTree[U >: T](from: Int, len: Int, z: U, op: (U, U) => U, protected[this] val pit: ParIterableIterator[T])
+  protected[this] class CreateScanTree[U >: T](from: Int, len: Int, z: U, op: (U, U) => U, protected[this] val pit: IterableSplitter[T])
   extends Transformer[ScanTree[U], CreateScanTree[U]] {
     @volatile var result: ScanTree[U] = null
     def leaf(prev: Option[ScanTree[U]]) = if (pit.remaining > 0) {
@@ -1162,7 +1287,7 @@ self =>
       val half = howmany / 2
       ScanNode(mergeTrees(trees, from, half), mergeTrees(trees, from + half, howmany - half))
     } else trees(from)
-    protected[this] def newSubtask(pit: ParIterableIterator[T]) = unsupported
+    protected[this] def newSubtask(pit: IterableSplitter[T]) = unsupported
     override def split = {
       val pits = pit.split
       for ((p, untilp) <- pits zip pits.scanLeft(from)(_ + _.remaining)) yield {
@@ -1240,7 +1365,7 @@ self =>
   }
 
   protected[this] case class ScanLeaf[U >: T]
-  (pit: ParIterableIterator[U], op: (U, U) => U, from: Int, len: Int, var prev: Option[ScanLeaf[U]], var acc: U)
+  (pit: IterableSplitter[U], op: (U, U) => U, from: Int, len: Int, var prev: Option[ScanLeaf[U]], var acc: U)
   extends ScanTree[U] {
     def beginsAt = from
     def pushdown(v: U) = {
@@ -1257,9 +1382,9 @@ self =>
 
   private[parallel] def brokenInvariants = Seq[String]()
 
-  private val dbbuff = ArrayBuffer[String]()
-  def debugBuffer: ArrayBuffer[String] = dbbuff
-  // def debugBuffer: ArrayBuffer[String] = null
+  // private val dbbuff = ArrayBuffer[String]()
+  // def debugBuffer: ArrayBuffer[String] = dbbuff
+  def debugBuffer: ArrayBuffer[String] = null
 
   private[parallel] def debugclear() = synchronized {
     debugBuffer.clear
@@ -1270,7 +1395,7 @@ self =>
   }
 
   import collection.DebugUtils._
-  private[parallel] def printDebugBuffer = println(buildString {
+  private[parallel] def printDebugBuffer() = println(buildString {
     append =>
     for (s <- debugBuffer) {
       append(s)

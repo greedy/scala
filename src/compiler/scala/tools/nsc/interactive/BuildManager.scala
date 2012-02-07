@@ -1,3 +1,8 @@
+/* NSC -- new Scala compiler
+ * Copyright 2009-2011 Scxala Solutions and LAMP/EPFL
+ * @author Iulian Dragos
+ * @author Hubert Plocinicak
+ */
 package scala.tools.nsc
 package interactive
 
@@ -28,7 +33,7 @@ trait BuildManager {
   /** Load saved dependency information. */
   def loadFrom(file: AbstractFile, toFile: String => AbstractFile) : Boolean
 
-  /** Save dependency information to `file'. */
+  /** Save dependency information to `file`. */
   def saveTo(file: AbstractFile, fromFile: AbstractFile => String)
 
   def compiler: scala.tools.nsc.Global

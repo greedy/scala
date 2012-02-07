@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2005-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2005-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -11,12 +11,11 @@ package scala.actors
 
 import java.util.{Timer, TimerTask}
 
-/** <p>
- *    The <code>ReplyReactor</code> trait extends the <code>Reactor</code>
+/**
+ * Extends the [[scala.actors.Reactor]]
  *    trait with methods to reply to the sender of a message.
  *    Sending a message to a <code>ReplyReactor</code> implicitly
  *    passes a reference to the sender together with the message.
- *  </p>
  *
  *  @author Philipp Haller
  *

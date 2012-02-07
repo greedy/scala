@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -15,7 +15,7 @@ package statement
 /** A statement that when executed on a database will return a relation.
  * The returned relation will be a subset of a table in the database or
  * a jointure between such subsets. */
-abstract class Select extends Relation {
+@deprecated(DbcIsDeprecated, "2.9.0") abstract class Select extends Relation {
 
   /** Defines if duplicated tuples should be removed from the returned
    * relation. <h3>Compatibility notice</h3> Some DBMS (PostgreSQL) allow
@@ -67,7 +67,7 @@ abstract class Select extends Relation {
                  ((name:String, dc:DerivedColumn) => name + ", " + dc.sqlString))
     }) +
     (fromClause match {
-      case Nil => system.error("Empty from clause is not allowed")
+      case Nil => sys.error("Empty from clause is not allowed")
       case _ => (" FROM " + fromClause.tail.foldLeft(fromClause.head.sqlInnerString)
       ((name:String, rel:Relation) => name + ", " + rel.sqlInnerString))
     }) +
@@ -78,7 +78,7 @@ abstract class Select extends Relation {
     (groupByClause match {
       case None => ""
       case Some(gbl) => gbl match {
-        case Nil => system.error("Empty group by clause is not allowed")
+        case Nil => sys.error("Empty group by clause is not allowed")
         case _ =>
           (" GROUP BY " +
            gbl.tail.foldLeft(gbl.head.sqlInnerString)

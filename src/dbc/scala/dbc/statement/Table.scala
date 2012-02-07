@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -15,7 +15,7 @@ package statement
 /** A reference to a table in the database.
   * @author Gilles Dubochet
   * @version 1.0 */
-abstract class Table extends Relation {
+@deprecated(DbcIsDeprecated, "2.9.0") abstract class Table extends Relation {
 
   /** The name of the table in the database. */
   def tableName: String

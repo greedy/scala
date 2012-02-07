@@ -967,10 +967,10 @@ abstract class GenLLVM extends SubComponent {
                 }
                 res
               } else {
-                system.error("Source (%s) and target (%s) not compatible".format(srctk,targettk))
+                sys.error("Source (%s) and target (%s) not compatible".format(srctk,targettk))
               }
             } else {
-              system.error("Source type kind (%s) and target type kind (%s) are not castable".format(srctk,targettk))
+              sys.error("Source type kind (%s) and target type kind (%s) are not castable".format(srctk,targettk))
             }
           }
           val (consumedTypes,producedTypes) = stackUsage(bb)

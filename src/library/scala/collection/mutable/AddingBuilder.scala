@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -27,7 +27,7 @@ import generic._
  *  @version 2.8
  *  @since 2.8
  */
-@deprecated("Will be removed after scala 2.9")
+@deprecated("Will be removed after scala 2.9", "2.8.0")
 class AddingBuilder[Elem, To <: Addable[Elem, To] with collection.Iterable[Elem] with collection.IterableLike[Elem, To]](empty: To)
 extends Builder[Elem, To] {
   protected var elems: To = empty

@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -10,12 +10,14 @@
 
 package scala.util.regexp
 
-/** <p>
- *    The class <code>WordExp</code> provides regular word expressions.
- *    Users have to instantiate type member <code>_regexpT &lt;: RegExp</code>
- *    (from class <code>Base</code>) and a type member
- *    <code>_labelT &lt;: Label</code>. Here is a short example:
- *  </p><pre>
+/**
+ *  The class `WordExp` provides regular word expressions.
+ *
+ *  Users have to instantiate type member `_regexpT <;: RegExp` (from class `Base`)
+ *  and a type member `_labelT <;: Label`.
+ *
+ *  Here is a short example:
+ *  <pre>
  *  <b>import</b> scala.util.regexp._
  *  <b>import</b> scala.util.automata._
  *  <b>object</b> MyLang <b>extends</b> WordExp {

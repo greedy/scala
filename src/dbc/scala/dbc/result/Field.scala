@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |                                         **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -16,7 +16,7 @@ import scala.dbc.datatype._
 import scala.dbc.value._
 
 /** An ISO-9075:2003 (SQL) table field. */
-abstract class Field {
+@deprecated(DbcIsDeprecated, "2.9.0") abstract class Field {
 
   /** The content (value) of the field. The type of this value is undefined,
    *  transformation into a useful type will be done by an automatic view
@@ -56,7 +56,7 @@ abstract class Field {
 
 }
 
-object Field {
+@deprecated(DbcIsDeprecated, "2.9.0") object Field {
 
   implicit def fieldToValue (field: Field): Value = field.content
 

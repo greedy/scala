@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2006-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -10,6 +10,7 @@
 package scala.collection.immutable
 
 import scala.collection.parallel.immutable.ParRange
+import annotation.bridge
 
 /** The `Range` class represents integer values in range
  *  ''[start;end)'' with non-zero step value `step`.
@@ -41,15 +42,19 @@ import scala.collection.parallel.immutable.ParRange
 @SerialVersionUID(7618862778670199309L)
 class Range(val start: Int, val end: Int, val step: Int)
 extends IndexedSeq[Int]
-   with collection.Parallelizable[ParRange]
+   with collection.CustomParallelizable[Int, ParRange]
    with Serializable
 {
-  def par = new ParRange(this)
+  override def par = new ParRange(this)
 
-  // Note that this value is calculated eagerly intentionally: it also
-  // serves to enforce conditions (step != 0) && (length <= Int.MaxValue)
-  private val numRangeElements: Int =
-    Range.count(start, end, step, isInclusive)
+  // This member is designed to enforce conditions:
+  //   (step != 0) && (length <= Int.MaxValue),
+  // but cannot be evaluated eagerly because we have a pattern where ranges
+  // are constructed like:    "x to y by z"
+  // The "x to y" piece should not trigger an exception. So the calculation
+  // is delayed, which means it will not fail fast for those cases where failing
+  // was correct.
+  private lazy val numRangeElements: Int = Range.count(start, end, step, isInclusive)
 
   protected def copy(start: Int, end: Int, step: Int): Range = new Range(start, end, step)
 
@@ -139,17 +144,6 @@ extends IndexedSeq[Int]
     drop(1)
   }
 
-  /** Creates a new range contained in the specified slice of this range.
-   *
-   *  $doesNotUseBuilders
-   *
-   *  @param from   the start of the slice.
-   *  @param until  the end of the slice.
-   *  @return       a new range consisting of all the elements of this range contained in the specified slice.
-   */
-  final override def slice(from: Int, until: Int): Range =
-    this drop from take (until - from)
-
   // Counts how many elements from the start meet the given test.
   private def skipCount(p: Int => Boolean): Int = {
     var current = start
@@ -216,11 +210,9 @@ extends IndexedSeq[Int]
 
   final def contains(x: Int) = isWithinBoundaries(x) && ((x - start) % step == 0)
 
-  override def toParIterable = par
+  override def toIterable = this
 
-  override def toParSeq = par
-
-  override def toParSet[U >: Int] = par.toParSet[U]
+  override def toSeq = this
 
   override def equals(other: Any) = other match {
     case x: Range =>
@@ -251,11 +243,16 @@ object Range {
   def count(start: Int, end: Int, step: Int): Int =
     count(start, end, step, false)
 
-  def count(start: Int, end: Int, step: Int, isInclusive: Boolean): Int =
-    NumericRange.count[Long](start, end, step, isInclusive)
+  def count(start: Int, end: Int, step: Int, isInclusive: Boolean): Int = {
+    // faster path for the common counting range
+    if (start >= 0 && end > start && end < scala.Int.MaxValue && step == 1)
+      (end - start) + ( if (isInclusive) 1 else 0 )
+    else
+      NumericRange.count[Long](start, end, step, isInclusive)
+  }
 
   class Inclusive(start: Int, end: Int, step: Int) extends Range(start, end, step) {
-    override def par = new ParRange(this)
+//    override def par = new ParRange(this)
     override def isInclusive = true
     override protected def copy(start: Int, end: Int, step: Int): Range = new Inclusive(start, end, step)
   }
@@ -295,7 +292,7 @@ object Range {
   // imprecision or surprises might result from anything, although this may
   // not yet be fully implemented.
   object BigDecimal {
-    implicit val bigDecAsIntegral = scala.Numeric.BigDecimalAsIfIntegral
+    implicit val bigDecAsIntegral = scala.math.Numeric.BigDecimalAsIfIntegral
 
     def apply(start: BigDecimal, end: BigDecimal, step: BigDecimal) =
       NumericRange(start, end, step)
@@ -310,9 +307,9 @@ object Range {
   // is necessary to keep 0.3d at 0.3 as opposed to
   // 0.299999999999999988897769753748434595763683319091796875 or so.
   object Double {
-    implicit val bigDecAsIntegral = scala.Numeric.BigDecimalAsIfIntegral
-    implicit val doubleAsIntegral = scala.Numeric.DoubleAsIfIntegral
-    def toBD(x: Double): BigDecimal = scala.BigDecimal valueOf x
+    implicit val bigDecAsIntegral = scala.math.Numeric.BigDecimalAsIfIntegral
+    implicit val doubleAsIntegral = scala.math.Numeric.DoubleAsIfIntegral
+    def toBD(x: Double): BigDecimal = scala.math.BigDecimal valueOf x
 
     def apply(start: Double, end: Double, step: Double) =
       BigDecimal(toBD(start), toBD(end), toBD(step)) mapRange (_.doubleValue)
@@ -334,5 +331,11 @@ object Range {
   object Int {
     def apply(start: Int, end: Int, step: Int) = NumericRange(start, end, step)
     def inclusive(start: Int, end: Int, step: Int) = NumericRange.inclusive(start, end, step)
+  }
+
+  @deprecated("use Range instead", "2.9.0")
+  trait ByOne extends Range {
+//    @bridge override def foreach[@specialized(Unit) U](f: Int => U) =
+//      super.foreach(f)
   }
 }

@@ -1,14 +1,12 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
 package scala.collection.parallel
-
-
-
-
-
-
-
-
-
-
 
 package object immutable {
 
@@ -27,14 +25,14 @@ package object immutable {
    */
   private[parallel] class Repetition[T](elem: T, val length: Int) extends ParSeq[T] {
   self =>
-    def apply(idx: Int) = if (0 <= idx && idx < length) elem else throw new IndexOutOfBoundsException
-    def seq = throw new UnsupportedOperationException
+    def apply(idx: Int) = if (0 <= idx && idx < length) elem else throw new IndexOutOfBoundsException("" + idx)
+    override def seq = throw new UnsupportedOperationException
     def update(idx: Int, elem: T) = throw new UnsupportedOperationException
 
     type SCPI = SignalContextPassingIterator[ParIterator]
 
     class ParIterator(var i: Int = 0, val until: Int = length, elem: T = self.elem) extends super.ParIterator {
-      me: SignalContextPassingIterator[ParIterator] =>
+    me: SignalContextPassingIterator[ParIterator] =>
       def remaining = until - i
       def hasNext = i < until
       def next = { i += 1; elem }
@@ -46,18 +44,7 @@ package object immutable {
       def split = psplit(remaining / 2, remaining - remaining / 2)
     }
 
-    def parallelIterator = new ParIterator with SCPI
+    def splitter = new ParIterator with SCPI
 
   }
-
 }
-
-
-
-
-
-
-
-
-
-

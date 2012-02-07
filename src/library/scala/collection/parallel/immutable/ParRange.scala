@@ -1,15 +1,33 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
 package scala.collection.parallel.immutable
 
-
-
 import scala.collection.immutable.Range
-import scala.collection.parallel.ParSeq
 import scala.collection.parallel.Combiner
 import scala.collection.generic.CanCombineFrom
-import scala.collection.parallel.ParIterableIterator
+import scala.collection.parallel.IterableSplitter
+import scala.collection.Iterator
 
-
-
+/** Parallel ranges.
+ *
+ *  $paralleliterableinfo
+ *
+ *  $sideeffects
+ *
+ *  @param range    the sequential range this parallel range was obtained from
+ *
+ *  @author Aleksandar Prokopec
+ *  @since 2.9
+ *
+ *  @define Coll immutable.ParRange
+ *  @define coll immutable parallel range
+ */
 @SerialVersionUID(1L)
 class ParRange(val range: Range)
 extends ParSeq[Int]
@@ -17,19 +35,15 @@ extends ParSeq[Int]
 {
 self =>
 
-  def seq = range
+  override def seq = range
 
   @inline final def length = range.length
 
   @inline final def apply(idx: Int) = range.apply(idx);
 
-  def parallelIterator = new ParRangeIterator with SCPI
+  def splitter = new ParRangeIterator with SCPI
 
   type SCPI = SignalContextPassingIterator[ParRangeIterator]
-
-  override def toParSeq = this // TODO remove when we have ParSeq, when ParVector is in place
-
-  override def toParSet[U >: Int] = toParCollection[U, ParSet[U]](() => HashSetCombiner[U]) // TODO remove when we have ParSeq, when ParVector is in place
 
   class ParRangeIterator(range: Range = self.range)
   extends ParIterator {
@@ -93,9 +107,7 @@ self =>
       cb
     }
   }
-
 }
-
 
 object ParRange {
   def apply(start: Int, end: Int, step: Int, inclusive: Boolean) = new ParRange(
@@ -103,8 +115,3 @@ object ParRange {
     else new Range(start, end, step)
   )
 }
-
-
-
-
-

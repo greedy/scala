@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Paul Phillips
  */
 
@@ -35,10 +35,11 @@ trait StandardScalaSettings {
   val g =               ChoiceSetting ("-g", "level", "Set level of generated debugging info.", List("none", "source", "line", "vars", "notailcalls"), "vars")
   val help =           BooleanSetting ("-help", "Print a synopsis of standard options")
   val make =            ChoiceSetting ("-make", "policy", "Recompilation detection policy", List("all", "changed", "immediate", "transitive", "transitivenocp"), "all")
-  val nowarn =         BooleanSetting ("-nowarn", "Generate no warnings")
+                        . withDeprecationMessage ("this option is unmaintained.  Use sbt or an IDE for selective recompilation.")
+  val nowarn =         BooleanSetting ("-nowarn", "Generate no warnings.")
   val optimise:        BooleanSetting // depends on post hook which mutates other settings
   val print =          BooleanSetting ("-print", "Print program with Scala-specific features removed.")
-  val target =          ChoiceSetting ("-target", "target", "Specify for which target object files should be built", List("jvm-1.5", "msil", "llvm"), "jvm-1.5")
+  val target =          ChoiceSetting ("-target", "target", "Target platform for object files.", List("jvm-1.5", "msil", "llvm"), "jvm-1.5")
   val unchecked =      BooleanSetting ("-unchecked", "Enable detailed unchecked (erasure) warnings.")
   val uniqid =         BooleanSetting ("-uniqid", "Uniquely tag all identifiers in debugging output.")
   val usejavacp =      BooleanSetting ("-usejavacp", "Utilize the java.class.path in classpath resolution.")

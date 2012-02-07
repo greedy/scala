@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -45,7 +45,7 @@ trait IndexedSeqLike[A, +Repr] extends scala.collection.IndexedSeqLike[A, Repr] 
    *
    *  @param n       the index of the element to replace.
    *  @param elem    the new value.
-   *  @throws   IndexOutofBoundsException if the index is not valid.
+   *  @throws   IndexOutOfBoundsException if the index is not valid.
    */
   def update(idx: Int, elem: A)
 

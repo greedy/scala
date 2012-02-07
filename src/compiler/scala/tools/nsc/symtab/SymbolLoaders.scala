@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -10,11 +10,11 @@ import java.io.IOException
 import ch.epfl.lamp.compiler.msil.{ Type => MSILType, Attribute => MSILAttribute }
 
 import scala.compat.Platform.currentTime
-import scala.tools.nsc.io.AbstractFile
 import scala.tools.nsc.util.{ ClassPath }
 import classfile.ClassfileParser
-import Flags._
+import reflect.internal.Flags._
 import util.Statistics._
+import scala.tools.nsc.io.AbstractFile
 
 /** This class ...
  *
@@ -25,21 +25,47 @@ abstract class SymbolLoaders {
   val global: Global
   import global._
 
+  protected def enterIfNew(owner: Symbol, member: Symbol, completer: SymbolLoader): Symbol = {
+    assert(owner.info.decls.lookup(member.name) == NoSymbol, owner.fullName + "." + member.name)
+    owner.info.decls enter member
+    member
+  }
+
+  private def realOwner(root: Symbol): Symbol = {
+    if (root.isRoot) definitions.EmptyPackageClass else root
+  }
+
+  /** Enter class with given `name` into scope of `root`
+   *  and give them `completer` as type.
+   */
+  def enterClass(root: Symbol, name: String, completer: SymbolLoader): Symbol = {
+    val owner = realOwner(root)
+    val clazz = owner.newClass(NoPosition, newTypeName(name))
+    clazz setInfo completer
+    enterIfNew(owner, clazz, completer)
+  }
+
+  /** Enter module with given `name` into scope of `root`
+   *  and give them `completer` as type.
+   */
+  def enterModule(root: Symbol, name: String, completer: SymbolLoader): Symbol = {
+    val owner = realOwner(root)
+    val module = owner.newModule(NoPosition, newTermName(name))
+    module setInfo completer
+    module.moduleClass setInfo moduleClassLoader
+    enterIfNew(owner, module, completer)
+  }
+
   /** Enter class and module with given `name` into scope of `root`
    *  and give them `completer` as type.
    */
   def enterClassAndModule(root: Symbol, name: String, completer: SymbolLoader) {
-    val owner = if (root.isRoot) definitions.EmptyPackageClass else root
-    assert(owner.info.decls.lookup(name) == NoSymbol, owner.fullName + "." + name)
-    val clazz = owner.newClass(NoPosition, newTypeName(name))
-    val module = owner.newModule(NoPosition, name)
-    clazz setInfo completer
-    module setInfo completer
-    module.moduleClass setInfo moduleClassLoader
-    owner.info.decls enter clazz
-    owner.info.decls enter module
-    assert(clazz.companionModule == module || clazz.isAnonymousClass, module)
-    assert(module.companionClass == clazz, clazz)
+    val clazz = enterClass(root, name, completer)
+    val module = enterModule(root, name, completer)
+    if (!clazz.isAnonymousClass) {
+      assert(clazz.companionModule == module, module)
+      assert(module.companionClass == clazz, clazz)
+    }
   }
 
   /** In batch mode: Enter class and module with given `name` into scope of `root`
@@ -58,10 +84,10 @@ abstract class SymbolLoaders {
    */
   abstract class SymbolLoader extends LazyType {
 
-    /** Load source or class file for `root', return */
+    /** Load source or class file for `root`, return */
     protected def doComplete(root: Symbol): Unit
 
-    protected def sourcefile: Option[AbstractFile] = None
+    def sourcefile: Option[AbstractFile] = None
 
     /**
      * Description of the resource (ClassPath, AbstractFile, MSILType)
@@ -125,9 +151,32 @@ abstract class SymbolLoaders {
 
     def enterPackage(root: Symbol, name: String, completer: SymbolLoader) {
       val preExisting = root.info.decls.lookup(newTermName(name))
-      if (preExisting != NoSymbol)
-        throw new TypeError(
-          root+" contains object and package with same name: "+name+"\none of them needs to be removed from classpath")
+      if (preExisting != NoSymbol) {
+        // Some jars (often, obfuscated ones) include a package and
+        // object with the same name. Rather than render them unusable,
+        // offer a setting to resolve the conflict one way or the other.
+        // This was motivated by the desire to use YourKit probes, which
+        // require yjp.jar at runtime. See SI-2089.
+        if (settings.termConflict.isDefault)
+          throw new TypeError(
+            root+" contains object and package with same name: "+
+            name+"\none of them needs to be removed from classpath"
+          )
+        else if (settings.termConflict.value == "package") {
+          global.warning(
+            "Resolving package/object name conflict in favor of package " +
+            preExisting.fullName + ".  The object will be inaccessible."
+          )
+          root.info.decls.unlink(preExisting)
+        }
+        else {
+          global.warning(
+            "Resolving package/object name conflict in favor of object " +
+            preExisting.fullName + ".  The package will be inaccessible."
+          )
+          return
+        }
+      }
       val pkg = root.newPackage(NoPosition, newTermName(name))
       pkg.moduleClass.setInfo(completer)
       pkg.setInfo(pkg.moduleClass.tpe)
@@ -144,7 +193,7 @@ abstract class SymbolLoaders {
 
     /**
      * Tells whether a class should be loaded and entered into the package
-     * scope. On .NET, this method returns `false' for all synthetic classes
+     * scope. On .NET, this method returns `false` for all synthetic classes
      * (anonymous classes, implementation classes, module classes), their
      * symtab is encoded in the pickle of another class.
      */
@@ -162,8 +211,10 @@ abstract class SymbolLoaders {
       for (classRep <- classpath.classes if doLoad(classRep)) {
         ((classRep.binary, classRep.source) : @unchecked) match {
           case (Some(bin), Some(src)) if needCompile(bin, src) =>
+            if (settings.verbose.value) inform("[symloader] picked up newer source file for " + src.path)
             enterToplevelsFromSource(root, classRep.name, src)
           case (None, Some(src)) =>
+            if (settings.verbose.value) inform("[symloader] no class, picked up source file for " + src.path)
             enterToplevelsFromSource(root, classRep.name, src)
           case (Some(bin), _) =>
             enterClassAndModule(root, classRep.name, newClassLoader(bin))
@@ -257,7 +308,7 @@ abstract class SymbolLoaders {
       classfileParser.parse(classfile, root)
       stopTimer(classReadNanos, start)
     }
-    override protected def sourcefile = classfileParser.srcfile
+    override def sourcefile: Option[AbstractFile] = classfileParser.srcfile
   }
 
   class MSILTypeLoader(typ: MSILType) extends SymbolLoader {
@@ -271,7 +322,7 @@ abstract class SymbolLoaders {
 
   class SourcefileLoader(val srcfile: AbstractFile) extends SymbolLoader {
     protected def description = "source file "+ srcfile.toString
-    override protected def sourcefile = Some(srcfile)
+    override def sourcefile = Some(srcfile)
     protected def doComplete(root: Symbol): Unit = global.currentRun.compileLate(srcfile)
   }
 

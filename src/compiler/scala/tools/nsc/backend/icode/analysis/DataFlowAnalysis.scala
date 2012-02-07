@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -43,7 +43,7 @@ trait DataFlowAnalysis[L <: SemiLattice] {
     f
   }
 
-  def run: Unit
+  def run(): Unit
 
   /** Implements forward dataflow analysis: the transfer function is
    *  applied when inputs to a Program point change, to obtain the new
@@ -82,7 +82,7 @@ trait DataFlowAnalysis[L <: SemiLattice] {
       Console.println("in: " + in.mkString("", "\n", ""))
       Console.println("out: " + out.mkString("", "\n", ""))
       e.printStackTrace
-      system.error("Could not find element " + e.getMessage)
+      sys.error("Could not find element " + e.getMessage)
   }
 
   /** ...

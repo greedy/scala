@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -90,8 +90,6 @@ abstract class ScalaPrimitives {
   // Any operations
   final val IS = 80                            // x.is[y]
   final val AS = 81                            // x.as[y]
-  final val ISERASED = 85                      // x.is$erased[y]
-  final val ASERASED = 86                      // x.as$erased[y]
   final val HASH = 87                          // x.##
 
   // AnyRef operations
@@ -205,7 +203,7 @@ abstract class ScalaPrimitives {
   private val primitives: mutable.Map[Symbol, Int] = new mutable.HashMap()
 
   /** Initialize the primitive map */
-  def init {
+  def init() {
     primitives.clear()
     // scala.Any
     addPrimitive(Any_==, EQ)
@@ -581,7 +579,7 @@ abstract class ScalaPrimitives {
       val arrayParent = tpe :: tpe.parents collectFirst {
         case TypeRef(_, ArrayClass, elem :: Nil) => elem
       }
-      arrayParent getOrElse system.error(fun.fullName + " : " + (tpe :: tpe.baseTypeSeq.toList).mkString(", "))
+      arrayParent getOrElse sys.error(fun.fullName + " : " + (tpe :: tpe.baseTypeSeq.toList).mkString(", "))
     }
 
     code match {

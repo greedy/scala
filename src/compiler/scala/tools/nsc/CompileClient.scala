@@ -1,121 +1,67 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Martin Odersky
  */
 
 package scala.tools.nsc
 
 import java.io.{ BufferedReader, File, InputStreamReader, PrintWriter }
-import Properties.fileEndings
-import scala.tools.util.PathResolver
-import io.Path
-import util.ClassPath
+import settings.FscSettings
+import scala.tools.util.CompileOutputCommon
+import sys.SystemProperties.preferIPv4Stack
 
 /** The client part of the fsc offline compiler.  Instead of compiling
  *  things itself, it send requests to a CompileServer.
  */
-class StandardCompileClient {
-  def compileSocket: CompileSocket = CompileSocket  // todo: should be lazy val
+class StandardCompileClient extends HasCompileSocket with CompileOutputCommon {
+  lazy val compileSocket: CompileSocket = CompileSocket
 
-  val versionMsg  = "Fast " + Properties.versionMsg
-  var verbose     = false
-  var version     = false
-  var shutdown    = false
+  val versionMsg = "Fast " + Properties.versionMsg
+  var verbose    = false
 
-  /** Convert a filename to an absolute path */
-  def absFileName(path: String) = new File(path).getAbsolutePath()
+  def process(args: Array[String]): Boolean = {
+    // Trying to get out in front of the log messages in case we're
+    // going from verbose to not verbose.
+    verbose = (args contains "-verbose")
 
-  /** Convert a sequence of filenames, separated by <code>File.pathSeparator</code>,
-    * into absolute filenames.
-    */
-  def absFileNames(paths: String) = ClassPath.map(paths, absFileName)
+    val settings     = new FscSettings(Console.println)
+    val command      = new OfflineCompilerCommand(args.toList, settings)
+    val shutdown     = settings.shutdown.value
+    val extraVmArgs  = if (settings.preferIPv4.value) List("-D%s=true".format(preferIPv4Stack.key)) else Nil
 
-  protected def normalize(args: Array[String]): (String, String) = {
-    var i = 0
-    val vmArgs = new StringBuilder
-    var serverAdr = ""
+    val vmArgs  = settings.jvmargs.unparse ++ settings.defines.unparse ++ extraVmArgs
+    val fscArgs = args.toList ++ command.extraFscArgs
 
-    while (i < args.length) {
-      val arg = args(i)
-      if (fileEndings exists(arg endsWith _)) {
-        args(i) = Path(arg).toAbsolute.path
-      } else if (arg startsWith "-J") {
-        //see http://java.sun.com/j2se/1.5.0/docs/tooldocs/solaris/javac.html#J
-        vmArgs append " "+arg.substring(2)
-        args(i) = ""
-      } else if (arg == "-verbose") {
-        verbose = true
-      } else if (arg == "-version") {
-        version = true
-      } else if (arg == "-shutdown") {
-        shutdown = true
-      }
-      i += 1
-
-      if (i < args.length) {
-        arg match {
-          case "-classpath" | "-sourcepath" | "-bootclasspath" | "-extdirs" | "-d"  =>
-            args(i) = PathResolver.makeAbsolute(args(i))
-            i += 1
-          case "-server"  =>
-            serverAdr = args(i)
-            args(i-1) = ""
-            args(i) = ""
-          case _          =>
-        }
-      }
-    }
-    (vmArgs.toString, serverAdr)
-  }
-
-  // used by class ant.FastScalac to skip exit statement in Ant.
-  def main0(args0: Array[String]): Int = {
-    val args = if (args0 contains "-d") args0 else Array("-d", ".") ++ args0
-    val (vmArgs, serverAdr) = normalize(args)
-
-    if (version) {
+    if (settings.version.value) {
       Console println versionMsg
-      return 0
+      return true
     }
-    if (verbose) {
-      Console println args.mkString("[Server arguments: ", " ", "]")
-      Console println "[VM arguments: %s]".format(vmArgs)
-    }
+
+    info(versionMsg)
+    info(args.mkString("[Given arguments: ", " ", "]"))
+    info(fscArgs.mkString("[Transformed arguments: ", " ", "]"))
+    info(vmArgs.mkString("[VM arguments: ", " ", "]"))
+
     val socket =
-      if (serverAdr == "") compileSocket.getOrCreateSocket(vmArgs, !shutdown)
-      else Some(compileSocket.getSocket(serverAdr))
+      if (settings.server.value == "") compileSocket.getOrCreateSocket(vmArgs mkString " ", !shutdown)
+      else Some(compileSocket.getSocket(settings.server.value))
 
-    val sawerror: Boolean = socket match {
-      case None =>
-        val msg = if (shutdown) "[No compilation server running.]" else "Compilation failed."
-        Console println msg
-        !shutdown
-
-      case Some(sock) =>
-        var wasError = false
-
-        sock.applyReaderAndWriter { (in, out) =>
-          out println compileSocket.getPassword(sock.getPort())
-          out println args.mkString("\0")
-          def loop: Unit = in.readLine() match {
-            case null       => ()
-            case fromServer =>
-              if (compileSocket.errorPattern matcher fromServer matches)
-                wasError = true
-
-              Console println fromServer
-              loop
-          }
-          loop
-        }
-        wasError
+    socket match {
+      case Some(sock) => compileOnServer(sock, fscArgs)
+      case _          =>
+        echo(
+          if (shutdown) "[No compilation server running.]"
+          else "Compilation failed."
+        )
+        shutdown
     }
-    if (sawerror) 1 else 0
   }
-
-  def main(args: Array[String]): Unit =
-    system.exit(try main0(args) catch { case e: Exception => 1 })
 }
 
+object CompileClient extends StandardCompileClient {
+  def main(args: Array[String]): Unit = sys exit {
+    try   { if (process(args)) 0 else 1 }
+    catch { case _: Exception => 1 }
+  }
+}
 
-object CompileClient extends StandardCompileClient

@@ -1,3 +1,12 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
+
 package scala.collection.parallel.mutable
 
 
@@ -14,7 +23,7 @@ import scala.collection.parallel.ParSeqLike
 import scala.collection.parallel.CHECK_RATE
 import scala.collection.mutable.ArraySeq
 import scala.collection.mutable.Builder
-import scala.collection.Sequentializable
+import scala.collection.GenTraversableOnce
 
 
 
@@ -25,17 +34,18 @@ import scala.collection.Sequentializable
  *  cannot be changed after it's been created.
  *
  *  `ParArray` internally keeps an array containing the elements. This means that
- *  bulk operations based on traversal are fast, but those returning a parallel array as a result
- *  are slightly slower. The reason for this is that `ParArray` uses lazy builders that
- *  create the internal data array only after the size of the array is known. The fragments
- *  are then copied into the resulting data array in parallel using fast array copy operations.
- *  Operations for which the resulting array size is known in advance are optimised to use this
- *  information.
+ *  bulk operations based on traversal ensure fast access to elements. `ParArray` uses lazy builders that
+ *  create the internal data array only after the size of the array is known. In the meantime, they keep
+ *  the result set fragmented. The fragments
+ *  are copied into the resulting data array in parallel using fast array copy operations once all the combiners
+ *  are populated in parallel.
  *
  *  @tparam T        type of the elements in the array
  *
  *  @define Coll ParArray
  *  @define coll parallel array
+ *
+ *  @author Aleksandar Prokopec
  */
 @SerialVersionUID(1L)
 class ParArray[T] private[mutable] (val arrayseq: ArraySeq[T])
@@ -62,11 +72,11 @@ self =>
 
   def length = arrayseq.length
 
-  def seq = arrayseq
+  override def seq = arrayseq
 
   type SCPI = SignalContextPassingIterator[ParArrayIterator]
 
-  def parallelIterator: ParArrayIterator = {
+  protected[parallel] def splitter: ParArrayIterator = {
     val pit = new ParArrayIterator with SCPI
     pit
   }
@@ -169,7 +179,7 @@ self =>
 
     override def fold[U >: T](z: U)(op: (U, U) => U): U = foldLeft[U](z)(op)
 
-    def aggregate[S](z: S)(seqop: (S, T) => S, combop: (S, S) => S): S = foldLeft[S](z)(seqop)
+    override def aggregate[S](z: S)(seqop: (S, T) => S, combop: (S, S) => S): S = foldLeft[S](z)(seqop)
 
     override def sum[U >: T](implicit num: Numeric[U]): U = {
       var s = sum_quick(num, arr, until, i, num.zero)
@@ -400,12 +410,12 @@ self =>
       }
     }
 
-    override def flatmap2combiner[S, That](f: T => TraversableOnce[S], cb: Combiner[S, That]): Combiner[S, That] = {
+    override def flatmap2combiner[S, That](f: T => GenTraversableOnce[S], cb: Combiner[S, That]): Combiner[S, That] = {
       //val cb = pbf(self.repr)
       while (i < until) {
         val traversable = f(arr(i).asInstanceOf[T])
         if (traversable.isInstanceOf[Iterable[_]]) cb ++= traversable.asInstanceOf[Iterable[S]].iterator
-        else cb ++= traversable
+        else cb ++= traversable.seq
         i += 1
       }
       cb
@@ -583,7 +593,7 @@ self =>
     (new ParArray[S](targarrseq)).asInstanceOf[That]
   } else super.map(f)(bf)
 
-  override def scan[U >: T, That](z: U)(op: (U, U) => U)(implicit cbf: CanCombineFrom[ParArray[T], U, That]): That =
+  override def scan[U >: T, That](z: U)(op: (U, U) => U)(implicit cbf: CanBuildFrom[ParArray[T], U, That]): That =
     if (parallelismLevel > 1 && buildsArray(cbf(repr))) {
       // reserve an array
       val targarrseq = new ArraySeq[U](length + 1)
@@ -591,7 +601,7 @@ self =>
       targetarr(0) = z
 
       // do a parallel prefix scan
-      if (length > 0) executeAndWaitResult(new CreateScanTree[U](0, size, z, op, parallelIterator) mapResult {
+      if (length > 0) executeAndWaitResult(new CreateScanTree[U](0, size, z, op, splitter) mapResult {
         tree => executeAndWaitResult(new ScanToArray(tree, z, op, targetarr))
       })
 
@@ -630,7 +640,7 @@ self =>
         new ScanToArray(left, z, op, targetarr),
         new ScanToArray(right, z, op, targetarr)
       )
-      case _ => system.error("Can only split scan tree internal nodes.")
+      case _ => sys.error("Can only split scan tree internal nodes.")
     }
     def shouldSplitFurther = tree match {
       case ScanNode(_, _) => true
@@ -673,9 +683,10 @@ self =>
 }
 
 
-
-
-
+/** $factoryInfo
+ *  @define Coll mutable.ParArray
+ *  @define coll parallel array
+ */
 object ParArray extends ParFactory[ParArray] {
   implicit def canBuildFrom[T]: CanCombineFrom[Coll, T, ParArray[T]] = new GenericCanCombineFrom[T]
   def newBuilder[T]: Combiner[T, ParArray[T]] = newCombiner
@@ -700,11 +711,10 @@ object ParArray extends ParFactory[ParArray] {
     handoff(newarr)
   }
 
-  def fromTraversables[T](xss: TraversableOnce[T]*) = {
+  def fromTraversables[T](xss: GenTraversableOnce[T]*) = {
     val cb = ParArrayCombiner[T]()
     for (xs <- xss) {
-      val it = xs.toIterator
-      while (it.hasNext) cb += it.next
+      cb ++= xs.seq
     }
     cb.result
   }

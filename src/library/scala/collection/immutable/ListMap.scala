@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -12,7 +12,7 @@ package scala.collection
 package immutable
 
 import generic._
-import annotation.tailrec
+import annotation.{tailrec, bridge}
 
 /** $factoryInfo
  *  @since 1
@@ -97,8 +97,11 @@ class ListMap[A, +B] extends Map[A, B] with MapLike[A, B, ListMap[A, B]] with Se
    *
    *  @param xs     the traversable object.
    */
-  override def ++[B1 >: B](xs: TraversableOnce[(A, B1)]): ListMap[A, B1] =
-    ((repr: ListMap[A, B1]) /: xs) (_ + _)
+  override def ++[B1 >: B](xs: GenTraversableOnce[(A, B1)]): ListMap[A, B1] =
+    ((repr: ListMap[A, B1]) /: xs.seq) (_ + _)
+
+  @bridge def ++[B1 >: B](xs: TraversableOnce[(A, B1)]): ListMap[A, B1] =
+    ++(xs: GenTraversableOnce[(A, B1)])
 
   /** This creates a new mapping without the given <code>key</code>.
    *  If the map does not contain a mapping for the given key, the

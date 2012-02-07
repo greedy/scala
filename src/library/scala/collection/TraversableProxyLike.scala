@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -30,9 +30,9 @@ trait TraversableProxyLike[+A, +Repr <: TraversableLike[A, Repr] with Traversabl
   override def nonEmpty: Boolean = self.nonEmpty
   override def size: Int = self.size
   override def hasDefiniteSize = self.hasDefiniteSize
-  override def ++[B >: A, That](xs: TraversableOnce[B])(implicit bf: CanBuildFrom[Repr, B, That]): That = self.++(xs)(bf)
+  override def ++[B >: A, That](xs: GenTraversableOnce[B])(implicit bf: CanBuildFrom[Repr, B, That]): That = self.++(xs)(bf)
   override def map[B, That](f: A => B)(implicit bf: CanBuildFrom[Repr, B, That]): That = self.map(f)(bf)
-  override def flatMap[B, That](f: A => TraversableOnce[B])(implicit bf: CanBuildFrom[Repr, B, That]): That = self.flatMap(f)(bf)
+  override def flatMap[B, That](f: A => GenTraversableOnce[B])(implicit bf: CanBuildFrom[Repr, B, That]): That = self.flatMap(f)(bf)
   override def filter(p: A => Boolean): Repr = self.filter(p)
   override def filterNot(p: A => Boolean): Repr = self.filterNot(p)
   override def collect[B, That](pf: PartialFunction[A, B])(implicit bf: CanBuildFrom[Repr, B, That]): That = self.collect(pf)(bf)

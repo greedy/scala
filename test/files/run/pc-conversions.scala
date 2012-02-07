@@ -7,7 +7,7 @@ import collection._
 object Test {
 
   def main(args: Array[String]) {
-    // disabled
+    testConversions
   }
 
   def testConversions {
@@ -30,7 +30,7 @@ object Test {
     assertPar(immutable.HashMap(1 -> 1, 2 -> 2))
     assertPar(immutable.HashSet(1, 2, 3))
 
-    // toPar*
+    // par.to* and to*.par tests
     assertToPar(List(1 -> 1, 2 -> 2, 3 -> 3))
     assertToPar(Stream(1 -> 1, 2 -> 2))
     assertToPar(Array(1 -> 1, 2 -> 2))
@@ -50,33 +50,43 @@ object Test {
 
     assertToParWoMap(immutable.Range(1, 10, 2))
 
-    assertToParIt(List(1 -> 1, 2 -> 2, 3 -> 3).iterator)
+    // seq and par again conversions)
+    assertSeqPar(parallel.mutable.ParArray(1, 2, 3))
   }
+
+  def assertSeqPar[T](pc: parallel.ParIterable[T]) = pc.seq.par == pc
 
   def assertSeq[T](pc: parallel.ParIterable[T]) = assert(pc.seq == pc)
 
-  def assertPar[T, P <: Parallel](xs: Iterable[T] with Parallelizable[P]) = assert(xs == xs.par)
+  def assertPar[T, P <: Parallel](xs: GenIterable[T]) = assert(xs == xs.par)
 
-  def assertToPar[K, V](xs: Traversable[(K, V)]) {
+  def assertToPar[K, V](xs: GenTraversable[(K, V)]) {
     xs match {
-      case _: Seq[_] => assert(xs.toParIterable == xs)
+      case _: Seq[_] =>
+        assert(xs.toIterable.par == xs)
+        assert(xs.par.toIterable == xs)
       case _ =>
     }
-    assert(xs.toParSeq == xs.toSeq)
-    assert(xs.toParSet == xs.toSet)
-    assert(xs.toParMap == xs.toMap)
+
+    assert(xs.toSeq.par == xs.toSeq)
+    assert(xs.par.toSeq == xs.toSeq)
+
+    assert(xs.toSet.par == xs.toSet)
+    assert(xs.par.toSet == xs.toSet)
+
+    assert(xs.toMap.par == xs.toMap)
+    assert(xs.par.toMap == xs.toMap)
   }
 
-  def assertToParWoMap[T](xs: Traversable[T]) {
-    assert(xs.toParIterable == xs)
-    assert(xs.toParSeq == xs.toSeq)
-    assert(xs.toParSet == xs.toSet)
-  }
+  def assertToParWoMap[T](xs: GenSeq[T]) {
+    assert(xs.toIterable.par == xs.toIterable)
+    assert(xs.par.toIterable == xs.toIterable)
 
-  def assertToParIt[K, V](xs: =>Iterator[(K, V)]) {
-    assert(xs.toParSeq == xs.toSeq)
-    assert(xs.toParSet == xs.toSet)
-    assert(xs.toParMap == xs.toMap)
+    assert(xs.toSeq.par == xs.toSeq)
+    assert(xs.par.toSeq == xs.toSeq)
+
+    assert(xs.toSet.par == xs.toSet)
+    assert(xs.par.toSet == xs.toSet)
   }
 
 }

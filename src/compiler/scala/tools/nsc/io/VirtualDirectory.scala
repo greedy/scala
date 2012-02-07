@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  */
 
 package scala.tools.nsc
@@ -27,14 +27,14 @@ extends AbstractFile {
   var lastModified: Long = System.currentTimeMillis
 
   override def file = null
-  override def input = system.error("directories cannot be read")
-  override def output = system.error("directories cannot be written")
+  override def input = sys.error("directories cannot be read")
+  override def output = sys.error("directories cannot be written")
 
   /** Does this abstract file denote an existing file? */
-  def create { unsupported }
+  def create() { unsupported }
 
   /** Delete the underlying file or directory (recursively). */
-  def delete { unsupported }
+  def delete() { unsupported }
 
   /** Returns an abstract file with the given name. It does not
    *  check that it exists.

@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://www.scala-lang.org/           **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -160,7 +160,7 @@ trait HashTable[A, Entry >: Null <: HashEntry[A, Entry]] extends HashTable.HashU
     var es = iterTable(idx).asInstanceOf[Entry]
     scan()
     def hasNext = es != null
-    def next = {
+    def next() = {
       val res = es
       es = es.next
       scan()
@@ -190,7 +190,7 @@ trait HashTable[A, Entry >: Null <: HashEntry[A, Entry]] extends HashTable.HashU
   protected final def foreachEntry[C](f: Entry => C) { entriesIterator.foreach(f) }
 
   /** An iterator returning all entries */
-  @deprecated("use entriesIterator instead")
+  @deprecated("use entriesIterator instead", "2.8.0")
   protected def entries: Iterator[Entry] = entriesIterator
 
   /** Remove all entries from table
@@ -265,7 +265,7 @@ trait HashTable[A, Entry >: Null <: HashEntry[A, Entry]] extends HashTable.HashU
   }
 
   // discards the previous sizemap and populates the new one
-  protected def sizeMapInitAndRebuild {
+  protected def sizeMapInitAndRebuild() {
     sizeMapInit(table.length)
 
     // go through the buckets, count elements
@@ -291,11 +291,11 @@ trait HashTable[A, Entry >: Null <: HashEntry[A, Entry]] extends HashTable.HashU
     }
   }
 
-  private[collection] def printSizeMap {
+  private[collection] def printSizeMap() {
     println(sizemap.toList)
   }
 
-  protected def sizeMapDisable = sizemap = null
+  protected def sizeMapDisable() = sizemap = null
 
   protected def isSizeMapDefined = sizemap ne null
 
@@ -363,7 +363,7 @@ private[collection] object HashTable {
     // so that:
     protected final def sizeMapBucketSize = 1 << sizeMapBucketBitSize
 
-    protected def elemHashCode(key: KeyType) = if (key == null) 0 else key.##
+    protected def elemHashCode(key: KeyType) = key.##
 
     protected final def improve(hcode: Int) = {
       /* Murmur hash

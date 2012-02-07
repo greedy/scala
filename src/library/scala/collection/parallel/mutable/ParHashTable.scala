@@ -1,3 +1,12 @@
+/*                     __                                               *\
+**     ________ ___   / /  ___     Scala API                            **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
+** /____/\___/_/ |_/____/_/ | |                                         **
+**                          |/                                          **
+\*                                                                      */
+
+
 package scala.collection
 package parallel.mutable
 
@@ -5,7 +14,7 @@ package parallel.mutable
 
 
 import collection.mutable.HashEntry
-import collection.parallel.ParIterableIterator
+import collection.parallel.IterableSplitter
 
 
 
@@ -19,9 +28,9 @@ trait ParHashTable[K, Entry >: Null <: HashEntry[K, Entry]] extends collection.m
 
   /** A parallel iterator returning all the entries.
    */
-  abstract class EntryIterator[T, +IterRepr <: ParIterableIterator[T]]
+  abstract class EntryIterator[T, +IterRepr <: IterableSplitter[T]]
     (private var idx: Int, private val until: Int, private val totalsize: Int, private var es: Entry)
-  extends ParIterableIterator[T] with SizeMapUtils {
+  extends IterableSplitter[T] with SizeMapUtils {
     private val itertable = table
     private var traversed = 0
     scan()
@@ -69,7 +78,7 @@ trait ParHashTable[K, Entry >: Null <: HashEntry[K, Entry]] extends collection.m
 
     def dup = newIterator(idx, until, totalsize, es)
 
-    def split: Seq[ParIterableIterator[T]] = if (remaining > 1) {
+    def split: Seq[IterableSplitter[T]] = if (remaining > 1) {
       if (until > idx) {
         // there is at least one more slot for the next iterator
         // divide the rest of the table
@@ -95,7 +104,7 @@ trait ParHashTable[K, Entry >: Null <: HashEntry[K, Entry]] extends collection.m
         // otherwise, this is the last entry in the table - all what remains is the chain
         // so split the rest of the chain
         val arr = convertToArrayBuffer(es)
-        val arrpit = new collection.parallel.BufferIterator[T](arr, 0, arr.length, signalDelegate)
+        val arrpit = new collection.parallel.BufferSplitter[T](arr, 0, arr.length, signalDelegate)
         arrpit.split
       }
     } else Seq(this.asInstanceOf[IterRepr])

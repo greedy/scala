@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author  Paul Phillips
  */
 
@@ -9,16 +9,19 @@ package settings
 trait AbsScalaSettings {
   self: AbsSettings =>
 
-  type BooleanSetting     <: AbsSetting { type T = Boolean }
-  type ChoiceSetting      <: AbsSetting { type T = String }
-  type IntSetting         <: AbsSetting { type T = Int }
-  type MultiStringSetting <: AbsSetting { type T = List[String] }
-  type PathSetting        <: AbsSetting { type T = String }
-  type PhasesSetting      <: AbsSetting { type T = List[String] }
-  type StringSetting      <: AbsSetting { type T = String }
+  type Setting <: AbsSetting
+
+  type BooleanSetting     <: Setting { type T = Boolean }
+  type ChoiceSetting      <: Setting { type T = String }
+  type IntSetting         <: Setting { type T = Int }
+  type MultiStringSetting <: Setting { type T = List[String] }
+  type PathSetting        <: Setting { type T = String }
+  type PhasesSetting      <: Setting { type T = List[String] }
+  type StringSetting      <: Setting { type T = String }
+  type PrefixSetting      <: Setting { type T = List[String] }
 
   type OutputDirs
-  type OutputSetting <: AbsSetting
+  type OutputSetting <: Setting
 
   def BooleanSetting(name: String, descr: String): BooleanSetting
   def ChoiceSetting(name: String, helpArg: String, descr: String, choices: List[String], default: String): ChoiceSetting
@@ -28,11 +31,12 @@ trait AbsScalaSettings {
   def PathSetting(name: String, descr: String, default: String): PathSetting
   def PhasesSetting(name: String, descr: String): PhasesSetting
   def StringSetting(name: String, helpArg: String, descr: String, default: String): StringSetting
+  def PrefixSetting(name: String, prefix: String, descr: String): PrefixSetting
 
   /** **/
   abstract class SettingGroup(val prefix: String) extends AbsSetting {
     def name = prefix
-    def helpDescription: String = system.error("todo")
+    def helpDescription: String = sys.error("todo")
     def unparse: List[String] = List(name)
   }
 }
