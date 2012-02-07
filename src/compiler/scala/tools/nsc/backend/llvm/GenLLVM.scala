@@ -400,6 +400,15 @@ abstract class GenLLVM extends SubComponent {
         Externally_visible, Default, Ccc,
         Seq.empty, Seq.empty, None, None, None)
 
+      lazy val rtAssertArrayBounds = new LMFunction(
+        LMVoid, "rt_assertArrayBounds",
+        Seq(
+          ArgSpec(new LocalVariable("a", rtObject.pointer)),
+          ArgSpec(new LocalVariable("i", LMInt.i32))
+        ), false,
+        Externally_visible, Default, Ccc,
+        Seq.empty, Seq.empty, None, None, None)
+
       lazy val rtTypes = Seq(
         definitions.BoxedBooleanClass,
         definitions.BoxedByteClass,
@@ -463,6 +472,7 @@ abstract class GenLLVM extends SubComponent {
         unwindResume.declare,
         unwindRaiseException.declare,
         createOurException.declare,
+        rtAssertArrayBounds.declare,
         rtAssertNotNull.declare
       )
     }
@@ -1225,6 +1235,8 @@ abstract class GenLLVM extends SubComponent {
                 val itemptr = nextvar(typeKindType(kind).pointer)
                 val item = nextvar(typeKindType(kind))
                 insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
+                insns.append(new invoke_void(rtAssertArrayBounds, Seq(asobj, index),
+                                             pass, blockExSelLabel(bb,-2)))
                 insns.append(new bitcast(asarray, asobj))
                 insns.append(new getelementptr(itemptr, asarray.asInstanceOf[LMValue[LMPointer]],
                   Seq(LMConstant.intconst(0), LMConstant.intconst(2), index.asInstanceOf[LMValue[LMInt]])))
@@ -1878,7 +1890,20 @@ abstract class GenLLVM extends SubComponent {
         fun.define(blocks)
       }
 
-      val name = llvmName(c.symbol)
+      val sym = if(c.symbol.hasModuleFlag) c.symbol.sourceModule
+                else c.symbol
+
+      currentRun.symData.get(sym) match {
+        case Some(p) =>
+          val symOut = getSymFile(sym).bufferedOutput
+          symOut.write(p.bytes.take(p.writeIndex))
+          symOut.close
+        case None =>
+          printf("MISSING pickle for %s(%x)\n", c.symbol, c.symbol.flags)
+          printf("  MISSING owner is %s (%s)\n",
+                 c.symbol.owner, currentRun.symData.isDefinedAt(c.symbol.owner))
+      }
+
       val outfile = getFile(c.symbol, ".ll")
       val outstream = new OutputStreamWriter(outfile.bufferedOutput,"US-ASCII")
       val header_comment = new Comment("Module for " + c.symbol.fullName('.'))
@@ -2014,6 +2039,15 @@ abstract class GenLLVM extends SubComponent {
       } else {
         typeType(s.tpe)
       }
+    }
+
+    def getSymFile(sym: Symbol): AbstractFile = {
+      val src = atPhase(currentRun.phaseNamed("llvm").prev)(sym.sourceFile)
+      var dir = settings.outputDirs.outputDirFor(src)
+      for(arc <- sym.fullName.split("\\.").toList.init) {
+        dir = dir.subdirectoryNamed(arc)
+      }
+      dir.fileNamed(sym.encodedName + ".sym")
     }
 
     def getFile(sym: Symbol, suffix: String): AbstractFile = {

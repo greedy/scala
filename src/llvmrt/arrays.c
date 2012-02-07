@@ -1,4 +1,5 @@
 #include "arrays.h"
+#include "runtime.h"
 #include <string.h>
 #include <assert.h>
 #include <stdarg.h>
@@ -108,4 +109,22 @@ new_array(uint8_t k, struct klass *et, int32_t ndims, int32_t dim0, ...)
   }
   va_end(dims);
   return a;
+}
+
+extern struct klass class_java_Dlang_DArrayIndexOutOfBoundsException;
+
+extern void
+method_java_Dlang_DArrayIndexOutOfBoundsException_M_Linit_G_Rjava_Dlang_DArrayIndexOutOfBoundsException(
+    struct java_lang_Object *, vtable);
+
+void rt_assertArrayBounds(struct array *arr,
+                          uint32_t i)
+{
+  if(i < 0 || i >= arr->length) {
+    struct java_lang_Object *exception = rt_new(&class_java_Dlang_DArrayIndexOutOfBoundsException);
+    void *uwx;
+    method_java_Dlang_DArrayIndexOutOfBoundsException_M_Linit_G_Rjava_Dlang_DArrayIndexOutOfBoundsException(exception, rt_loadvtable(exception));
+    uwx = createOurException(exception);
+    _Unwind_RaiseException(uwx);
+  }
 }

@@ -7,8 +7,6 @@
 #include <stdio.h>
 #include <string.h>
 
-extern int32_t _Unwind_RaiseException(void*);
-
 static void printclassname(FILE* f, struct klass *klass)
 {
   fprintf(f, "%*s", klass->name.len, klass->name.bytes);

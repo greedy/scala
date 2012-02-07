@@ -24,4 +24,6 @@ extern vtable rt_loadvtable(struct java_lang_Object *object);
 
 extern void* createOurException(struct java_lang_Object *obj);
 
+extern int32_t _Unwind_RaiseException(void*);
+
 #endif
