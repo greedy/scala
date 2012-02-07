@@ -30,8 +30,7 @@ import util.Chars.{ SU, LF }
  *  @author  Burak Emir
  *  @version 1.0
  */
-trait MarkupParsers
-{
+trait MarkupParsers {
   self: Parsers =>
 
   case object MissingEndTagControl extends ControlThrowable {
@@ -294,7 +293,7 @@ trait MarkupParsers
       while (ch != SU) {
         if (ch == '}') {
           if (charComingAfter(nextch) == '}') nextch
-          else errorBraces
+          else errorBraces()
         }
 
         buf append ch
@@ -318,16 +317,17 @@ trait MarkupParsers
       }
       finally parser.in resume Tokens.XMLSTART
 
-      EmptyTree
+      parser.errorTermTree
     }
 
     /** Use a lookahead parser to run speculative body, and return the first char afterward. */
     private def charComingAfter(body: => Unit): Char = {
-      input = input.lookaheadReader
-      body
-      val res = ch
-      input = parser.in
-      res
+      try {
+        input = input.lookaheadReader
+        body
+        ch
+      }
+      finally input = parser.in
     }
 
     /** xLiteral = element { element }
@@ -393,7 +393,7 @@ trait MarkupParsers
 
     /** xScalaPatterns  ::= patterns
      */
-    def xScalaPatterns: List[Tree] = escapeToScala(parser.patterns(true), "pattern")
+    def xScalaPatterns: List[Tree] = escapeToScala(parser.seqPatterns(), "pattern")
 
     def reportSyntaxError(pos: Int, str: String) = parser.syntaxError(pos, str)
     def reportSyntaxError(str: String) = {

@@ -20,7 +20,7 @@ import scala.collection.generic.GenericParMapCompanion
 import scala.collection.immutable.HashMap
 
 
-
+import annotation.unchecked.uncheckedVariance
 
 
 
@@ -28,10 +28,12 @@ import scala.collection.immutable.HashMap
  *
  *  @author prokopec
  */
+@SerialVersionUID(1L)
 class ParHashMap[K, +V] private[immutable] (private[this] val trie: HashMap[K, V])
 extends ParMap[K, V]
    with GenericParMapTemplate[K, V, ParHashMap]
    with ParMapLike[K, V, ParHashMap[K, V], HashMap[K, V]]
+   with Serializable
 {
 self =>
 
@@ -62,10 +64,24 @@ self =>
 
   type SCPI = SignalContextPassingIterator[ParHashMapIterator]
 
-  class ParHashMapIterator(val triter: Iterator[(K, V)], val sz: Int)
+  class ParHashMapIterator(var triter: Iterator[(K, V @uncheckedVariance)], val sz: Int)
   extends super.ParIterator {
   self: SignalContextPassingIterator[ParHashMapIterator] =>
     var i = 0
+    def dup = triter match {
+      case t: HashMap.TrieIterator[_, _] =>
+        val dupt = t.dupIterator.asInstanceOf[Iterator[(K, V)]]
+        dupFromIterator(dupt)
+      case _ =>
+        val buff = triter.toBuffer
+        triter = buff.iterator
+        dupFromIterator(buff.iterator)
+    }
+    private def dupFromIterator(it: Iterator[(K, V @uncheckedVariance)]) = {
+      val phit = new ParHashMapIterator(it, sz) with SCPI
+      phit.i = i
+      phit
+    }
     def split: Seq[ParIterator] = if (remaining < 2) Seq(this) else triter match {
       case t: HashMap.TrieIterator[_, _] =>
         val previousRemaining = remaining
@@ -90,6 +106,7 @@ self =>
       i < sz
     }
     def remaining = sz - i
+    override def toString = "HashTrieIterator(" + sz + ")"
   }
 
   private[parallel] def printDebugInfo {
@@ -168,7 +185,8 @@ self: EnvironmentPassingCombiner[(K, V), ParHashMap[K, V]] =>
   }
 
   override def toString = {
-    "HashTrieCombiner(buckets:\n\t" + buckets.filter(_ != null).mkString("\n\t") + ")\n"
+    "HashTrieCombiner(sz: " + size + ")"
+    //"HashTrieCombiner(buckets:\n\t" + buckets.filter(_ != null).mkString("\n\t") + ")\n"
   }
 
   /* tasks */

@@ -15,8 +15,7 @@ import io.{ File, Path }
  *  @version 1.1, 2009/1/2
  *  Updated 2009/1/2 by Anders Bach Nielsen: Added features to implement SIP 00002
  */
-trait Plugins
-{
+trait Plugins {
   self: Global =>
 
   /** Load a rough list of the plugins.  For speed, it
@@ -106,8 +105,12 @@ trait Plugins
    * Extract all phases supplied by plugins and add them to the phasesSet.
    * @see phasesSet
    */
-  protected def computePluginPhases(): Unit =
-    phasesSet ++= (plugins flatMap (_.components))
+  protected def computePluginPhases(): Unit = {
+    // For reasons not yet apparent to me, plugins started appearing
+    // as null when I added phaseTimings to global.
+    if (plugins != null)
+      phasesSet ++= (plugins flatMap (_.components))
+  }
 
   /** Summary of the options for all loaded plugins */
   def pluginOptionsHelp: String =

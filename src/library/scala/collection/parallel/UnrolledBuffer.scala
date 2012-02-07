@@ -10,24 +10,59 @@ import annotation.tailrec
 
 
 
+
+/** A buffer that stores elements in an unrolled linked list.
+ *
+ *  Unrolled linked lists store elements in linked fixed size
+ *  arrays.
+ *
+ *  Unrolled buffers retain locality and low memory overhead
+ *  properties of array buffers, but offer much more efficient
+ *  element addition, since they never reallocate and copy the
+ *  internal array.
+ *
+ *  However, they provide `O(n/m)` complexity random access,
+ *  where `n` is the number of elements, and `m` the size of
+ *  internal array chunks.
+ *
+ *  Ideal to use when:
+ *  - elements are added to the buffer and then all of the
+ *    elements are traversed sequentially
+ *  - two unrolled buffers need to be concatenated (see `concat`)
+ *
+ *  Better than singly linked lists for random access, but
+ *  should still be avoided for such a purpose.
+ *
+ *  @author Aleksandar Prokopec
+ *
+ *  @coll unrolled buffer
+ *  @Coll UnrolledBuffer
+ */
+@SerialVersionUID(1L)
 class UnrolledBuffer[T](implicit val manifest: ClassManifest[T])
 extends collection.mutable.Buffer[T]
    with collection.mutable.BufferLike[T, UnrolledBuffer[T]]
    with GenericClassManifestTraversableTemplate[T, UnrolledBuffer]
    with collection.mutable.Builder[T, UnrolledBuffer[T]]
+   with Serializable
 {
   import UnrolledBuffer.Unrolled
 
-  private var headptr = new Unrolled[T]
-  private var lastptr = headptr
-  private var sz = 0
+  @transient private var headptr = newUnrolled
+  @transient private var lastptr = headptr
+  @transient private var sz = 0
 
   private[parallel] def headPtr = headptr
   private[parallel] def headPtr_=(head: Unrolled[T]) = headptr = head
   private[parallel] def lastPtr = lastptr
   private[parallel] def lastPtr_=(last: Unrolled[T]) = lastptr = last
+  private[parallel] def size_=(s: Int) = sz = s
 
   protected[this] override def newBuilder = new UnrolledBuffer[T]
+
+  protected def newUnrolled = new Unrolled[T](this)
+
+  private[collection] def calcNextLength(sz: Int) = sz
 
   def classManifestCompanion = UnrolledBuffer
 
@@ -54,7 +89,7 @@ extends collection.mutable.Buffer[T]
   }
 
   def clear() {
-    headptr = new Unrolled[T]
+    headptr = newUnrolled
     lastptr = headptr
     sz = 0
   }
@@ -113,6 +148,27 @@ extends collection.mutable.Buffer[T]
       sz += elems.size
     } else outofbounds(idx)
 
+  private def writeObject(out: java.io.ObjectOutputStream) {
+    out.defaultWriteObject
+    out.writeInt(sz)
+    for (elem <- this) out.writeObject(elem)
+  }
+
+  private def readObject(in: java.io.ObjectInputStream) {
+    in.defaultReadObject
+
+    val num = in.readInt
+
+    headPtr = newUnrolled
+    lastPtr = headPtr
+    sz = 0
+    var i = 0
+    while (i < num) {
+      this += in.readObject.asInstanceOf[T]
+      i += 1
+    }
+  }
+
   override def stringPrefix = "UnrolledBuffer"
 }
 
@@ -125,20 +181,23 @@ object UnrolledBuffer extends ClassManifestTraversableFactory[UnrolledBuffer] {
 
   val waterline = 50
   val waterlineDelim = 100
-  private[parallel] val unrolledsize = 32
+  private[parallel] val unrolledlength = 32
 
   /** Unrolled buffer node.
    */
-  class Unrolled[T: ClassManifest] private (var size: Int, var array: Array[T], var next: Unrolled[T]) {
-    def this() = this(0, new Array[T](UnrolledBuffer.unrolledsize), null)
+  class Unrolled[T: ClassManifest] private[parallel] (var size: Int, var array: Array[T], var next: Unrolled[T], val buff: UnrolledBuffer[T] = null) {
+    private[parallel] def this() = this(0, new Array[T](unrolledlength), null, null)
+    private[parallel] def this(b: UnrolledBuffer[T]) = this(0, new Array[T](unrolledlength), null, b)
+
+    private def nextlength = if (buff eq null) unrolledlength else buff.calcNextLength(array.length)
 
     // adds and returns itself or the new unrolled if full
-    @tailrec final def append(elem: T): Unrolled[T] = if (size < UnrolledBuffer.unrolledsize) {
+    @tailrec final def append(elem: T): Unrolled[T] = if (size < array.length) {
       array(size) = elem
       size += 1
       this
     } else {
-      next = new Unrolled[T]
+      next = new Unrolled[T](0, new Array[T](nextlength), null, buff)
       next.append(elem)
     }
     def foreach[U](f: T => U) {
@@ -172,7 +231,7 @@ object UnrolledBuffer extends ClassManifestTraversableFactory[UnrolledBuffer] {
     } else {
       // allocate a new node and store element
       // then make it point to this
-      val newhead = new Unrolled[T]
+      val newhead = new Unrolled[T](buff)
       newhead.append(elem)
       newhead.next = this
       newhead
@@ -216,7 +275,7 @@ object UnrolledBuffer extends ClassManifestTraversableFactory[UnrolledBuffer] {
     @tailrec final def insertAll(idx: Int, t: Traversable[T], buffer: UnrolledBuffer[T]): Unit = if (idx < size) {
       // divide this node at the appropriate position and insert all into head
       // update new next
-      val newnextnode = new Unrolled[T]
+      val newnextnode = new Unrolled[T](0, new Array(array.length), null, buff)
       Array.copy(array, idx, newnextnode.array, 0, size - idx)
       newnextnode.size = size - idx
       newnextnode.next = next
@@ -237,7 +296,7 @@ object UnrolledBuffer extends ClassManifestTraversableFactory[UnrolledBuffer] {
     private def nullout(from: Int, until: Int) {
       var idx = from
       while (idx < until) {
-        array(idx) = null.asInstanceOf[T] // !!
+        array(idx) = null.asInstanceOf[T] // TODO find a way to assign a default here!!
         idx += 1
       }
     }
@@ -251,7 +310,7 @@ object UnrolledBuffer extends ClassManifestTraversableFactory[UnrolledBuffer] {
       tryMergeWithNext()
     }
 
-    override def toString = array.take(size).mkString("Unrolled(", ", ", ")") + " -> " + (if (next ne null) next.toString else "")
+    override def toString = array.take(size).mkString("Unrolled[" + array.length + "](", ", ", ")") + " -> " + (if (next ne null) next.toString else "")
   }
 
 }

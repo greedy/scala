@@ -311,11 +311,13 @@ trait Definitions extends reflect.generic.StandardDefinitions {
       def tupleField(n: Int, j: Int) = getMember(TupleClass(n), "_" + j)
       def isTupleType(tp: Type): Boolean = isTupleType(tp, false)
       def isTupleTypeOrSubtype(tp: Type): Boolean = isTupleType(tp, true)
-      private def isTupleType(tp: Type, subtypeOK: Boolean): Boolean = cond(tp.normalize) {
-        case t @ TypeRef(_, sym, elems) =>
-          elems.length <= MaxTupleArity &&
-          (sym == TupleClass(elems.length) ||
-           subtypeOK && !tp.isHigherKinded && (t <:< TupleClass(elems.length).tpe))
+      private def isTupleType(tp: Type, subtypeOK: Boolean) = tp.normalize match {
+        case TypeRef(_, sym, args) =>
+          args.nonEmpty && args.length <= MaxTupleArity && {
+            val tsym = TupleClass(args.length)
+            (sym == tsym) || (subtypeOK && !tp.isHigherKinded && sym.isSubClass(tsym))
+          }
+        case _ => false
       }
 
       def tupleType(elems: List[Type]) =
@@ -349,10 +351,7 @@ trait Definitions extends reflect.generic.StandardDefinitions {
 
     /** if tpe <: ProductN[T1,...,TN], returns Some(T1,...,TN) else None */
     def getProductArgs(tpe: Type): Option[List[Type]] =
-      tpe.baseClasses.find(x => isExactProductType(x.tpe)) match {
-        case Some(p) => Some(tpe.baseType(p).typeArgs)
-        case _       => None
-      }
+      tpe.baseClasses collectFirst { case x if isExactProductType(x.tpe) => tpe.baseType(x).typeArgs }
 
     def unapplyUnwrap(tpe:Type) = (tpe match {
       case PolyType(_,MethodType(_, res)) => res
@@ -385,8 +384,9 @@ trait Definitions extends reflect.generic.StandardDefinitions {
 
     def isSeqType(tp: Type) = cond(tp.normalize) { case TypeRef(_, SeqClass, List(tparam)) => true }
 
-    def seqType(arg: Type)   = typeRef(SeqClass.typeConstructor.prefix, SeqClass, List(arg))
-    def arrayType(arg: Type) = typeRef(ArrayClass.typeConstructor.prefix, ArrayClass, List(arg))
+    def seqType(arg: Type)    = typeRef(SeqClass.typeConstructor.prefix, SeqClass, List(arg))
+    def arrayType(arg: Type)  = typeRef(ArrayClass.typeConstructor.prefix, ArrayClass, List(arg))
+    def byNameType(arg: Type) = appliedType(ByNameParamClass.typeConstructor, List(arg))
 
     def ClassType(arg: Type) =
       if (phase.erasedTypes || forMSIL) ClassClass.tpe

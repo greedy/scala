@@ -29,10 +29,12 @@ import scala.collection.immutable.HashSet
  *
  *  @author prokopec
  */
+@SerialVersionUID(1L)
 class ParHashSet[T] private[immutable] (private[this] val trie: HashSet[T])
 extends ParSet[T]
    with GenericParTemplate[T, ParHashSet]
    with ParSetLike[T, ParHashSet[T], HashSet[T]]
+   with Serializable
 {
 self =>
 
@@ -61,10 +63,24 @@ self =>
 
   type SCPI = SignalContextPassingIterator[ParHashSetIterator]
 
-  class ParHashSetIterator(val triter: Iterator[T], val sz: Int)
+  class ParHashSetIterator(var triter: Iterator[T], val sz: Int)
   extends super.ParIterator {
   self: SignalContextPassingIterator[ParHashSetIterator] =>
     var i = 0
+    def dup = triter match {
+      case t: HashSet.TrieIterator[_] =>
+        val dupt = t.dupIterator.asInstanceOf[Iterator[T]]
+        dupFromIterator(dupt)
+      case _ =>
+        val buff = triter.toBuffer
+        triter = buff.iterator
+        dupFromIterator(buff.iterator)
+    }
+    private def dupFromIterator(it: Iterator[T]) = {
+      val phit = new ParHashSetIterator(it, sz) with SCPI
+      phit.i = i
+      phit
+    }
     def split: Seq[ParIterator] = if (remaining < 2) Seq(this) else triter match {
       case t: HashSet.TrieIterator[_] =>
         val previousRemaining = remaining

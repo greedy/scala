@@ -49,7 +49,6 @@ self =>
   trait Transformed[+S] extends ParIterableView[S, Coll, CollSeq] with super.Transformed[S] {
     override def parallelIterator: ParIterableIterator[S]
     override def iterator = parallelIterator
-    tasksupport.environment = self.tasksupport.environment
   }
 
   trait Sliced extends super.Sliced with Transformed[T] {
@@ -117,7 +116,7 @@ self =>
 
   override def zip[U >: T, S, That](that: Iterable[S])(implicit bf: CanBuildFrom[This, (U, S), That]): That = newZippedTryParSeq(that).asInstanceOf[That]
   override def zipWithIndex[U >: T, That](implicit bf: CanBuildFrom[This, (U, Int), That]): That =
-    newZipped(new ParRange(0, parallelIterator.remaining, 1, false)).asInstanceOf[That]
+    newZipped(ParRange(0, parallelIterator.remaining, 1, false)).asInstanceOf[That]
   override def zipAll[S, U >: T, That](that: Iterable[S], thisElem: U, thatElem: S)(implicit bf: CanBuildFrom[This, (U, S), That]): That =
     newZippedAllTryParSeq(that, thisElem, thatElem).asInstanceOf[That]
 

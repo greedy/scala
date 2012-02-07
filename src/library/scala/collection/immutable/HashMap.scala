@@ -473,14 +473,25 @@ time { mNew.iterator.foreach( p => ()) }
   }
 
   class TrieIterator[A, +B](elems: Array[HashMap[A, B]]) extends Iterator[(A, B)] {
-    private[this] var depth = 0
-    private[this] var arrayStack = new Array[Array[HashMap[A,B]]](6)
-    private[this] var posStack = new Array[Int](6)
+    protected var depth = 0
+    protected var arrayStack: Array[Array[HashMap[A, B @uncheckedVariance]]] = new Array[Array[HashMap[A,B]]](6)
+    protected var posStack = new Array[Int](6)
 
-    private[this] var arrayD = elems
-    private[this] var posD = 0
+    protected var arrayD: Array[HashMap[A, B  @uncheckedVariance]] = elems
+    protected var posD = 0
 
-    private[this] var subIter: Iterator[(A, B)] = null // to traverse collision nodes
+    protected var subIter: Iterator[(A, B @uncheckedVariance)] = null // to traverse collision nodes
+
+    def dupIterator: TrieIterator[A, B] = {
+      val t = new TrieIterator(elems)
+      t.depth = depth
+      t.arrayStack = arrayStack
+      t.posStack = posStack
+      t.arrayD = arrayD
+      t.posD = posD
+      t.subIter = subIter
+      t
+    }
 
     def hasNext = (subIter ne null) || depth >= 0
 
@@ -509,16 +520,17 @@ time { mNew.iterator.foreach( p => ()) }
         posD += 1
 
       elems(i) match {
-        case m: HashTrieMap[A,B] => // push current pos onto stack and descend
+        case m: HashTrieMap[_, _] => // push current pos onto stack and descend
           if (depth >= 0) {
             arrayStack(depth) = arrayD
             posStack(depth) = posD
           }
           depth += 1
-          arrayD = m.elems
+          val elems = m.elems.asInstanceOf[Array[HashMap[A, B]]]
+          arrayD = elems
           posD = 0
-          next0(m.elems, 0)
-        case m: HashMap1[A,B] => m.ensurePair
+          next0(elems, 0)
+        case m: HashMap1[_, _] => m.ensurePair
         case m =>
           subIter = m.iterator
           subIter.next

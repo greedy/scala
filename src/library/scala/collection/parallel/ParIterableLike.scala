@@ -4,7 +4,7 @@ package scala.collection.parallel
 
 
 import scala.collection.mutable.Builder
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.ArrayBuffer
 import scala.collection.IterableLike
 import scala.collection.Parallel
 import scala.collection.Parallelizable
@@ -14,6 +14,8 @@ import scala.collection.generic._
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+
+import annotation.unchecked.uncheckedStable
 
 
 // TODO update docs!!
@@ -126,7 +128,6 @@ extends IterableLike[T, Repr]
 {
 self =>
 
-  private[collection] final val tasksupport: TaskSupport = getTaskSupport
   import tasksupport._
 
   /** Parallel iterators are split iterators that have additional accessor and
@@ -476,8 +477,7 @@ self =>
       val copythis = new Copy(() => pbf(repr), parallelIterator)
       val copythat = wrap {
         val othtask = new other.Copy(() => pbf(self.repr), other.parallelIterator)
-        othtask.compute
-        othtask.result
+        tasksupport.executeAndWaitResult(othtask)
       }
       val task = (copythis parallel copythat) { _ combine _ } mapResult {
         _.result
@@ -578,15 +578,13 @@ self =>
    *
    *  @return           a new $coll containing the prefix scan of the elements in this $coll
    */
-  def scan[U >: T, That](z: U)(op: (U, U) => U)(implicit cbf: CanCombineFrom[Repr, U, That]): That = {
-    val array = new Array[Any](size + 1)
-    array(0) = z
-    executeAndWaitResult(new BuildScanTree[U, Any](z, op, 1, size, array, parallelIterator) mapResult { st =>
-      executeAndWaitResult(new ScanWithScanTree[U, Any](Some(z), op, st, array, array) mapResult { u =>
-        executeAndWaitResult(new FromArray(array, 0, size + 1, cbf) mapResult { _.result })
+  def scan[U >: T, That](z: U)(op: (U, U) => U)(implicit cbf: CanCombineFrom[Repr, U, That]): That = if (parallelismLevel > 1) {
+    if (size > 0) executeAndWaitResult(new CreateScanTree(0, size, z, op, parallelIterator) mapResult {
+      tree => executeAndWaitResult(new FromScanTree(tree, z, op, cbf) mapResult {
+        cb => cb.result
       })
-    })
-  }
+    }) else (cbf(self.repr) += z).result
+  } else super.scanLeft(z)(op)(cbf)
 
   /** Takes the longest prefix of elements that satisfy the predicate.
    *
@@ -645,7 +643,7 @@ self =>
     executeAndWaitResult(new Zip(pbf, parallelIterator, thatseq.parallelIterator) mapResult { _.result });
   } else super.zip(that)(bf)
 
-  override def zipWithIndex[U >: T, That](implicit bf: CanBuildFrom[Repr, (U, Int), That]): That = this zip new immutable.ParRange(0, size, 1, false)
+  override def zipWithIndex[U >: T, That](implicit bf: CanBuildFrom[Repr, (U, Int), That]): That = this zip immutable.ParRange(0, size, 1, false)
 
   override def zipAll[S, U >: T, That](that: Iterable[S], thisElem: U, thatElem: S)(implicit bf: CanBuildFrom[Repr, (U, S), That]): That = if (bf.isParallel && that.isParSeq) {
     val pbf = bf.asParallel
@@ -713,13 +711,12 @@ self =>
     def shouldSplitFurther = pit.remaining > threshold(size, parallelismLevel)
     def split = pit.split.map(newSubtask(_)) // default split procedure
     private[parallel] override def signalAbort = pit.abort
-    override def toString = "Accessor(" + pit.toString + ")"
+    override def toString = this.getClass.getSimpleName + "(" + pit.toString + ")(" + result + ")"
   }
 
   protected[this] trait NonDivisibleTask[R, Tp] extends StrictSplitterCheckTask[R, Tp] {
     def shouldSplitFurther = false
     def split = throw new UnsupportedOperationException("Does not split.")
-    override def toString = "NonDivisibleTask"
   }
 
   protected[this] trait NonDivisible[R] extends NonDivisibleTask[R, NonDivisible[R]]
@@ -768,9 +765,7 @@ self =>
     var result: R1 = null.asInstanceOf[R1]
     def map(r: R): R1
     def leaf(prevr: Option[R1]) = {
-      inner.compute
-      throwable = inner.throwable
-      if (throwable eq null) result = map(inner.result)
+      result = map(executeAndWaitResult(inner))
     }
     private[parallel] override def signalAbort {
       inner.signalAbort
@@ -787,10 +782,12 @@ self =>
   }
 
   protected[this] class Count(pred: T => Boolean, protected[this] val pit: ParIterableIterator[T]) extends Accessor[Int, Count] {
+    // val pittxt = pit.toString
     var result: Int = 0
     def leaf(prevr: Option[Int]) = result = pit.count(pred)
     protected[this] def newSubtask(p: ParIterableIterator[T]) = new Count(pred, p)
     override def merge(that: Count) = result = result + that.result
+    // override def toString = "CountTask(" + pittxt + ")"
   }
 
   protected[this] class Reduce[U >: T](op: (U, U) => U, protected[this] val pit: ParIterableIterator[T]) extends Accessor[Option[U], Reduce[U]] {
@@ -901,7 +898,9 @@ self =>
   protected[this] class Filter[U >: T, This >: Repr](pred: T => Boolean, cbf: () => Combiner[U, This], protected[this] val pit: ParIterableIterator[T])
   extends Transformer[Combiner[U, This], Filter[U, This]] {
     var result: Combiner[U, This] = null
-    def leaf(prev: Option[Combiner[U, This]]) = result = pit.filter2combiner(pred, reuse(prev, cbf()))
+    def leaf(prev: Option[Combiner[U, This]]) = {
+      result = pit.filter2combiner(pred, reuse(prev, cbf()))
+    }
     protected[this] def newSubtask(p: ParIterableIterator[T]) = new Filter(pred, cbf, p)
     override def merge(that: Filter[U, This]) = result = result combine that.result
   }
@@ -909,7 +908,9 @@ self =>
   protected[this] class FilterNot[U >: T, This >: Repr](pred: T => Boolean, cbf: () => Combiner[U, This], protected[this] val pit: ParIterableIterator[T])
   extends Transformer[Combiner[U, This], FilterNot[U, This]] {
     var result: Combiner[U, This] = null
-    def leaf(prev: Option[Combiner[U, This]]) = result = pit.filterNot2combiner(pred, reuse(prev, cbf()))
+    def leaf(prev: Option[Combiner[U, This]]) = {
+      result = pit.filterNot2combiner(pred, reuse(prev, cbf()))
+    }
     protected[this] def newSubtask(p: ParIterableIterator[T]) = new FilterNot(pred, cbf, p)
     override def merge(that: FilterNot[U, This]) = result = result combine that.result
   }
@@ -1097,154 +1098,117 @@ self =>
     override def requiresStrictSplitters = true
   }
 
-  protected[this] class ScanTree[U >: T](val from: Int, val len: Int) {
-    var value: U = _
-    var left: ScanTree[U] = null
-    var right: ScanTree[U] = null
-    @volatile var chunkFinished = false
-    var activeScan: () => Unit = null
-
-    def isApplying = activeScan ne null
-    def isLeaf = (left eq null) && (right eq null)
-    def shouldApply = !chunkFinished && !isApplying
-    def applyToInterval[A >: U](elem: U, op: (U, U) => U, array: Array[A]) = {
-      //executeAndWait(new ApplyToArray(elem, op, from, len, array))
-      var i = from
-      val until = from + len
-      while (i < until) {
-        array(i) = op(elem, array(i).asInstanceOf[U])
-        i += 1
-      }
-    }
-    def scanInterval[A >: U](elem: U, op: (U, U) => U, srcA: Array[A], destA: Array[A]) = {
-      val src = srcA.asInstanceOf[Array[Any]]
-      val dest = destA.asInstanceOf[Array[Any]]
-      var last = elem
-      var i = from
-      val until = from + len
-      while (i < until) {
-        last = op(last, src(i - 1).asInstanceOf[U])
-        dest(i) = last
-        i += 1
-      }
-    }
-    def pushDown(v: U, op: (U, U) => U) {
-      value = op(v, value)
-      if (left ne null) left.pushDown(v, op)
-      if (right ne null) right.pushDown(v, op)
-    }
-    def pushDownOnRight(v: U, op: (U, U) => U) = if (right ne null) right.pushDown(v, op)
-    def printTree: Unit = printTree(0)
-    private def printTree(t: Int): Unit = {
-      for (i <- 0 until t) print(" ")
-      if (isLeaf) print("(l) ")
-      println(value + ": from " + from + " until " + (from + len))
-      if (left ne null) left.printTree(t + 1)
-      if (right ne null) right.printTree(t + 1)
-    }
-  }
-
-  protected[this] class ApplyToArray[U >: T, A >: U](elem: U, op: (U, U) => U, from: Int, len: Int, array: Array[A])
-  extends StrictSplitterCheckTask[Unit, ApplyToArray[U, A]] {
-    var result: Unit = ()
-    def leaf(prev: Option[Unit]) = {
-      var i = from
-      val until = from + len
-      while (i < until) {
-        array(i) = op(elem, array(i).asInstanceOf[U])
-        i += 1
-      }
-    }
-    def shouldSplitFurther = len > threshold(size, parallelismLevel min availableProcessors)
-    def split = {
-      val fp = len / 2
-      val sp = len - fp
-      Seq(
-        new ApplyToArray(elem, op, from, fp, array),
-        new ApplyToArray(elem, op, from + fp, sp, array)
-      )
-    }
-  }
-
-  protected[this] class BuildScanTree[U >: T, A >: U](z: U, op: (U, U) => U, val from: Int, val len: Int, array: Array[A], protected[this] val pit: ParIterableIterator[T])
-  extends Accessor[ScanTree[U], BuildScanTree[U, A]] {
-    // TODO reimplement - there are some issues here
+  protected[this] class CreateScanTree[U >: T](from: Int, len: Int, z: U, op: (U, U) => U, protected[this] val pit: ParIterableIterator[T])
+  extends Transformer[ScanTree[U], CreateScanTree[U]] {
     var result: ScanTree[U] = null
-    def leaf(prev: Option[ScanTree[U]]) = if ((prev != None && prev.get.chunkFinished) || from == 1) {
-      val prevElem = if (from == 1) z else prev.get.value
-      result = new ScanTree[U](from, len)
-      pit.scanToArray(prevElem, op, array, from)
-      result.value = array(from + len - 1).asInstanceOf[U]
-      result.chunkFinished = true
-    } else {
-      result = new ScanTree[U](from, len)
-      result.value = pit.fold(z)(op)
+    def leaf(prev: Option[ScanTree[U]]) = if (pit.remaining > 0) {
+      val trees = ArrayBuffer[ScanTree[U]]()
+      var i = from
+      val until = from + len
+      val blocksize = scanBlockSize
+      while (i < until) {
+        trees += scanBlock(i, math.min(blocksize, pit.remaining))
+        i += blocksize
+      }
+
+      // merge trees
+      result = mergeTrees(trees, 0, trees.length)
+    } else result = null // no elements to scan (merge will take care of `null`s)
+    private def scanBlock(from: Int, len: Int): ScanTree[U] = {
+      val pitdup = pit.dup
+      new ScanLeaf(pitdup, op, from, len, None, pit.reduceLeft(len, op))
     }
-    protected[this] def newSubtask(p: ParIterableIterator[T]) = unsupported
+    private def mergeTrees(trees: ArrayBuffer[ScanTree[U]], from: Int, howmany: Int): ScanTree[U] = if (howmany > 1) {
+      val half = howmany / 2
+      ScanNode(mergeTrees(trees, from, half), mergeTrees(trees, from + half, howmany - half))
+    } else trees(from)
+    protected[this] def newSubtask(pit: ParIterableIterator[T]) = unsupported
     override def split = {
       val pits = pit.split
-      for ((p, untilp) <- pits zip pits.scanLeft(0)(_ + _.remaining); if untilp < len) yield {
-        val plen = p.remaining min (len - untilp)
-        new BuildScanTree[U, A](z, op, from + untilp, plen, array, p)
+      for ((p, untilp) <- pits zip pits.scanLeft(from)(_ + _.remaining)) yield {
+        new CreateScanTree(untilp, p.remaining, z, op, p)
       }
     }
-    override def merge(that: BuildScanTree[U, A]) = {
-      // create scan tree node
-      val left = result
-      val right = that.result
-      val ns = new ScanTree[U](left.from, left.len + right.len)
-      ns.left = left
-      ns.right = right
-      ns.value = op(left.value, right.value)
-      ns.pushDownOnRight(left.value, op)
-
-      // set result
-      result = ns
-    }
+    override def merge(that: CreateScanTree[U]) = if (this.result != null) {
+      if (that.result != null) result = ScanNode(result, that.result)
+    } else result = that.result
     override def requiresStrictSplitters = true
   }
 
-  protected[this] class ScanWithScanTree[U >: T, A >: U](first: Option[U], op: (U, U) => U, st: ScanTree[U], src: Array[A], dest: Array[A])
-  extends StrictSplitterCheckTask[Unit, ScanWithScanTree[U, A]] {
-    var result = ();
-    def leaf(prev: Option[Unit]) = scan(st, first.get)
-    private def scan(st: ScanTree[U], elem: U): Unit = if (!st.chunkFinished) {
-      if (st.isLeaf) st.scanInterval(elem, op, src, dest)
-      else {
-        scan(st.left, elem)
-        scan(st.right, st.left.value)
-      }
-    }
-    def split = collection.mutable.ArrayBuffer(
-      new ScanWithScanTree(first, op, st.left, src, dest),
-      new ScanWithScanTree(Some(st.left.value), op, st.right, src, dest)
-    )
-    def shouldSplitFurther = (st.left ne null) && (st.right ne null)
-  }
-
-  protected[this] class FromArray[S, A, That](array: Array[A], from: Int, len: Int, cbf: CanCombineFrom[Repr, S, That])
-  extends StrictSplitterCheckTask[Combiner[S, That], FromArray[S, A, That]] {
-    var result: Result = null
-    def leaf(prev: Option[Result]) = {
-      val cb = prev getOrElse cbf(self.repr)
-      var i = from
-      val until = from + len
-      while (i < until) {
-        cb += array(i).asInstanceOf[S]
-        i += 1
-      }
+  protected[this] class FromScanTree[U >: T, That]
+  (tree: ScanTree[U], z: U, op: (U, U) => U, cbf: CanCombineFrom[Repr, U, That])
+  extends StrictSplitterCheckTask[Combiner[U, That], FromScanTree[U, That]] {
+    var result: Combiner[U, That] = null
+    def leaf(prev: Option[Combiner[U, That]]) {
+      val cb = reuse(prev, cbf(self.repr))
+      iterate(tree, cb)
       result = cb
     }
-    def shouldSplitFurther = len > threshold(size, parallelismLevel)
-    def split = {
-      val fp = len / 2
-      val sp = len - fp
-      Seq(
-        new FromArray(array, from, fp, cbf),
-        new FromArray(array, from + fp, sp, cbf)
-      )
+    private def iterate(tree: ScanTree[U], cb: Combiner[U, That]): Unit = tree match {
+      case ScanNode(left, right) =>
+        iterate(left, cb)
+        iterate(right, cb)
+      case ScanLeaf(p, _, _, len, Some(prev), _) =>
+        p.scanToCombiner(len, prev.acc, op, cb)
+      case ScanLeaf(p, _, _, len, None, _) =>
+        cb += z
+        p.scanToCombiner(len, z, op, cb)
     }
-    override def merge(that: FromArray[S, A, That]) = result = result combine that.result
+    def split = tree match {
+      case ScanNode(left, right) => Seq(
+        new FromScanTree(left, z, op, cbf),
+        new FromScanTree(right, z, op, cbf)
+      )
+      case _ => unsupportedop("Cannot be split further")
+    }
+    def shouldSplitFurther = tree match {
+      case ScanNode(_, _) => true
+      case ScanLeaf(_, _, _, _, _, _) => false
+    }
+    override def merge(that: FromScanTree[U, That]) = result = result combine that.result
+  }
+
+  /* scan tree */
+
+  protected[this] def scanBlockSize = (threshold(size, parallelismLevel) / 2) max 1
+
+  protected[this] trait ScanTree[U >: T] {
+    def beginsAt: Int
+    def pushdown(v: U): Unit
+    def leftmost: ScanLeaf[U]
+    def rightmost: ScanLeaf[U]
+    def print(depth: Int = 0): Unit
+  }
+
+  protected[this] case class ScanNode[U >: T](left: ScanTree[U], right: ScanTree[U]) extends ScanTree[U] {
+    right.pushdown(left.rightmost.acc)
+    right.leftmost.prev = Some(left.rightmost)
+
+    val leftmost = left.leftmost
+    val rightmost = right.rightmost
+
+    def beginsAt = left.beginsAt
+    def pushdown(v: U) {
+      left.pushdown(v)
+      right.pushdown(v)
+    }
+    def print(depth: Int) {
+      println((" " * depth) + "ScanNode, begins at " + beginsAt)
+      left.print(depth + 1)
+      right.print(depth + 1)
+    }
+  }
+
+  protected[this] case class ScanLeaf[U >: T]
+  (pit: ParIterableIterator[U], op: (U, U) => U, from: Int, len: Int, var prev: Option[ScanLeaf[U]], var acc: U)
+  extends ScanTree[U] {
+    def beginsAt = from
+    def pushdown(v: U) = {
+      acc = op(v, acc)
+    }
+    def leftmost = this
+    def rightmost = this
+    def print(depth: Int) = println((" " * depth) + this)
   }
 
   /* debug information */
@@ -1252,6 +1216,25 @@ self =>
   private[parallel] def debugInformation = "Parallel collection: " + this.getClass
 
   private[parallel] def brokenInvariants = Seq[String]()
+
+  // private val dbbuff = ArrayBuffer[String]()
+  def debugBuffer: ArrayBuffer[String] = null // dbbuff
+
+  private[parallel] def debugclear() = synchronized {
+    debugBuffer.clear
+  }
+
+  private[parallel] def debuglog(s: String) = synchronized {
+    debugBuffer += s
+  }
+
+  import collection.DebugUtils._
+  private[parallel] def printDebugBuffer = println(buildString {
+    append =>
+    for (s <- debugBuffer) {
+      append(s)
+    }
+  })
 
 }
 

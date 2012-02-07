@@ -9,7 +9,7 @@ import scala.tools.nsc.util._
 import Chars._
 import Tokens._
 import scala.annotation.switch
-import scala.collection.mutable.{ListBuffer, ArrayBuffer}
+import scala.collection.mutable.{ ListBuffer, ArrayBuffer }
 import scala.xml.Utility.{ isNameStart }
 
 /** See Parsers.scala / ParsersCommon for some explanation of ScannersCommon.
@@ -77,7 +77,9 @@ trait Scanners extends ScannersCommon {
 
     def resume(lastCode: Int) = {
       token = lastCode
-      assert(next.token == EMPTY || reporter.hasErrors)
+      if (next.token != EMPTY && !reporter.hasErrors)
+        syntaxError("unexpected end of input: possible missing '}' in XML block")
+
       nextToken()
     }
 

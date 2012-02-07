@@ -18,8 +18,8 @@ import scala.collection.parallel.ops._
 
 
 object ParallelRangeCheck extends ParallelSeqCheck[Int]("ParallelRange[Int]") with ops.IntSeqOperators {
-  ForkJoinTasks.defaultForkJoinPool.setMaximumPoolSize(Runtime.getRuntime.availableProcessors * 2)
-  ForkJoinTasks.defaultForkJoinPool.setParallelism(Runtime.getRuntime.availableProcessors * 2)
+  // ForkJoinTasks.defaultForkJoinPool.setMaximumPoolSize(Runtime.getRuntime.availableProcessors * 2)
+  // ForkJoinTasks.defaultForkJoinPool.setParallelism(Runtime.getRuntime.availableProcessors * 2)
 
   type CollType = collection.parallel.ParSeq[Int]
 
@@ -38,7 +38,7 @@ object ParallelRangeCheck extends ParallelSeqCheck[Int]("ParallelRange[Int]") wi
   }
 
   def fromSeq(a: Seq[Int]) = a match {
-    case r: Range => new ParRange(r.start, r.end, r.step, false)
+    case r: Range => ParRange(r.start, r.end, r.step, false)
     case _ =>
       val pa = new parallel.mutable.ParArray[Int](a.length)
       for (i <- 0 until a.length) pa(i) = a(i)
