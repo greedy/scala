@@ -91,11 +91,10 @@ abstract class ICodeReader extends ClassfileParser {
   }
 
   private def parseMember(field: Boolean): (Int, Symbol) = {
-    val jflags = in.nextChar
-    val name = pool.getName(in.nextChar)
-
-    val owner = getOwner(jflags)
-    val dummySym = owner.newMethod(owner.pos, name).setFlag(javaToScalaFlags(jflags))
+    val jflags   = in.nextChar
+    val name     = pool.getName(in.nextChar)
+    val owner    = getOwner(jflags)
+    val dummySym = owner.newMethod(owner.pos, name) setFlag javaToScalaFlags(jflags)
 
     try {
       val ch = in.nextChar
@@ -107,7 +106,7 @@ abstract class ICodeReader extends ClassfileParser {
         val owner = getOwner(jflags)
         var sym = owner.info.member(name).suchThat(old => sameType(old.tpe, tpe));
         if (sym == NoSymbol)
-          sym = owner.info.member(newTermName(name.toString + nme.LOCAL_SUFFIX)).suchThat(old => old.tpe =:= tpe);
+          sym = owner.info.member(newTermName(name + nme.LOCAL_SUFFIX_STRING)).suchThat(old => old.tpe =:= tpe);
         if (sym == NoSymbol) {
           log("Could not find symbol for " + name + ": " + tpe)
           log(owner.info.member(name).tpe + " : " + tpe)
@@ -177,10 +176,10 @@ abstract class ICodeReader extends ClassfileParser {
   }
 
   def parseAttribute() {
-    val attrName = pool.getName(in.nextChar)
+    val attrName = pool.getName(in.nextChar).toTypeName
     val attrLen = in.nextInt
     attrName match {
-      case nme.CodeATTR =>
+      case tpnme.CodeATTR =>
         parseByteCode()
       case _ =>
         in.skip(attrLen)
@@ -364,12 +363,12 @@ abstract class ICodeReader extends ClassfileParser {
         case JVM.pop         => code.emit(DROP(INT))   // any 1-word type would do
         case JVM.pop2        => code.emit(DROP(LONG))  // any 2-word type would do
         case JVM.dup         => code.emit(DUP(ObjectReference)) // TODO: Is the kind inside DUP ever needed?
-        case JVM.dup_x1      => code.emit(DUP_X1)      // Predef.error("Unsupported JVM bytecode: dup_x1")
-        case JVM.dup_x2      => code.emit(DUP_X2)      // Predef.error("Unsupported JVM bytecode: dup_x2")
+        case JVM.dup_x1      => code.emit(DUP_X1)      // system.error("Unsupported JVM bytecode: dup_x1")
+        case JVM.dup_x2      => code.emit(DUP_X2)      // system.error("Unsupported JVM bytecode: dup_x2")
         case JVM.dup2        => code.emit(DUP(LONG))   // TODO: Is the kind inside DUP ever needed?
-        case JVM.dup2_x1     => code.emit(DUP2_X1)     // Predef.error("Unsupported JVM bytecode: dup2_x1")
-        case JVM.dup2_x2     => code.emit(DUP2_X2)     // Predef.error("Unsupported JVM bytecode: dup2_x2")
-        case JVM.swap        => Predef.error("Unsupported JVM bytecode: swap")
+        case JVM.dup2_x1     => code.emit(DUP2_X1)     // system.error("Unsupported JVM bytecode: dup2_x1")
+        case JVM.dup2_x2     => code.emit(DUP2_X2)     // system.error("Unsupported JVM bytecode: dup2_x2")
+        case JVM.swap        => system.error("Unsupported JVM bytecode: swap")
 
         case JVM.iadd        => code.emit(CALL_PRIMITIVE(Arithmetic(ADD, INT)))
         case JVM.ladd        => code.emit(CALL_PRIMITIVE(Arithmetic(ADD, LONG)))
@@ -456,8 +455,8 @@ abstract class ICodeReader extends ClassfileParser {
         case JVM.if_acmpne   => code.emit(LCJUMP(parseJumpTarget, pc + size, NE, ObjectReference))
 
         case JVM.goto        => emit(LJUMP(parseJumpTarget))
-        case JVM.jsr         => Predef.error("Cannot handle jsr/ret")
-        case JVM.ret         => Predef.error("Cannot handle jsr/ret")
+        case JVM.jsr         => system.error("Cannot handle jsr/ret")
+        case JVM.ret         => system.error("Cannot handle jsr/ret")
         case JVM.tableswitch =>
           val padding = if ((pc + size) % 4 != 0) 4 - ((pc + size) % 4) else 0
           size += padding
@@ -582,14 +581,14 @@ abstract class ICodeReader extends ClassfileParser {
             case JVM.fstore => code.emit(STORE_LOCAL(code.getLocal(in.nextChar, FLOAT)));  size += 2
             case JVM.dstore => code.emit(STORE_LOCAL(code.getLocal(in.nextChar, DOUBLE))); size += 2
             case JVM.astore => code.emit(STORE_LOCAL(code.getLocal(in.nextChar, ObjectReference))); size += 2
-            case JVM.ret => Predef.error("Cannot handle jsr/ret")
+            case JVM.ret => system.error("Cannot handle jsr/ret")
             case JVM.iinc =>
               size += 4
               val local = code.getLocal(in.nextChar, INT)
               code.emit(CONSTANT(Constant(in.nextChar)))
               code.emit(CALL_PRIMITIVE(Arithmetic(ADD, INT)))
               code.emit(STORE_LOCAL(local))
-            case _ => Predef.error("Invalid 'wide' operand")
+            case _ => system.error("Invalid 'wide' operand")
           }
 
         case JVM.multianewarray =>
@@ -602,9 +601,9 @@ abstract class ICodeReader extends ClassfileParser {
         case JVM.ifnull    => code.emit(LCZJUMP(parseJumpTarget, pc + size, EQ, ObjectReference))
         case JVM.ifnonnull => code.emit(LCZJUMP(parseJumpTarget, pc + size, NE, ObjectReference))
         case JVM.goto_w    => code.emit(LJUMP(parseJumpTargetW))
-        case JVM.jsr_w     => Predef.error("Cannot handle jsr/ret")
+        case JVM.jsr_w     => system.error("Cannot handle jsr/ret")
 
-//        case _ => Predef.error("Unknown bytecode")
+//        case _ => system.error("Unknown bytecode")
       }
       pc += size
     }
@@ -970,13 +969,13 @@ abstract class ICodeReader extends ClassfileParser {
 
       def checkValidIndex {
         locals.get(idx - 1) match {
-          case Some(others) if ((others find { x => x._1 == LONG || x._1 == DOUBLE}) != None) =>
-            error("Illegal index: " + idx + " points in the middle of another local")
+          case Some(others) if others exists (_._2.isWideType) =>
+            global.globalError("Illegal index: " + idx + " points in the middle of another local")
           case _ => ()
         }
         kind match {
           case LONG | DOUBLE if (locals.isDefinedAt(idx + 1)) =>
-            error("Illegal index: " + idx + " overlaps " + locals(idx + 1))
+            global.globalError("Illegal index: " + idx + " overlaps " + locals(idx + 1))
           case _ => ()
         }
       }

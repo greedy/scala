@@ -12,7 +12,7 @@ package scala.collection
 package immutable
 
 import generic._
-import mutable.{ Builder, AddingBuilder }
+import mutable.{ Builder, SetBuilder }
 
 /** $factoryInfo
  *  @define Coll immutable.TreeSet
@@ -21,7 +21,7 @@ import mutable.{ Builder, AddingBuilder }
 object TreeSet extends ImmutableSortedSetFactory[TreeSet] {
   implicit def implicitBuilder[A](implicit ordering: Ordering[A]): Builder[A, TreeSet[A]] = newBuilder[A](ordering)
   override def newBuilder[A](implicit ordering: Ordering[A]): Builder[A, TreeSet[A]] =
-    new AddingBuilder(empty[A](ordering))
+    new SetBuilder(empty[A](ordering))
 
   /** The empty set of this type
    */
@@ -43,10 +43,10 @@ object TreeSet extends ImmutableSortedSetFactory[TreeSet] {
  *  @define mayNotTerminateInf
  *  @define willNotTerminateInf
  */
-@serializable @SerialVersionUID(-234066569443569402L)
+@SerialVersionUID(-234066569443569402L)
 class TreeSet[A](override val size: Int, t: RedBlack[A]#Tree[Unit])
                 (implicit val ordering: Ordering[A])
-  extends RedBlack[A] with SortedSet[A] with SortedSetLike[A, TreeSet[A]] {
+  extends RedBlack[A] with SortedSet[A] with SortedSetLike[A, TreeSet[A]] with Serializable {
 
   override def stringPrefix = "TreeSet"
 

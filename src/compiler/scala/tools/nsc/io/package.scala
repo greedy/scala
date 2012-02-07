@@ -5,7 +5,7 @@
 
 package scala.tools.nsc
 
-import java.util.concurrent.{ Future, Callable, Executors }
+import java.util.concurrent.{ Future, Callable, Executors, ThreadFactory }
 import java.util.{ Timer, TimerTask }
 
 package object io {
@@ -16,6 +16,17 @@ package object io {
   def runnableFn(f: () => Unit): Runnable     = runnable(f())
   def callableFn[T](f: () => T): Callable[T]  = callable(f())
   def spawnFn[T](f: () => T): Future[T]       = spawn(f())
+
+  def newConfiguredExecutor(f: Thread => Unit) = {
+    Executors.newCachedThreadPool(new ThreadFactory {
+      def newThread(r: Runnable) = {
+        val t = Executors.defaultThreadFactory().newThread(r)
+        f(t)
+        t
+      }
+    })
+  }
+  def newDaemonThreadExecutor() = newConfiguredExecutor(_ setDaemon true)
 
   // Create, start, and return a background thread
   // If isDaemon is true, it is marked as daemon (and will not interfere with JVM shutdown)

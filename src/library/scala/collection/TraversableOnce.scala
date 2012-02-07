@@ -9,6 +9,7 @@
 package scala.collection
 
 import mutable.{ Buffer, ListBuffer, ArrayBuffer }
+import annotation.unchecked.{ uncheckedVariance => uV }
 
 /** A template trait for collections which can be traversed either once only
  *  or one or more times.
@@ -88,7 +89,6 @@ trait TraversableOnce[+A] {
   def exists(p: A => Boolean): Boolean
   def find(p: A => Boolean): Option[A]
   def copyToArray[B >: A](xs: Array[B], start: Int, len: Int): Unit
-  // def mapFind[B](f: A => Option[B]): Option[B]
 
   // for internal use
   protected[this] def reversed = {
@@ -126,6 +126,25 @@ trait TraversableOnce[+A] {
       if (p(x)) cnt += 1
 
     cnt
+  }
+
+  /** Finds the first element of the $coll for which the given partial
+   *  function is defined, and applies the partial function to it.
+   *
+   *  $mayNotTerminateInf
+   *  $orderDependent
+   *
+   *  @param pf   the partial function
+   *  @return     an option value containing pf applied to the first
+   *              value for which it is defined, or `None` if none exists.
+   *  @example   `Seq("a", 1, 5L).collectFirst({ case x: Int => x*10 }) = Some(10)`
+   */
+  def collectFirst[B](pf: PartialFunction[A, B]): Option[B] = {
+    for (x <- self.toIterator) {
+      if (pf isDefinedAt x)
+        return Some(pf(x))
+    }
+    None
   }
 
   /** Applies a binary operator to a start value and all elements of this $coll,
@@ -350,6 +369,19 @@ trait TraversableOnce[+A] {
     reduceLeft((x, y) => if (cmp.gteq(x, y)) x else y)
   }
 
+  def maxBy[B](f: A => B)(implicit cmp: Ordering[B]): A = {
+    if (isEmpty)
+      throw new UnsupportedOperationException("empty.maxBy")
+
+    reduceLeft((x, y) => if (cmp.gteq(f(x), f(y))) x else y)
+  }
+  def minBy[B](f: A => B)(implicit cmp: Ordering[B]): A = {
+    if (isEmpty)
+      throw new UnsupportedOperationException("empty.maxBy")
+
+    reduceLeft((x, y) => if (cmp.lteq(f(x), f(y))) x else y)
+  }
+
   /** Copies all elements of this $coll to a buffer.
    *  $willNotTerminateInf
    *  @param  dest   The buffer to which elements are copied.
@@ -469,6 +501,40 @@ trait TraversableOnce[+A] {
     b.result
   }
 
+  /* The following 4 methods are implemented in a generic way here,
+   * but are specialized further down the hierarchy where possible.
+   * In particular:
+   *
+   * - all concrete sequential collection classes that can be
+   *   parallelized have their corresponding `toPar*` methods
+   *   overridden (e.g. ArrayBuffer overrides `toParIterable`
+   *   and `toParSeq`)
+   * - ParIterableLike overrides all 4 methods
+   * - ParSeqLike again overrides `toParSeq`
+   * - ParSetLike again overrides `toParSet`
+   * - ParMapLike again overrides `toParMap`
+   */
+
+  def toParIterable: parallel.ParIterable[A] = toParSeq
+
+  def toParSeq: parallel.ParSeq[A] = {
+    val cb = parallel.mutable.ParArray.newCombiner[A]
+    for (elem <- this) cb += elem
+    cb.result
+  }
+
+  def toParSet[B >: A]: parallel.ParSet[B] = {
+    val cb = parallel.mutable.ParHashSet.newCombiner[B]
+    for (elem <- this) cb += elem
+    cb.result
+  }
+
+  def toParMap[T, U](implicit ev: A <:< (T, U)): parallel.ParMap[T, U] = {
+    val cb = parallel.mutable.ParHashMap.newCombiner[T, U]
+    for (elem <- this) cb += elem
+    cb.result
+  }
+
   /** Displays all elements of this $coll in a string using start, end, and
    *  separator strings.
    *
@@ -557,3 +623,45 @@ trait TraversableOnce[+A] {
    */
   def addString(b: StringBuilder): StringBuilder = addString(b, "")
 }
+
+object TraversableOnce {
+  implicit def traversableOnceCanBuildFrom[T]: TraversableOnceCanBuildFrom[T] =
+    new TraversableOnceCanBuildFrom[T]
+
+  implicit def wrapTraversableOnce[A](trav: TraversableOnce[A]): TraversableOnceMonadOps[A] =
+    new TraversableOnceMonadOps(trav)
+
+  implicit def flattenTraversableOnce[A](travs: TraversableOnce[TraversableOnce[A]]): TraversableOnceFlattenOps[A] =
+    new TraversableOnceFlattenOps[A](travs)
+
+  /** With the advent of TraversableOnce, it can be useful to have a builder which
+   *  operates on Iterators so they can be treated uniformly along with the collections.
+   *  See scala.util.Random.shuffle for an example.
+   */
+  class TraversableOnceCanBuildFrom[A] extends generic.CanBuildFrom[TraversableOnce[A], A, TraversableOnce[A]] {
+    def newIterator = new ArrayBuffer[A] mapResult (_.iterator)
+
+    /** Creates a new builder on request of a collection.
+     *  @param from  the collection requesting the builder to be created.
+     *  @return the result of invoking the `genericBuilder` method on `from`.
+     */
+    def apply(from: TraversableOnce[A]) = newIterator
+
+    /** Creates a new builder from scratch
+     *  @return the result of invoking the `newBuilder` method of this factory.
+     */
+    def apply() = newIterator
+  }
+
+  class TraversableOnceFlattenOps[A](travs: TraversableOnce[TraversableOnce[A]]) {
+    def flatten: Iterator[A] = travs.foldLeft(Iterator.empty: Iterator[A])(_ ++ _)
+  }
+
+  class TraversableOnceMonadOps[+A](trav: TraversableOnce[A]) {
+    def map[B](f: A => B): TraversableOnce[B] = trav.toIterator map f
+    def flatMap[B](f: A => TraversableOnce[B]): TraversableOnce[B] = trav.toIterator flatMap f
+    def withFilter(p: A => Boolean) = trav.toIterator filter p
+    def filter(p: A => Boolean): TraversableOnce[A] = withFilter(p)
+  }
+}
+

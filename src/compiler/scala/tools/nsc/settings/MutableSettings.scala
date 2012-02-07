@@ -107,20 +107,36 @@ class MutableSettings(val errorFn: String => Unit) extends AbsSettings with Scal
       // any non-Nil return value means failure and we return s unmodified
       tryToSetIfExists(p, args split "," toList, (s: Setting) => s.tryToSetColon _)
     }
-    // if arg is of form -Dfoo=bar or -Dfoo (name = "-D")
-    def isPropertyArg(s: String) = lookupSetting(s take 2) match {
-      case Some(x: DefinesSetting)  => true
-      case _                        => false
-    }
-    def parsePropertyArg(s: String): Option[List[String]] = {
-      val (p, args) = (s take 2, s drop 2)
-
-      tryToSetIfExists(p, List(args), (s: Setting) => s.tryToSetProperty _)
-    }
 
     // if arg is of form -Xfoo or -Xfoo bar (name = "-Xfoo")
     def parseNormalArg(p: String, args: List[String]): Option[List[String]] =
       tryToSetIfExists(p, args, (s: Setting) => s.tryToSet _)
+
+    def getMainClass(jarName: String): Option[String] = {
+      import java.io._, java.util.jar._
+      try {
+        val in = new JarInputStream(new FileInputStream(jarName))
+        val mf = in.getManifest
+        val res = if (mf != null) {
+          val name = mf.getMainAttributes getValue Attributes.Name.MAIN_CLASS
+          if (name != null) Some(name)
+          else {
+            errorFn("Unable to get attribute 'Main-Class' from jarfile "+jarName)
+            None
+          }
+        } else {
+          errorFn("Unable to find manifest in jarfile "+jarName)
+          None
+        }
+        in.close()
+        res
+      } catch {
+        case e: FileNotFoundException =>
+          errorFn("Unable to access jarfile "+jarName); None
+        case e: IOException =>
+          errorFn(e.getMessage); None
+      }
+    }
 
     def doArgs(args: List[String]): List[String] = {
       if (args.isEmpty) return Nil
@@ -137,6 +153,16 @@ class MutableSettings(val errorFn: String => Unit) extends AbsSettings with Scal
         errorFn("'-' is not a valid argument.")
         args
       }
+      else if (arg == "-jar") {
+        parseNormalArg("-cp", rest) match {
+          case Some(xs) =>
+            getMainClass(rest.head) match {
+              case Some(mainClass) => mainClass :: xs
+              case None => args
+            }
+          case None     => args
+        }
+      }
       else
         // we dispatch differently based on the appearance of p:
         // 1) If it has a : it is presumed to be -Xfoo:bar,baz
@@ -145,11 +171,7 @@ class MutableSettings(val errorFn: String => Unit) extends AbsSettings with Scal
         //
         // Internally we use Option[List[String]] to discover error,
         // but the outside expects our arguments back unchanged on failure
-        if (isPropertyArg(arg)) parsePropertyArg(arg) match {
-          case Some(_)  => rest
-          case None     => args
-        }
-        else if (arg contains ":") parseColonArg(arg) match {
+        if (arg contains ":") parseColonArg(arg) match {
           case Some(_)  => rest
           case None     => args
         }
@@ -196,21 +218,20 @@ class MutableSettings(val errorFn: String => Unit) extends AbsSettings with Scal
   }
 
   def BooleanSetting(name: String, descr: String) = add(new BooleanSetting(name, descr))
-  def ChoiceSetting(name: String, descr: String, choices: List[String], default: String) =
-    add(new ChoiceSetting(name, descr, choices, default))
-  def DefinesSetting() = add(new DefinesSetting())
+  def ChoiceSetting(name: String, helpArg: String, descr: String, choices: List[String], default: String) =
+    add(new ChoiceSetting(name, helpArg, descr, choices, default))
   def IntSetting(name: String, descr: String, default: Int, range: Option[(Int, Int)], parser: String => Option[Int]) = add(new IntSetting(name, descr, default, range, parser))
   def MultiStringSetting(name: String, arg: String, descr: String) = add(new MultiStringSetting(name, arg, descr))
   def OutputSetting(outputDirs: OutputDirs, default: String) = add(new OutputSetting(outputDirs, default))
   def PhasesSetting(name: String, descr: String) = add(new PhasesSetting(name, descr))
   def StringSetting(name: String, arg: String, descr: String, default: String) = add(new StringSetting(name, arg, descr, default))
-  def PathSetting(name: String, arg: String, descr: String, default: String): PathSetting = {
+  def PathSetting(name: String, descr: String, default: String): PathSetting = {
     val prepend = new StringSetting(name + "/p", "", "", "") with InternalSetting
     val append = new StringSetting(name + "/a", "", "", "") with InternalSetting
 
     add[StringSetting](prepend)
     add[StringSetting](append)
-    add(new PathSetting(name, arg, descr, default, prepend, append))
+    add(new PathSetting(name, descr, default, prepend, append))
   }
 
   // basically this is a value which remembers if it's been modified
@@ -453,12 +474,11 @@ class MutableSettings(val errorFn: String => Unit) extends AbsSettings with Scal
 
   class PathSetting private[nsc](
     name: String,
-    arg: String,
     descr: String,
     default: String,
     prependPath: StringSetting,
     appendPath: StringSetting)
-  extends StringSetting(name, arg, descr, default) {
+  extends StringSetting(name, "path", descr, default) {
     import util.ClassPath.join
     def prepend(s: String) = prependPath.value = join(s, prependPath.value)
     def append(s: String) = appendPath.value = join(appendPath.value, s)
@@ -511,19 +531,19 @@ class MutableSettings(val errorFn: String => Unit) extends AbsSettings with Scal
    */
   class ChoiceSetting private[nsc](
     name: String,
+    helpArg: String,
     descr: String,
     override val choices: List[String],
     val default: String)
-  extends Setting(name, descr + choices.mkString(" (", ",", ")")) {
+  extends Setting(name, descr + choices.mkString(" (", ",", ") default:" + default)) {
     type T = String
     protected var v: String = default
-    protected def argument: String = name drop 1
     def indexOfChoice: Int = choices indexOf value
 
     def tryToSet(args: List[String]) = { value = default ; Some(args) }
 
     override def tryToSetColon(args: List[String]) = args match {
-      case Nil                            => errorAndValue("missing " + argument, None)
+      case Nil                            => errorAndValue("missing " + helpArg, None)
       case List(x) if choices contains x  => value = x ; Some(Nil)
       case List(x)                        => errorAndValue("'" + x + "' is not a valid choice for '" + name + "'", None)
       case xs                             => errorAndValue("'" + name + "' does not accept multiple arguments.", None)
@@ -531,7 +551,7 @@ class MutableSettings(val errorFn: String => Unit) extends AbsSettings with Scal
     def unparse: List[String] =
       if (value == default) Nil else List(name + ":" + value)
 
-    withHelpSyntax(name + ":<" + argument + ">")
+    withHelpSyntax(name + ":<" + helpArg + ">")
   }
 
   /** A setting represented by a list of strings which should be prefixes of
@@ -542,10 +562,33 @@ class MutableSettings(val errorFn: String => Unit) extends AbsSettings with Scal
   class PhasesSetting private[nsc](
     name: String,
     descr: String)
-  extends Setting(name, descr + " <phase> or \"all\"") {
+  extends Setting(name, descr + " <phase>.") {
     type T = List[String]
     protected var v: List[String] = Nil
     override def value = if (v contains "all") List("all") else super.value
+    private lazy val (numericValues, stringValues) =
+      value partition (_ forall (ch => ch.isDigit || ch == '-'))
+
+    /** A little ad-hoc parsing.  If a string is not the name of a phase, it can also be:
+     *    a phase id: 5
+     *    a phase id range: 5-10 (inclusive of both ends)
+     *    a range with no start: -5 means up to and including 5
+     *    a range with no end: 10- means 10 until completion.
+     */
+    private def stringToPhaseIdTest(s: String): Int => Boolean = (s indexOf '-') match {
+      case -1  => (_ == s.toInt)
+      case 0   => (_ <= s.tail.toInt)
+      case idx =>
+        if (s.last == '-') (_ >= s.init.toInt)
+        else (s splitAt idx) match {
+          case (s1, s2) => (id => id >= s1.toInt && id <= s2.tail.toInt)
+        }
+    }
+    private lazy val phaseIdTest: Int => Boolean =
+      (numericValues map stringToPhaseIdTest) match {
+        case Nil    => _ => false
+        case fns    => fns.reduceLeft((f1, f2) => id => f1(id) || f2(id))
+      }
 
     def tryToSet(args: List[String]) = errorAndValue("missing phase", None)
     override def tryToSetColon(args: List[String]) = args match {
@@ -554,47 +597,14 @@ class MutableSettings(val errorFn: String => Unit) extends AbsSettings with Scal
     }
     // we slightly abuse the usual meaning of "contains" here by returning
     // true if our phase list contains "all", regardless of the incoming argument
-    def contains(phasename: String): Boolean =
-      doAllPhases || (value exists { phasename startsWith _ } )
+    def contains(phName: String)     = doAllPhases || containsName(phName)
+    def containsName(phName: String) = stringValues exists (phName startsWith _)
+    def containsId(phaseId: Int)     = phaseIdTest(phaseId)
+    def containsPhase(ph: Phase)     = contains(ph.name) || containsId(ph.id)
 
-    def doAllPhases() = value contains "all"
-    def unparse: List[String] = value map { name + ":" + _ }
+    def doAllPhases = stringValues contains "all"
+    def unparse: List[String] = value map (name + ":" + _)
 
     withHelpSyntax(name + ":<phase>")
-  }
-
-  /** A setting for a -D style property definition */
-  class DefinesSetting private[nsc] extends Setting("-D", "set a Java property") {
-    type T = List[(String, String)]
-    protected var v: T = Nil
-    withHelpSyntax(name + "<prop>")
-
-    // given foo=bar returns Some(foo, bar), or None if parse fails
-    def parseArg(s: String): Option[(String, String)] = {
-      if (s == "") return None
-      val idx = s indexOf '='
-
-      if (idx < 0) Some(s, "")
-      else Some(s take idx, s drop (idx + 1))
-    }
-
-    protected[nsc] override def tryToSetProperty(args: List[String]): Option[List[String]] =
-      tryToSet(args)
-
-    def tryToSet(args: List[String]) =
-      if (args.isEmpty) None
-      else parseArg(args.head) match {
-        case None         => None
-        case Some((a, b)) => value = value ++ List((a, b)) ; Some(args.tail)
-      }
-
-    def unparse: List[String] =
-      value map { case (k,v) => "-D" + k + (if (v == "") "" else "=" + v) }
-
-    /** Apply the specified properties to the current JVM and returns them. */
-    def applyToJVM() = {
-      value foreach { case (k, v) => System.getProperties.setProperty(k, v) }
-      value
-    }
   }
 }

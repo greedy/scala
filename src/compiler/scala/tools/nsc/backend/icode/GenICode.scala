@@ -122,7 +122,7 @@ abstract class GenICode extends SubComponent  {
             case Block(_, Return(_)) => ()
             case Return(_) => ()
             case EmptyTree =>
-              error("Concrete method has no definition: " + tree)
+              globalError("Concrete method has no definition: " + tree)
             case _ => if (ctx1.bb.isEmpty)
               ctx1.bb.closeWith(RETURN(m.returnType), rhs.pos)
             else
@@ -1771,7 +1771,7 @@ abstract class GenICode extends SubComponent  {
         val sym = t.symbol
         def getLabel(pos: Position, name: Name) =
           labels.getOrElseUpdate(sym,
-            method.newLabel(sym.pos, unit.fresh.newName(name.toString)) setInfo sym.tpe
+            method.newLabel(sym.pos, unit.freshTermName(name.toString)) setInfo sym.tpe
           )
 
         t match {
@@ -1800,15 +1800,11 @@ abstract class GenICode extends SubComponent  {
 
     /////////////////////// Context ////////////////////////////////
 
-    abstract class Cleanup;
-    case class MonitorRelease(m: Local) extends Cleanup {
-      override def hashCode = m.hashCode
-      override def equals(other: Any) = m == other;
+    abstract class Cleanup(val value: AnyRef) {
+      def contains(x: AnyRef) = value == x
     }
-    case class Finalizer(f: Tree) extends Cleanup {
-      override def hashCode = f.hashCode
-      override def equals(other: Any) = f == other;
-    }
+    case class MonitorRelease(m: Local) extends Cleanup(m) { }
+    case class Finalizer(f: Tree) extends Cleanup (f) { }
 
     def duplicateFinalizer(boundLabels: Set[Symbol], targetCtx: Context, finalizer: Tree) =  {
       (new DuplicateLabels(boundLabels))(targetCtx, finalizer)
@@ -1917,7 +1913,7 @@ abstract class GenICode extends SubComponent  {
       }
 
       def exitSynchronized(monitor: Local): this.type = {
-        assert(cleanups.head == monitor,
+        assert(cleanups.head contains monitor,
                "Bad nesting of cleanup operations: " + cleanups + " trying to exit from monitor: " + monitor)
         cleanups = cleanups.tail
         this
@@ -1929,7 +1925,7 @@ abstract class GenICode extends SubComponent  {
       }
 
       def removeFinalizer(f: Tree): this.type = {
-        assert(cleanups.head == f,
+        assert(cleanups.head contains f,
                "Illegal nesting of cleanup operations: " + cleanups + " while exiting finalizer " + f);
         cleanups = cleanups.tail
         this
@@ -2028,7 +2024,7 @@ abstract class GenICode extends SubComponent  {
 
       /** Make a fresh local variable. It ensures the 'name' is unique. */
       def makeLocal(pos: Position, tpe: Type, name: String): Local = {
-        val sym = method.symbol.newVariable(pos, unit.fresh.newName(name))
+        val sym = method.symbol.newVariable(pos, unit.freshTermName(name))
           .setInfo(tpe)
           .setFlag(Flags.SYNTHETIC)
         this.method.addLocal(new Local(sym, toTypeKind(tpe), false))

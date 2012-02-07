@@ -40,6 +40,7 @@ extends IterableView[T, Coll]
    with ParIterableLike[T, This, ThisSeq]
 {
 self =>
+  import tasksupport._
 
   override protected[this] def newCombiner: Combiner[T, This] = throw new UnsupportedOperationException(this + ".newCombiner");
 
@@ -48,7 +49,7 @@ self =>
   trait Transformed[+S] extends ParIterableView[S, Coll, CollSeq] with super.Transformed[S] {
     override def parallelIterator: ParIterableIterator[S]
     override def iterator = parallelIterator
-    environment = self.environment
+    tasksupport.environment = self.tasksupport.environment
   }
 
   trait Sliced extends super.Sliced with Transformed[T] {
@@ -112,7 +113,7 @@ self =>
     val (pref, suff) = thisParSeq.span(p)
     (newForced(pref).asInstanceOf[This], newForced(suff).asInstanceOf[This])
   }
-  override def flatMap[S, That](f: T => Traversable[S])(implicit bf: CanBuildFrom[This, S, That]): That = newForced(thisParSeq.flatMap(f)).asInstanceOf[That]
+  override def flatMap[S, That](f: T => TraversableOnce[S])(implicit bf: CanBuildFrom[This, S, That]): That = newForced(thisParSeq.flatMap(f)).asInstanceOf[That]
 
   override def zip[U >: T, S, That](that: Iterable[S])(implicit bf: CanBuildFrom[This, (U, S), That]): That = newZippedTryParSeq(that).asInstanceOf[That]
   override def zipWithIndex[U >: T, That](implicit bf: CanBuildFrom[This, (U, Int), That]): That =
@@ -121,7 +122,7 @@ self =>
     newZippedAllTryParSeq(that, thisElem, thatElem).asInstanceOf[That]
 
   override def force[U >: T, That](implicit bf: CanBuildFrom[Coll, U, That]) = bf ifParallel { pbf =>
-    executeAndWaitResult(new Force(pbf, parallelIterator) mapResult { _.result })
+    executeAndWaitResult(new Force(pbf, parallelIterator).mapResult(_.result).asInstanceOf[Task[That, ResultMapping[_, Force[U, That], That]]])
   } otherwise {
     val b = bf(underlying)
     b ++= this.iterator
@@ -136,7 +137,7 @@ self =>
   protected override def newAppended[U >: T](that: Traversable[U]): Transformed[U] = new Appended[U] { val rest = that }
   protected override def newDroppedWhile(p: T => Boolean) = unsupported
   protected override def newTakenWhile(p: T => Boolean) = unsupported
-  protected override def newFlatMapped[S](f: T => Traversable[S]) = unsupported
+  protected override def newFlatMapped[S](f: T => TraversableOnce[S]) = unsupported
   protected override def newFiltered(p: T => Boolean) = unsupported
   protected override def newZipped[S](that: Iterable[S]): Transformed[(T, S)] = new Zipped[S] { val other = that }
   protected override def newZippedAll[U >: T, S](that: Iterable[S], _thisElem: U, _thatElem: S): Transformed[(U, S)] = new ZippedAll[U, S] {

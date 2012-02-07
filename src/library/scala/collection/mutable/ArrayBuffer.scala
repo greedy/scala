@@ -40,7 +40,7 @@ import parallel.mutable.ParArray
  *  @define mayNotTerminateInf
  *  @define willNotTerminateInf
  */
-@serializable @SerialVersionUID(1529165946227428979L)
+@SerialVersionUID(1529165946227428979L)
 class ArrayBuffer[A](override protected val initialSize: Int)
   extends Buffer[A]
      with GenericTraversableTemplate[A, ArrayBuffer]
@@ -48,7 +48,8 @@ class ArrayBuffer[A](override protected val initialSize: Int)
      with IndexedSeqOptimized[A, ArrayBuffer[A]]
      with Builder[A, ArrayBuffer[A]]
      with ResizableArray[A]
-     with Parallelizable[ParArray[A]] {
+     with Parallelizable[ParArray[A]]
+     with Serializable {
 
   override def companion: GenericCompanion[ArrayBuffer] = ArrayBuffer
 
@@ -175,6 +176,11 @@ class ArrayBuffer[A](override protected val initialSize: Int)
   /** Defines the prefix of the string representation.
    */
   override def stringPrefix: String = "ArrayBuffer"
+
+  override def toParIterable = par
+
+  override def toParSeq = par
+
 }
 
 /** Factory object for the `ArrayBuffer` class.

@@ -30,11 +30,12 @@ import collection.parallel.immutable.ParHashSet
  *  @define Coll immutable.HashSet
  *  @define coll immutable hash set
  */
-@serializable @SerialVersionUID(2L)
+@SerialVersionUID(2L)
 class HashSet[A] extends Set[A]
                     with GenericSetTemplate[A, HashSet]
                     with SetLike[A, HashSet[A]]
                     with Parallelizable[ParHashSet[A]]
+                    with Serializable
 {
   override def companion: GenericCompanion[HashSet] = HashSet
 
@@ -80,6 +81,11 @@ class HashSet[A] extends Set[A]
   protected def removed0(key: A, hash: Int, level: Int): HashSet[A] = this
 
   protected def writeReplace(): AnyRef = new HashSet.SerializationProxy(this)
+
+  override def toParIterable = par
+
+  override def toParSet[B >: A] = par.asInstanceOf[ParHashSet[B]]
+
 }
 
 /** $factoryInfo
@@ -162,12 +168,12 @@ object HashSet extends ImmutableSetFactory[HashSet] {
       // hash codes and remove the collision. however this is never called
       // because no references to this class are ever handed out to client code
       // and HashTrieSet serialization takes care of the situation
-      error("cannot serialize an immutable.HashSet where all items have the same 32-bit hash code")
+      system.error("cannot serialize an immutable.HashSet where all items have the same 32-bit hash code")
       //out.writeObject(kvs)
     }
 
     private def readObject(in: java.io.ObjectInputStream) {
-      error("cannot deserialize an immutable.HashSet where all items have the same 32-bit hash code")
+      system.error("cannot deserialize an immutable.HashSet where all items have the same 32-bit hash code")
       //kvs = in.readObject().asInstanceOf[ListSet[A]]
       //hash = computeHash(kvs.)
     }
@@ -392,7 +398,7 @@ time { mNew.iterator.foreach( p => ()) }
             val arr: Array[HashSet[A]] = arrayD(posD) match {
               case c: HashSetCollision1[a] => collisionToArray(c).asInstanceOf[Array[HashSet[A]]]
               case ht: HashTrieSet[_] => ht.asInstanceOf[HashTrieSet[A]].elems
-              case _ => error("cannot divide single element")
+              case _ => system.error("cannot divide single element")
             }
             arrayToIterators(arr)
           } else {
@@ -407,7 +413,7 @@ time { mNew.iterator.foreach( p => ()) }
     }
   }
 
-  @serializable  @SerialVersionUID(2L) private class SerializationProxy[A,B](@transient private var orig: HashSet[A]) {
+  @SerialVersionUID(2L) private class SerializationProxy[A,B](@transient private var orig: HashSet[A]) extends Serializable {
     private def writeObject(out: java.io.ObjectOutputStream) {
       val s = orig.size
       out.writeInt(s)

@@ -66,7 +66,7 @@ abstract class SymbolLoaders {
           ok = false
           if (settings.debug.value) ex.printStackTrace()
           val msg = ex.getMessage()
-          error(
+          globalError(
             if (msg eq null) "i/o error while loading " + root.name
             else "error while loading " + root.name + ", " + msg);
       }
@@ -109,9 +109,8 @@ abstract class SymbolLoaders {
 
     def enterClassAndModule(root: Symbol, name: String, completer: SymbolLoader) {
       val owner = if (root.isRoot) definitions.EmptyPackageClass else root
-      val className = newTermName(name)
       assert(owner.info.decls.lookup(name) == NoSymbol, owner.fullName + "." + name)
-      val clazz = owner.newClass(NoPosition, name.toTypeName)
+      val clazz = owner.newClass(NoPosition, newTypeName(name))
       val module = owner.newModule(NoPosition, name)
       clazz setInfo completer
       module setInfo completer
@@ -148,16 +147,18 @@ abstract class SymbolLoaders {
 
       val sourcepaths = classpath.sourcepaths
       for (classRep <- classpath.classes if doLoad(classRep)) {
-        if (classRep.binary.isDefined && classRep.source.isDefined) {
-          val (bin, src) = (classRep.binary.get, classRep.source.get)
-          val loader = if (needCompile(bin, src)) new SourcefileLoader(src)
-                       else newClassLoader(bin)
-          enterClassAndModule(root, classRep.name, loader)
-        } else if (classRep.binary.isDefined) {
-          enterClassAndModule(root, classRep.name, newClassLoader(classRep.binary.get))
-        } else if (classRep.source.isDefined) {
-          enterClassAndModule(root, classRep.name, new SourcefileLoader(classRep.source.get))
-        }
+	def enterToplevels(src: AbstractFile) {
+	  if (global.forInteractive)
+	    // Parse the source right away in the presentation compiler.
+	    global.currentRun.compileLate(src)
+	  else
+	    enterClassAndModule(root, classRep.name, new SourcefileLoader(src))
+	}
+	((classRep.binary, classRep.source) : @unchecked) match {
+	  case (Some(bin), Some(src)) if needCompile(bin, src) => enterToplevels(src)
+	  case (None, Some(src)) => enterToplevels(src)
+	  case (Some(bin), _) => enterClassAndModule(root, classRep.name, newClassLoader(bin))
+	}
       }
 
       for (pkg <- classpath.packages) {
@@ -167,7 +168,7 @@ abstract class SymbolLoaders {
       // if there's a $member object, enter its members as well.
       val pkgModule = root.info.decl(nme.PACKAGEkw)
       if (pkgModule.isModule && !pkgModule.rawInfo.isInstanceOf[SourcefileLoader]) {
-        //println("open "+pkgModule)//DEBUG
+        // println("open "+pkgModule)//DEBUG
         openPackageModule(pkgModule)()
       }
     }
@@ -233,7 +234,6 @@ abstract class SymbolLoaders {
 
     protected def newPackageLoader(pkg: ClassPath[MSILType]) =
       new NamespaceLoader(pkg)
-
   }
 
   class ClassfileLoader(val classfile: AbstractFile) extends SymbolLoader {

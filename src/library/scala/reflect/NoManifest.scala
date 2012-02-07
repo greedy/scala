@@ -12,7 +12,6 @@ package scala.reflect
 
 /** <p> One of the branches of an OptManifest
   */
-@serializable
-object NoManifest extends OptManifest[Nothing] {
+object NoManifest extends OptManifest[Nothing] with Serializable {
   override def toString = "<?>"
 }

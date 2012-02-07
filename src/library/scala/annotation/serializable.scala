@@ -1,22 +1,15 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2006-2010, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2002-2010, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
 \*                                                                      */
 
+package scala.annotation
 
-
-package scala
-
-/** <p>
- *    A base class for static annotations. These are available
- *    to the Scala type checker, even across different compilation units.
- *  </p>
- *
- *  @author  Martin Odersky
- *  @version 1.1, 2/02/2007
- *  @since   2.4
+/**
+ * An annotation that designates the class to which it is applied as serializable
  */
-trait StaticAnnotation extends Annotation {}
+@deprecated("instead of `@serializable class C`, use `class C extends Serializable`")
+class serializable extends annotation.StaticAnnotation

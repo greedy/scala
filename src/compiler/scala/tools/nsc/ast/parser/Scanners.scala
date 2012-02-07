@@ -12,7 +12,26 @@ import scala.annotation.switch
 import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 import scala.xml.Utility.{ isNameStart }
 
-trait Scanners {
+/** See Parsers.scala / ParsersCommon for some explanation of ScannersCommon.
+ */
+trait ScannersCommon {
+  val global : Global
+  import global._
+
+  trait CommonTokenData {
+    def token: Int
+    def name: TermName
+  }
+
+  trait ScannerCommon extends CommonTokenData {
+    // things to fill in, in addition to buf, decodeUni
+    def warning(off: Int, msg: String): Unit
+    def error  (off: Int, msg: String): Unit
+    def incompleteInputError(off: Int, msg: String): Unit
+  }
+}
+
+trait Scanners extends ScannersCommon {
   val global : Global
   import global._
 
@@ -22,7 +41,7 @@ trait Scanners {
   /** An undefined offset */
   val NoOffset: Offset = -1
 
-  trait TokenData {
+  trait TokenData extends CommonTokenData {
 
     /** the next token */
     var token: Int = EMPTY
@@ -34,7 +53,7 @@ trait Scanners {
     var lastOffset: Offset = 0
 
     /** the name of an identifier */
-    var name: Name = null
+    var name: TermName = null
 
     /** the string value of a literal */
     var strVal: String = null
@@ -52,7 +71,7 @@ trait Scanners {
     }
   }
 
-  abstract class Scanner extends CharArrayReader with TokenData {
+  abstract class Scanner extends CharArrayReader with TokenData with ScannerCommon {
 
     def flush = { charOffset = offset; nextChar(); this }
 
@@ -61,12 +80,6 @@ trait Scanners {
       assert(next.token == EMPTY || reporter.hasErrors)
       nextToken()
     }
-
-    // things to fill in, in addition to buf, decodeUni
-    def warning(off: Offset, msg: String): Unit
-    def error  (off: Offset, msg: String): Unit
-    def incompleteInputError(off: Offset, msg: String): Unit
-    def deprecationWarning(off: Offset, msg: String): Unit
 
     /** the last error offset
      */
@@ -898,14 +911,14 @@ trait Scanners {
   /** The highest name index of a keyword token */
   private var maxKey = 0
   /** An array of all keyword token names */
-  private var keyName = new Array[Name](128)
+  private var keyName = new Array[TermName](128)
   /** The highest keyword token plus one */
   private var tokenCount = 0
 
   /** Enter keyword with given name and token id */
-  protected def enterKeyword(n: Name, tokenId: Int) {
+  protected def enterKeyword(n: TermName, tokenId: Int) {
     while (tokenId >= keyName.length) {
-      val newTokName = new Array[Name](keyName.length * 2)
+      val newTokName = new Array[TermName](keyName.length * 2)
       compat.Platform.arraycopy(keyName, 0, newTokName, 0, newTokName.length)
       keyName = newTokName
     }
@@ -1022,7 +1035,6 @@ trait Scanners {
     def warning(off: Offset, msg: String) = unit.warning(unit.position(off), msg)
     def error  (off: Offset, msg: String) = unit.error(unit.position(off), msg)
     def incompleteInputError(off: Offset, msg: String) = unit.incompleteInputError(unit.position(off), msg)
-    def deprecationWarning(off: Offset, msg: String) = unit.deprecationWarning(unit.position(off), msg)
 
     private var bracePatches: List[BracePatch] = patches
 

@@ -1195,8 +1195,8 @@ trait Namers { self: Analyzer =>
               }
 
               def isValidSelector(from: Name)(fun : => Unit) {
-                  if (base.nonLocalMember(from) == NoSymbol &&
-                      base.nonLocalMember(from.toTypeName) == NoSymbol) fun
+                if (from.bothNames forall (x => (base nonLocalMember x) == NoSymbol))
+                  fun
               }
 
               def checkSelectors(selectors: List[ImportSelector]): Unit = selectors match {
@@ -1206,7 +1206,7 @@ trait Namers { self: Analyzer =>
                       if (currentRun.compileSourceFor(expr, from))
                         return typeSig(tree)
                       // for Java code importing Scala objects
-                      if (from.endsWith(nme.DOLLARraw))
+                      if (from.endsWith(nme.raw.DOLLAR))
                         isValidSelector(from.subName(0, from.length -1)) {
                           context.error(tree.pos, from.decode + " is not a member of " + expr)
                         }

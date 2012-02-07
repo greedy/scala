@@ -3,18 +3,18 @@
 package scala.util.continuations
 
 
-class cpsParam[-B,+C] extends StaticAnnotation with TypeConstraint
+class cpsParam[-B,+C] extends annotation.StaticAnnotation with TypeConstraint
 
 private class cpsSym[B] extends Annotation // implementation detail
 
 private class cpsSynth extends Annotation // implementation detail
 
-private class cpsPlus extends StaticAnnotation with TypeConstraint // implementation detail
+private class cpsPlus extends annotation.StaticAnnotation with TypeConstraint // implementation detail
 private class cpsMinus extends Annotation // implementation detail
 
 
 
-@serializable final class ControlContext[+A,-B,+C](val fun: (A => B, Exception => B) => C, val x: A) {
+final class ControlContext[+A,-B,+C](val fun: (A => B, Exception => B) => C, val x: A) extends Serializable {
 
   /*
     final def map[A1](f: A => A1): ControlContext[A1,B,C] = {

@@ -870,49 +870,89 @@ abstract class RefChecks extends InfoTransform {
             sym = sym.info.bounds.hi.widen.typeSymbol
           sym
         }
-        val actual = underlyingClass(args.head.tpe)
+        val actual   = underlyingClass(args.head.tpe)
         val receiver = underlyingClass(qual.tpe)
+        def onTrees[T](f: List[Tree] => T) = f(List(qual, args.head))
+        def onSyms[T](f: List[Symbol] => T) = f(List(receiver, actual))
+
+        // @MAT normalize for consistency in error message, otherwise only part is normalized due to use of `typeSymbol'
+        def typesString = normalizeAll(qual.tpe.widen)+" and "+normalizeAll(args.head.tpe.widen)
+
+        /** Symbols which limit the warnings we can issue since they may be value types */
+        val isMaybeValue = Set(AnyClass, AnyRefClass, AnyValClass, ObjectClass, ComparableClass, SerializableClass)
 
         // Whether def equals(other: Any) is overridden
         def isUsingDefaultEquals      = {
           val m = receiver.info.member(nme.equals_)
           (m == Object_equals) || (m == Any_equals)
         }
-        // Whether this == or != is actually an overloaded version
+        // Whether this == or != is one of those defined in Any/AnyRef or an overload from elsewhere.
         def isUsingDefaultScalaOp = {
           val s = fn.symbol
-          (s == Object_==) || (s == Object_!=) || (s == Any_==) || (s == Any_!=) || (s == Object_eq) || (s == Object_ne)
+          (s == Object_==) || (s == Object_!=) || (s == Any_==) || (s == Any_!=)
         }
         // Whether the operands+operator represent a warnable combo (assuming anyrefs)
-        def isWarnable                = isReferenceOp || (isUsingDefaultEquals && isUsingDefaultScalaOp)
-        def isScalaNumber(s: Symbol)  = isNumericValueClass(s) || (s isSubClass BoxedNumberClass) || (s isSubClass ScalaNumberClass)
-        def isEitherNull              = (receiver == NullClass) || (actual == NullClass)
-        def isEitherNullable          = (NullClass.tpe <:< receiver.info) || (NullClass.tpe <:< actual.info)
+        def isWarnable           = isReferenceOp || (isUsingDefaultEquals && isUsingDefaultScalaOp)
+        def isEitherNullable     = (NullClass.tpe <:< receiver.info) || (NullClass.tpe <:< actual.info)
+        def isBoolean(s: Symbol) = unboxedValueClass(s) == BooleanClass
+        def isUnit(s: Symbol)    = unboxedValueClass(s) == UnitClass
+        def isNumeric(s: Symbol) = isNumericValueClass(unboxedValueClass(s)) || (s isSubClass ScalaNumberClass)
+        def possibleNumericCount = onSyms(_ filter (x => isNumeric(x) || isMaybeValue(x)) size)
+        val nullCount            = onSyms(_ filter (_ == NullClass) size)
 
         def nonSensibleWarning(what: String, alwaysEqual: Boolean) = {
           val msg = alwaysEqual == (name == nme.EQ || name == nme.eq)
           unit.warning(pos, "comparing "+what+" using `"+name.decode+"' will always yield " + msg)
         }
 
-        // @MAT normalize for consistency in error message, otherwise only part is normalized due to use of `typeSymbol'
         def nonSensible(pre: String, alwaysEqual: Boolean) =
-          nonSensibleWarning(pre+"values of types "+normalizeAll(qual.tpe.widen)+" and "+normalizeAll(args.head.tpe.widen),
-                             alwaysEqual)
+          nonSensibleWarning(pre+"values of types "+typesString, alwaysEqual)
 
-        if (receiver == BooleanClass && !(receiver isSubClass actual))  // true == 5
-          nonSensible("", false)
-        else if (receiver == UnitClass && actual == UnitClass)  // () == ()
-          nonSensible("", true)
-        else if (isNumericValueClass(receiver)) {
-          if (!isScalaNumber(actual) && !forMSIL) // 5 == "abc"
+        def unrelatedTypes() =
+          unit.warning(pos, typesString + " are unrelated: should not compare equal")
+
+        if (nullCount == 2)
+          nonSensible("", true)  // null == null
+        else if (nullCount == 1) {
+          if (onSyms(_ exists isValueClass)) // null == 5
             nonSensible("", false)
-        }
-        else if (isWarnable) {
-          if (receiver.isFinal && !isEitherNull && !(receiver isSubClass actual)) // object X, Y; X == Y
-            nonSensible((if (isEitherNullable) "non-null " else ""), false)
-          else if (isNew(qual) || (isNew(args.head) && (receiver.isFinal || isReferenceOp))) // new X == y or object X ; X == new Y
+          else if (onTrees( _ exists isNew)) // null == new AnyRef
             nonSensibleWarning("a fresh object", false)
         }
+        else if (isBoolean(receiver)) {
+          if (!isBoolean(actual) && !isMaybeValue(actual))    // true == 5
+            nonSensible("", false)
+        }
+        else if (isUnit(receiver)) {
+          if (isUnit(actual)) // () == ()
+            nonSensible("", true)
+          else if (!isUnit(actual) && !isMaybeValue(actual))  // () == "abc"
+            nonSensible("", false)
+        }
+        else if (isNumeric(receiver)) {
+          if (!isNumeric(actual) && !forMSIL)
+            if (isUnit(actual) || isBoolean(actual) || !isMaybeValue(actual))   // 5 == "abc"
+              nonSensible("", false)
+        }
+        else if (isWarnable) {
+          if (isNew(qual)) // new X == y
+            nonSensibleWarning("a fresh object", false)
+          else if (isNew(args.head) && (receiver.isFinal || isReferenceOp))   // object X ; X == new Y
+            nonSensibleWarning("a fresh object", false)
+          else if (receiver.isFinal && !(receiver isSubClass actual)) {  // object X, Y; X == Y
+            if (isEitherNullable)
+              nonSensible("non-null ", false)
+            else
+              nonSensible("", false)
+          }
+        }
+        // Warning on types without a parental relationship.  Uncovers a lot of
+        // bugs, but not always right to warn.
+        if (false) {
+          if (nullCount == 0 && possibleNumericCount < 2 && !(receiver isSubClass actual) && !(actual isSubClass receiver))
+            unrelatedTypes()
+        }
+
       case _ =>
     }
 
@@ -953,11 +993,14 @@ abstract class RefChecks extends InfoTransform {
       tree match {
         case ModuleDef(mods, name, impl) =>
           val sym = tree.symbol
-          if (sym.isStatic) {
-            val cdef = ClassDef(mods | MODULE, name, List(), impl)
+          def mkClassDef(transformedInfo: Boolean) = {
+            ClassDef(mods | MODULE, name.toTypeName, Nil, impl)
               .setPos(tree.pos)
-              .setSymbol(sym.moduleClass)
+              .setSymbol(if (transformedInfo) sym.lazyAccessor else sym.moduleClass)
               .setType(NoType)
+          }
+          if (sym.isStatic) {
+            val cdef = mkClassDef(false)
 
             if (!sym.allOverriddenSymbols.isEmpty) {
               val factory = sym.owner.newMethod(sym.pos, sym.name)
@@ -980,11 +1023,7 @@ abstract class RefChecks extends InfoTransform {
               // that the object info was already run through the transformInfo.
               // Since we do not want to have duplicate lazy accessors
               // (through duplicate nested object -> lazy val transformation) we have this check here.
-              val cdef = ClassDef(mods | MODULE, name, List(), impl)
-                .setPos(tree.pos)
-                .setSymbol(if (!transformedInfo) sym.moduleClass else sym.lazyAccessor)
-                .setType(NoType)
-
+              val cdef = mkClassDef(transformedInfo)
               val vdef = localTyper.typedPos(tree.pos){
                 if (!transformedInfo)
                   gen.mkModuleVarDef(sym)
@@ -1088,7 +1127,7 @@ abstract class RefChecks extends InfoTransform {
           (args corresponds clazz.primaryConstructor.tpe.asSeenFrom(seltpe, clazz).paramTypes)(isIrrefutable) // @PP: corresponds
         case Typed(pat, tpt) =>
           seltpe <:< tpt.tpe
-        case Ident(nme.WILDCARD) =>
+        case Ident(tpnme.WILDCARD) =>
           true
         case Bind(_, pat) =>
           isIrrefutable(pat, seltpe)
@@ -1257,7 +1296,7 @@ abstract class RefChecks extends InfoTransform {
 
       def checkSuper(mix: Name) =
         // term should have been eliminated by super accessors
-        assert(!(qual.symbol.isTrait && sym.isTerm && mix == nme.EMPTY.toTypeName))
+        assert(!(qual.symbol.isTrait && sym.isTerm && mix == tpnme.EMPTY))
 
       transformCaseApply(tree,
         qual match {
@@ -1347,15 +1386,15 @@ abstract class RefChecks extends InfoTransform {
             enterReference(tree.pos, tpt.tpe.typeSymbol)
             tree
 
-          case Typed(_, Ident(nme.WILDCARD_STAR)) if !isRepeatedParamArg(tree) =>
+          case Typed(_, Ident(tpnme.WILDCARD_STAR)) if !isRepeatedParamArg(tree) =>
             unit.error(tree.pos, "no `: _*' annotation allowed here\n"+
               "(such annotations are only allowed in arguments to *-parameters)")
             tree
 
           case Ident(name) =>
             transformCaseApply(tree,
-              if (name != nme.WILDCARD && name != nme.WILDCARD_STAR) {
-                assert(sym != NoSymbol, tree) //debug
+              if (name != nme.WILDCARD && name != tpnme.WILDCARD_STAR) {
+                assert(sym != NoSymbol, "transformCaseApply: name = " + name.debugString + " tree = " + tree + " / " + tree.getClass) //debug
                 enterReference(tree.pos, sym)
               }
             )

@@ -10,7 +10,9 @@ import java.io.{ BufferedReader, FileReader, PrintWriter }
 import java.io.IOException
 
 import scala.tools.nsc.{ InterpreterResults => IR }
+import scala.tools.util.SignalManager
 import scala.annotation.tailrec
+import scala.util.control.Exception.{ ignoring }
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.ops
 import util.{ ClassPath }
@@ -26,11 +28,14 @@ trait InterpreterControl {
   // the default result means "keep running, and don't record that line"
   val defaultResult = Result(true, None)
 
+  private def isQuoted(s: String) =
+    (s.length >= 2) && (s.head == s.last) && ("\"'" contains s.head)
+
   // a single interpreter command
   sealed abstract class Command extends Function1[List[String], Result] {
     def name: String
     def help: String
-    def error(msg: String) = {
+    def commandError(msg: String) = {
       out.println(":" + name + " " + msg + ".")
       Result(true, None)
     }
@@ -39,7 +44,7 @@ trait InterpreterControl {
 
   case class NoArgs(name: String, help: String, f: () => Result) extends Command {
     def usage(): String = ":" + name
-    def apply(args: List[String]) = if (args.isEmpty) f() else error("accepts no arguments")
+    def apply(args: List[String]) = if (args.isEmpty) f() else commandError("accepts no arguments")
   }
 
   case class LineArg(name: String, help: String, f: (String) => Result) extends Command {
@@ -51,7 +56,7 @@ trait InterpreterControl {
     def usage(): String = ":" + name + " <arg>"
     def apply(args: List[String]) =
       if (args.size == 1) f(args.head)
-      else error("requires exactly one argument")
+      else commandError("requires exactly one argument")
   }
 
   case class VarArgs(name: String, help: String, f: (List[String]) => Result) extends Command {
@@ -102,7 +107,35 @@ class InterpreterLoop(in0: Option[BufferedReader], protected val out: PrintWrite
   /** Record a command for replay should the user request a :replay */
   def addReplay(cmd: String) = replayCommandStack ::= cmd
 
-  /** Close the interpreter and set the var to <code>null</code>. */
+  /** Try to install sigint handler: ignore failure.  Signal handler
+   *  will interrupt current line execution if any is in progress.
+   *
+   *  Attempting to protect the repl from accidental exit, we only honor
+   *  a single ctrl-C if the current buffer is empty: otherwise we look
+   *  for a second one within a short time.
+   */
+  private def installSigIntHandler() {
+    def onExit() {
+      Console.println("") // avoiding "shell prompt in middle of line" syndrome
+      system.exit(1)
+    }
+    ignoring(classOf[Exception]) {
+      SignalManager("INT") = {
+        if (interpreter == null)
+          onExit()
+        else if (interpreter.lineManager.running)
+          interpreter.lineManager.cancel()
+        else if (in.currentLine != "") {
+          // non-empty buffer, so make them hit ctrl-C a second time
+          SignalManager("INT") = onExit()
+          io.timer(5)(installSigIntHandler())  // and restore original handler if they don't
+        }
+        else onExit()
+      }
+    }
+  }
+
+  /** Close the interpreter and set the var to null. */
   def closeInterpreter() {
     if (interpreter ne null) {
       interpreter.close
@@ -117,10 +150,23 @@ class InterpreterLoop(in0: Option[BufferedReader], protected val out: PrintWrite
       settings.classpath append addedClasspath
 
     interpreter = new Interpreter(settings, out) {
+      override protected def createLineManager() = new Line.Manager {
+        override def onRunaway(line: Line[_]): Unit = {
+          val template = """
+            |// She's gone rogue, captain! Have to take her out!
+            |// Calling Thread.stop on runaway %s with offending code:
+            |// scala> %s""".stripMargin
+
+          println(template.format(line.thread, line.code))
+          line.thread.stop()
+          in.redrawLine()
+        }
+      }
       override protected def parentClassLoader =
         settings.explicitParentLoader.getOrElse( classOf[InterpreterLoop].getClassLoader )
     }
     interpreter.setContextClassLoader()
+    installSigIntHandler()
     // interpreter.quietBind("settings", "scala.tools.nsc.InterpreterSettings", interpreter.isettings)
   }
 
@@ -197,7 +243,7 @@ class InterpreterLoop(in0: Option[BufferedReader], protected val out: PrintWrite
   val standardCommands: List[Command] = {
     import CommandImplicits._
     List(
-       OneArg("cp", "add an entry (jar or directory) to the classpath", addClasspath),
+       LineArg("cp", "add an entry (jar or directory) to the classpath", addClasspath),
        NoArgs("help", "print this help message", printHelp),
        VarArgs("history", "show the history (optional arg: lines to show)", printHistory),
        LineArg("h?", "search the history", searchHistory),
@@ -311,7 +357,7 @@ class InterpreterLoop(in0: Option[BufferedReader], protected val out: PrintWrite
     if (f.exists) {
       addedClasspath = ClassPath.join(addedClasspath, f.path)
       val totalClasspath = ClassPath.join(settings.classpath.value, addedClasspath)
-      println("Added '%s'.  Your new classpath is:\n%s".format(f.path, totalClasspath))
+      println("Added '%s'.  Your new classpath is:\n\"%s\"".format(f.path, totalClasspath))
       replay()
     }
     else out.println("The path '" + f + "' doesn't seem to exist.")

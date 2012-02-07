@@ -34,8 +34,7 @@ import generic._
  *  @define orderDependent
  *  @define orderDependentFold
  */
-@serializable
-class ListMap[A, B] extends Map[A, B] with MapLike[A, B, ListMap[A, B]] {
+class ListMap[A, B] extends Map[A, B] with MapLike[A, B, ListMap[A, B]] with Serializable {
 
 
   override def empty = ListMap.empty[A, B]
@@ -53,7 +52,7 @@ class ListMap[A, B] extends Map[A, B] with MapLike[A, B, ListMap[A, B]] {
     else if (elems.head._1 == key) { siz -= 1; elems.tail }
     else elems.head :: remove(key, elems.tail)
 
-  override def clear() = elems = List()
+  override def clear() = { elems = List(); siz = 0 }
   override def size: Int = siz
 }
 

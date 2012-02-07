@@ -48,8 +48,8 @@ trait IndexedSeqLike[+A, +Repr] extends SeqLike[A, Repr] { self =>
    *  multiple `take`, `drop`, and `slice` operations on this iterator are bunched
    *  together for better efficiency.
    */
-  @serializable @SerialVersionUID(1756321872811029277L)
-  protected class Elements(start: Int, end: Int) extends BufferedIterator[A] {
+  @SerialVersionUID(1756321872811029277L)
+  protected class Elements(start: Int, end: Int) extends BufferedIterator[A] with Serializable {
     private var i = start
 
     def hasNext: Boolean = i < end
@@ -81,6 +81,15 @@ trait IndexedSeqLike[+A, +Repr] extends SeqLike[A, Repr] { self =>
 
   override /*IterableLike*/
   def iterator: Iterator[A] = new Elements(0, length)
+
+  /** Overridden for efficiency */
+  override def toBuffer[A1 >: A]: mutable.Buffer[A1] = {
+    val result = new mutable.ArrayBuffer[A1](size)
+    copyToBuffer(result)
+    result
+  }
+
+
 /*
   override /*SeqLike*/
   def view = new IndexedSeqView[A, Repr] {

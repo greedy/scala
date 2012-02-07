@@ -42,7 +42,7 @@ package symtab
 // 27:        ACCESSOR
 // 28:   SUPERACCESSOR
 // 29: PARAMACCESSOR/M
-// 30:       MODULEVAR SYNTHETICMETH
+// 30:       MODULEVAR
 // 31:          LAZY/M
 // 32:        IS_ERROR
 // 33:      OVERLOADED
@@ -55,7 +55,7 @@ package symtab
 // 40:     SPECIALIZED
 // 41:   DEFAULTINIT/M
 // 42:         VBRIDGE
-// 43:
+// 43:         VARARGS
 // 44:
 // 45:
 // 46:
@@ -179,7 +179,7 @@ class Flags extends reflect.generic.Flags {
     case            ACCESSOR => "<accessor>"                          // (1L << 27)
     case       SUPERACCESSOR => "<superaccessor>"                     // (1L << 28)
     case       PARAMACCESSOR => "<paramaccessor>"                     // (1L << 29)
-    case           MODULEVAR => "<modulevar/syntheticmeth>"           // (1L << 30)
+    case           MODULEVAR => "<modulevar>"                         // (1L << 30)
     case                LAZY => "lazy"                                // (1L << 31)
     case            IS_ERROR => "<is_error>"                          // (1L << 32)
     case          OVERLOADED => "<overloaded>"                        // (1L << 33)
@@ -192,7 +192,7 @@ class Flags extends reflect.generic.Flags {
     case         SPECIALIZED => "<specialized>"                       // (1L << 40)
     case         DEFAULTINIT => "<defaultinit>"                       // (1L << 41)
     case             VBRIDGE => "<vbridge>"                           // (1L << 42)
-    case      0x80000000000L => ""                                    // (1L << 43)
+    case             VARARGS => "<varargs>"                           // (1L << 43)
     case     0x100000000000L => ""                                    // (1L << 44)
     case     0x200000000000L => ""                                    // (1L << 45)
     case     0x400000000000L => ""                                    // (1L << 46)

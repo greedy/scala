@@ -210,7 +210,7 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
    *  guarantees the same result regardless of the map order by sorting
    *  type variables alphabetically.
    */
-  private def specializedName(sym: Symbol, env: TypeEnv): Name = {
+  private def specializedName(sym: Symbol, env: TypeEnv): TermName = {
     val tvars = if (sym.isClass) env.keySet
                 else specializedTypeVars(sym).intersect(env.keySet)
     val (methparams, others) = tvars.toList.partition(_.owner.isMethod)
@@ -223,7 +223,7 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
   /** Specialize name for the two list of types. The first one denotes
    *  specialization on method type parameters, the second on outer environment.
    */
-  private def specializedName(name: Name, types1: List[Type], types2: List[Type]): Name = {
+  private def specializedName(name: Name, types1: List[Type], types2: List[Type]): TermName = {
     if (nme.INITIALIZER == name || (types1.isEmpty && types2.isEmpty))
       name
     else if (nme.isSetterName(name))
@@ -346,7 +346,7 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
    */
   def specializeClass(clazz: Symbol, outerEnv: TypeEnv): List[Symbol] = {
     def specializedClass(env: TypeEnv, normMembers: List[Symbol]): Symbol = {
-      val cls = clazz.owner.newClass(clazz.pos, specializedName(clazz, env))
+      val cls = clazz.owner.newClass(clazz.pos, specializedName(clazz, env).toTypeName)
                               .setFlag(SPECIALIZED | clazz.flags)
                               .resetFlag(CASE)
       cls.sourceFile = clazz.sourceFile
@@ -545,7 +545,7 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
         } else if (m.isClass) {
           val specClass: Symbol = m.cloneSymbol(cls).setFlag(SPECIALIZED)
           typeEnv(specClass) = fullEnv
-          specClass.name = specializedName(specClass, fullEnv)
+          specClass.name = specializedName(specClass, fullEnv).toTypeName
           enterMember(specClass)
           log("entered specialized class " + specClass.fullName)
           info(specClass) = SpecializedInnerClass(m, fullEnv)
@@ -581,6 +581,14 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
       val spc = specializedClass(env, decls1)
       log("entered " + spc + " in " + clazz.owner)
       hasSubclasses = true
+      val existing = clazz.owner.info.decl(spc.name)
+      // a symbol for the specialized class already exists if there's a classfile for it.
+      // keeping both crashes the compiler on test/files/pos/spec-Function1.scala
+      if (existing != NoSymbol) {
+        log("removing existing symbol for "+ existing)
+        clazz.owner.info.decls.unlink(existing)
+      }
+
       atPhase(phase.next)(clazz.owner.info.decls enter spc) //!! assumes fully specialized classes
     }
     if (hasSubclasses) clazz.resetFlag(FINAL)
@@ -1135,7 +1143,7 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
         case ddef @ DefDef(mods, name, tparams, vparamss, tpt, rhs) if info.isDefinedAt(symbol) =>
           if (symbol.isConstructor) {
             val t = atOwner(symbol) {
-              val superRef: Tree = Select(Super(nme.EMPTY.toTypeName, nme.EMPTY.toTypeName), nme.CONSTRUCTOR)
+              val superRef: Tree = Select(Super(tpnme.EMPTY, tpnme.EMPTY), nme.CONSTRUCTOR)
               forwardCtorCall(tree.pos, superRef, vparamss, symbol.owner)
             }
             if (symbol.isPrimaryConstructor) localTyper typed {

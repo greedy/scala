@@ -1150,8 +1150,11 @@ trait Typers { self: Analyzer =>
         treeInfo.firstConstructor(templ.body) match {
           case constr @ DefDef(_, _, _, vparamss, _, cbody @ Block(cstats, cunit)) =>
             // Convert constructor body to block in environment and typecheck it
-            val cstats1: List[Tree] = cstats map (_.duplicate)
-            val scall = if (cstats.isEmpty) EmptyTree else cstats.last
+            val (preSuperStats, rest) = cstats span (!treeInfo.isSuperConstrCall(_))
+            val (scall, upToSuperStats) =
+              if (rest.isEmpty) (EmptyTree, preSuperStats)
+              else (rest.head, preSuperStats :+ rest.head)
+            val cstats1: List[Tree] = upToSuperStats map (_.duplicate)
             val cbody1 = scall match {
               case Apply(_, _) =>
                 treeCopy.Block(cbody, cstats1.init,
@@ -1244,9 +1247,10 @@ trait Typers { self: Analyzer =>
           }
           if (!(selfType <:< parent.tpe.typeOfThis) &&
               !phase.erasedTypes &&
-              !context.owner.isSynthetic && // don't do this check for synthetic concrete classes for virtuals (part of DEVIRTUALIZE)
-              !(settings.suppressVTWarn.value) &&
-              !selfType.isErroneous && !parent.tpe.isErroneous)
+              !context.owner.isSynthetic &&   // don't check synthetic concrete classes for virtuals (part of DEVIRTUALIZE)
+              !settings.noSelfCheck.value &&  // setting to suppress this very check
+              !selfType.isErroneous &&
+              !parent.tpe.isErroneous)
           {
             //Console.println(context.owner);//DEBUG
             //Console.println(context.owner.unsafeTypeParams);//DEBUG
@@ -1337,10 +1341,16 @@ trait Typers { self: Analyzer =>
         for (c <- linkedClass.info.decl(nme.CONSTRUCTOR).alternatives)
           c.initialize
       val clazz = mdef.symbol.moduleClass
+      val maybeAddSerializable = (l: List[Tree]) =>
+        if(linkedClass == NoSymbol || !linkedClass.isSerializable || clazz.isSerializable) l
+        else {
+          clazz.makeSerializable()
+          l ::: List(TypeTree(SerializableClass.tpe))
+        }
       val typedMods = removeAnnotations(mdef.mods)
       assert(clazz != NoSymbol)
       val impl1 = newTyper(context.make(mdef.impl, clazz, new Scope))
-        .typedTemplate(mdef.impl, parentTypes(mdef.impl))
+        .typedTemplate(mdef.impl, maybeAddSerializable(parentTypes(mdef.impl)))
       val impl2 = typerAddSyntheticMethods(impl1, clazz, context)
 
       if (mdef.name == nme.PACKAGEkw)
@@ -1771,8 +1781,7 @@ trait Typers { self: Analyzer =>
           if (!meth.isPrimaryConstructor &&
               (!meth.owner.isClass ||
                meth.owner.isModuleClass ||
-               meth.owner.isAnonymousClass ||
-               meth.owner.isRefinementClass))
+               meth.owner.isAnonOrRefinementClass))
             error(ddef.pos, "constructor definition not allowed here")
           typed(ddef.rhs)
         } else {
@@ -2036,11 +2045,7 @@ trait Typers { self: Analyzer =>
                     }
                   case _ =>
                 }
-                error(
-                  vparam.pos,
-                  "missing parameter type"+
-                  (if (vparam.mods.isSynthetic) " for expanded function "+fun
-                   else ""))
+                error(vparam.pos, missingParameterTypeMsg(fun, vparam, pt))
                 ErrorType
               }
             if (!vparam.tpt.pos.isDefined) vparam.tpt setPos vparam.pos.focus
@@ -2132,7 +2137,7 @@ trait Typers { self: Analyzer =>
 
       def checkNoDoubleDefsAndAddSynthetics(stats: List[Tree]): List[Tree] = {
         val scope = if (inBlock) context.scope else context.owner.info.decls
-        val newStats = new ListBuffer[Tree]
+        var newStats = new ListBuffer[Tree]
         var needsCheck = true
         var moreToAdd = true
         while (moreToAdd) {
@@ -2172,12 +2177,27 @@ trait Typers { self: Analyzer =>
         }
         if (newStats.isEmpty) stats
         else {
-          val (defaultGetters, others) = newStats.toList.partition {
-            case DefDef(mods, _, _, _, _, _) => mods.hasDefaultFlag
+          // put default getters next to the method they belong to,
+          // same for companion objects. fixes #2489 and #4036.
+          def matches(stat: Tree, synt: Tree) = (stat, synt) match {
+            case (DefDef(_, statName, _, _, _, _), DefDef(mods, syntName, _, _, _, _)) =>
+              mods.hasDefaultFlag && syntName.toString.startsWith(statName.toString)
+
+            case (ClassDef(_, className, _, _), ModuleDef(_, moduleName, _)) =>
+              className.toTermName == moduleName
+
             case _ => false
           }
-          // default getters first: see #2489
-          defaultGetters ::: stats ::: others
+
+          def matching(stat: Tree): List[Tree] = {
+            val (pos, neg) = newStats.partition(synt => matches(stat, synt))
+            newStats = neg
+            pos.toList
+          }
+
+          (stats foldRight List[Tree]())((stat, res) => {
+            stat :: matching(stat) ::: res
+          }) ::: newStats.toList
         }
       }
       val result = stats mapConserve (typedStat)
@@ -2390,16 +2410,7 @@ trait Typers { self: Analyzer =>
                   if (!(context.diagnostic contains note)) context.diagnostic = note :: context.diagnostic
                   doTypedApply(tree, if (blockIsEmpty) fun else fun1, allArgs, mode, pt)
                 } else {
-                  tryTupleApply.getOrElse {
-                    val suffix =
-                      if (missing.isEmpty) ""
-                      else {
-                        val missingStr = missing.take(3).map(_.name).mkString(", ") + (if (missing.length > 3) ", ..." else ".")
-                        val sOpt = if (missing.length > 1) "s" else ""
-                        ".\nUnspecified value parameter"+ sOpt +" "+ missingStr
-                      }
-                    errorTree(tree, "not enough arguments for "+treeSymTypeMsg(fun) + suffix)
-                  }
+                  tryTupleApply getOrElse errorTree(tree, notEnoughArgumentsMsg(fun, missing))
                 }
               }
             }
@@ -3055,7 +3066,7 @@ trait Typers { self: Analyzer =>
       def typedBind(name: Name, body: Tree) = {
         var vble = tree.symbol
         if (name.isTypeName) {
-          assert(body == EmptyTree)
+          assert(body == EmptyTree, context.unit + " typedBind: " + name.debugString + " " + body + " " + body.getClass)
           if (vble == NoSymbol)
             vble =
               if (isFullyDefined(pt))
@@ -3064,7 +3075,7 @@ trait Typers { self: Analyzer =>
                 context.owner.newAbstractType(tree.pos, name) setInfo
                   TypeBounds(NothingClass.tpe, AnyClass.tpe)
           val rawInfo = vble.rawInfo
-          vble = if (vble.name == nme.WILDCARD.toTypeName) context.scope.enter(vble)
+          vble = if (vble.name == tpnme.WILDCARD) context.scope.enter(vble)
                  else namer.enterInScope(vble)
           tree setSymbol vble setType vble.tpe
         } else {
@@ -3335,7 +3346,7 @@ trait Typers { self: Analyzer =>
               // TODO: In theory we should be able to call:
               //if (fun2.hasSymbol && fun2.symbol.name == nme.apply && fun2.symbol.owner == ArrayClass) {
               // But this causes cyclic reference for Array class in Cleanup. It is easy to overcome this
-              // by calling here ArrayClass.info here (or some other place before specialize).
+              // by calling ArrayClass.info here (or some other place before specialize).
               if (fun2.symbol == Array_apply) {
                 val checked = gen.mkCheckInit(res)
                 // this check is needed to avoid infinite recursion in Duplicators
@@ -3903,7 +3914,7 @@ trait Typers { self: Analyzer =>
             val params = for (i <- List.range(0, arity)) yield
               atPos(tree.pos.focusStart) {
                 ValDef(Modifiers(PARAM | SYNTHETIC),
-                       unit.fresh.newName("x" + i + "$"), TypeTree(), EmptyTree)
+                       unit.freshTermName("x" + i + "$"), TypeTree(), EmptyTree)
               }
             val ids = for (p <- params) yield Ident(p.name)
             val selector1 = atPos(tree.pos.focusStart) { if (arity == 1) ids.head else gen.mkTuple(ids) }
@@ -3944,7 +3955,7 @@ trait Typers { self: Analyzer =>
         case Typed(expr, Function(List(), EmptyTree)) =>
           typedEta(checkDead(typed1(expr, mode, pt)))
 
-        case Typed(expr, tpt @ Ident(nme.WILDCARD_STAR))  =>
+        case Typed(expr, tpt @ Ident(tpnme.WILDCARD_STAR))  =>
           val expr0 = typed(expr, mode & stickyModes, WildcardType)
           def subArrayType(pt: Type) =
             if (isValueClass(pt.typeSymbol) || !isFullyDefined(pt)) arrayType(pt)
@@ -4081,7 +4092,7 @@ trait Typers { self: Analyzer =>
         case Ident(name) =>
           incCounter(typedIdentCount)
           if ((name == nme.WILDCARD && (mode & (PATTERNmode | FUNmode)) == PATTERNmode) ||
-              (name == nme.WILDCARD.toTypeName && (mode & TYPEmode) != 0))
+              (name == tpnme.WILDCARD && (mode & TYPEmode) != 0))
             tree setType makeFullyDefined(pt)
           else
             typedIdent(name)
@@ -4165,7 +4176,7 @@ trait Typers { self: Analyzer =>
           tree.tpe = null
           if (tree.hasSymbol) tree.symbol = NoSymbol
         }
-        printTyping("typing "+tree+", pt = "+pt+", undetparams = "+context.undetparams+", implicits-enabled = "+context.implicitsEnabled+", silent = "+context.reportGeneralErrors) //DEBUG
+        printTyping("typing "+tree+", pt = "+pt+", undetparams = "+context.undetparams+", implicits-enabled = "+context.implicitsEnabled+", silent = "+context.reportGeneralErrors+", context.owner = "+context.owner) //DEBUG
 
         var tree1 = if (tree.tpe ne null) tree else typed1(tree, mode, dropExistential(pt))
         printTyping("typed "+tree1+":"+tree1.tpe+(if (isSingleType(tree1.tpe)) " with underlying "+tree1.tpe.widen else "")+", undetparams = "+context.undetparams+", pt = "+pt) //DEBUG
@@ -4339,3 +4350,4 @@ trait Typers { self: Analyzer =>
 */
   }
 }
+

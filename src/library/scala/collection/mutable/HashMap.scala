@@ -39,12 +39,13 @@ import scala.collection.parallel.mutable.ParHashMap
  *  @define mayNotTerminateInf
  *  @define willNotTerminateInf
  */
-@serializable @SerialVersionUID(1L)
+@SerialVersionUID(1L)
 class HashMap[A, B] private[collection] (contents: HashTable.Contents[A, DefaultEntry[A, B]])
 extends Map[A, B]
    with MapLike[A, B, HashMap[A, B]]
    with HashTable[A, DefaultEntry[A, B]]
    with Parallelizable[ParHashMap[A, B]]
+   with Serializable
 {
   initWithContents(contents)
 
@@ -56,7 +57,7 @@ extends Map[A, B]
 
   def this() = this(null)
 
-  def par = new ParHashMap[A, B](contents)
+  def par = new ParHashMap[A, B](hashTableContents)
 
   def get(key: A): Option[B] = {
     val e = findEntry(key)
@@ -128,6 +129,11 @@ extends Map[A, B]
   private def readObject(in: java.io.ObjectInputStream) {
     init[B](in, new Entry(_, _))
   }
+
+  override def toParIterable = par
+
+  private type C = (A, B)
+  override def toParMap[D, E](implicit ev: C <:< (D, E)) = par.asInstanceOf[ParHashMap[D, E]]
 
 }
 

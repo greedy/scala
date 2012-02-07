@@ -15,8 +15,8 @@ package immutable
  *
  *  @since 2.3
  */
-@serializable @SerialVersionUID(8691885935445612921L)
-abstract class RedBlack[A] {
+@SerialVersionUID(8691885935445612921L)
+abstract class RedBlack[A] extends Serializable {
 
   def isSmaller(x: A, y: A): Boolean
 
@@ -27,8 +27,7 @@ abstract class RedBlack[A] {
   private def mkTree[B](isBlack: Boolean, k: A, v: B, l: Tree[B], r: Tree[B]) =
     if (isBlack) BlackTree(k, v, l, r) else RedTree(k, v, l, r)
 
-  @serializable
-  abstract class Tree[+B] {
+  abstract class Tree[+B] extends Serializable {
     def isEmpty: Boolean
     def isBlack: Boolean
     def lookup(x: A): Tree[B]
@@ -49,8 +48,7 @@ abstract class RedBlack[A] {
     def last : A
     def count : Int
   }
-  @serializable
-  abstract class NonEmpty[+B] extends Tree[B] {
+  abstract class NonEmpty[+B] extends Tree[B] with Serializable {
     def isEmpty = false
     def key: A
     def value: B
@@ -100,7 +98,7 @@ abstract class RedBlack[A] {
       }
       def subl(t: Tree[B]) = t match {
         case BlackTree(x, xv, a, b) => RedTree(x, xv, a, b)
-        case _ => error("Defect: invariance violation; expected black, got "+t)
+        case _ => system.error("Defect: invariance violation; expected black, got "+t)
       }
       def balLeft(x: A, xv: B, tl: Tree[B], tr: Tree[B]) = (tl, tr) match {
         case (RedTree(y, yv, a, b), c) =>
@@ -109,7 +107,7 @@ abstract class RedBlack[A] {
           balance(x, xv, bl, RedTree(y, yv, a, b))
         case (bl, RedTree(y, yv, BlackTree(z, zv, a, b), c)) =>
           RedTree(z, zv, BlackTree(x, xv, bl, a), balance(y, yv, b, subl(c)))
-        case _ => error("Defect: invariance violation at "+right)
+        case _ => system.error("Defect: invariance violation at "+right)
       }
       def balRight(x: A, xv: B, tl: Tree[B], tr: Tree[B]) = (tl, tr) match {
         case (a, RedTree(y, yv, b, c)) =>
@@ -118,7 +116,7 @@ abstract class RedBlack[A] {
           balance(x, xv, RedTree(y, yv, a, b), bl)
         case (RedTree(y, yv, a, BlackTree(z, zv, b, c)), bl) =>
           RedTree(z, zv, balance(y, yv, subl(a), b), BlackTree(x, xv, c, bl))
-        case _ => error("Defect: invariance violation at "+left)
+        case _ => system.error("Defect: invariance violation at "+left)
       }
       def delLeft = left match {
         case _: BlackTree[_] => balLeft(key, value, left.del(k), right)
@@ -239,7 +237,7 @@ abstract class RedBlack[A] {
         case (_: BlackTree[B]) :: tail =>
           if (depth == 1) zipper else findDepth(tail, depth - 1)
         case _ :: tail => findDepth(tail, depth)
-        case Nil => error("Defect: unexpected empty zipper while computing range")
+        case Nil => system.error("Defect: unexpected empty zipper while computing range")
       }
 
       // Blackening the smaller tree avoids balancing problems on union;
@@ -270,7 +268,6 @@ abstract class RedBlack[A] {
     def last  = if (right.isEmpty) key else right.last
     def count = 1 + left.count + right.count
   }
-  @serializable
   case object Empty extends Tree[Nothing] {
     def isEmpty = true
     def isBlack = true
@@ -291,14 +288,12 @@ abstract class RedBlack[A] {
     def last = throw new NoSuchElementException("empty map")
     def count = 0
   }
-  @serializable
   case class RedTree[+B](override val key: A,
                          override val value: B,
                          override val left: Tree[B],
                          override val right: Tree[B]) extends NonEmpty[B] {
     def isBlack = false
   }
-  @serializable
   case class BlackTree[+B](override val key: A,
                            override val value: B,
                            override val left: Tree[B],

@@ -145,11 +145,19 @@ trait TypeDiagnostics {
   def alternativesString(tree: Tree) =
     alternatives(tree) map (x => "  " + methodTypeErrorString(x)) mkString ("", " <and>\n", "\n")
 
-  def missingParameterTypeError(fun: Tree, vparam: ValDef) = {
-    val suffix = if (vparam.mods.isSynthetic) " for expanded function "+fun else ""
+  def missingParameterTypeMsg(fun: Tree, vparam: ValDef, pt: Type) = {
+    def anonMessage = (
+      "\nThe argument types of an anonymous function must be fully known. (SLS 8.5)" +
+      "\nExpected type was: " + pt.toLongString
+    )
+    val suffix =
+      if (!vparam.mods.isSynthetic) ""
+      else " for expanded function" + (fun match {
+        case Function(_, Match(_, _)) => anonMessage
+        case _                        => " " + fun
+      })
 
-    inferError(vparam.pos, "missing parameter type" + suffix)
-    ErrorType
+    "missing parameter type" + suffix
   }
 
   def treeSymTypeMsg(tree: Tree): String = {
@@ -168,6 +176,22 @@ trait TypeDiagnostics {
     else if (sym.isModule) moduleMessage
     else if (sym.name == nme.apply) applyMessage
     else defaultMessage
+  }
+
+  def notEnoughArgumentsMsg(fun: Tree, missing: List[Symbol]): String = {
+    val suffix = {
+      if (missing.isEmpty) ""
+      else {
+        val keep = missing take 3 map (_.name)
+        ".\nUnspecified value parameter%s %s".format(
+          if (missing.tail.isEmpty) "" else "s",
+          if (missing drop 3 nonEmpty) (keep :+ "...").mkString(", ")
+          else keep.mkString("", ", ", ".")
+        )
+      }
+    }
+
+    "not enough arguments for " + treeSymTypeMsg(fun) + suffix
   }
 
   def applyErrorMsg(tree: Tree, msg: String, argtpes: List[Type], pt: Type) = {
@@ -210,18 +234,16 @@ trait TypeDiagnostics {
     // functions to manipulate the name
     def preQualify()   = modifyName(trueOwner.fullName + "." + _)
     def postQualify()  = modifyName(_ + "(in " + trueOwner + ")")
-    def scalaQualify() = if (isInScalaOrPredef) preQualify()
+    def scalaQualify() = if (inPredefOrScala) preQualify()
     def typeQualify()  = if (sym.isTypeParameterOrSkolem) postQualify()
     def nameQualify()  = if (trueOwner.isPackageClass) preQualify() else postQualify()
 
-    def trueOwner  = tp.typeSymbol.ownerSkipPackageObject
-    def aliasOwner = tp.typeSymbolDirect.ownerSkipPackageObject
+    def trueOwner  = tp.typeSymbol.owner.skipPackageObject
+    def aliasOwner = tp.typeSymbolDirect.owner.skipPackageObject
     def owners     = List(trueOwner, aliasOwner)
 
-    def isInScalaOrPredef = owners exists {
-      case ScalaPackageClass | PredefModuleClass => true
-      case _                                     => false
-    }
+    private def scalaAndPredef = Set(ScalaPackageClass, PredefModuleClass)
+    def inPredefOrScala = owners exists scalaAndPredef
 
     def sym_==(other: TypeDiag)     = tp.typeSymbol == other.tp.typeSymbol
     def owner_==(other: TypeDiag)   = trueOwner == other.trueOwner
@@ -240,9 +262,9 @@ trait TypeDiagnostics {
       |tp.typeSymbol.owner = %s
       |tp.typeSymbolDirect = %s
       |tp.typeSymbolDirect.owner = %s
-      |isInScalaOrPredef = %s
+      |inPredefOrScala = %s
       """.stripMargin.format(
-        tp, tp.typeSymbol, tp.typeSymbol.owner, tp.typeSymbolDirect, tp.typeSymbolDirect.owner, isInScalaOrPredef
+        tp, tp.typeSymbol, tp.typeSymbol.owner, tp.typeSymbolDirect, tp.typeSymbolDirect.owner, inPredefOrScala
       )
     }
   }

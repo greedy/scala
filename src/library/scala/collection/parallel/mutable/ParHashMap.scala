@@ -65,6 +65,8 @@ self =>
 
   def -=(key: K): this.type = { removeEntry(key); this }
 
+  override def stringPrefix = "ParHashMap"
+
   type SCPI = SignalContextPassingIterator[ParHashMapIterator]
 
   class ParHashMapIterator(start: Int, untilIdx: Int, totalSize: Int, e: DefaultEntry[K, V])
@@ -121,6 +123,7 @@ extends collection.parallel.BucketCombiner[(K, V), ParHashMap[K, V], DefaultEntr
    with collection.mutable.HashTable.HashUtils[K]
 {
 self: EnvironmentPassingCombiner[(K, V), ParHashMap[K, V]] =>
+  import tasksupport._
   private var mask = ParHashMapCombiner.discriminantmask
   private var nonmasklen = ParHashMapCombiner.nonmasklength
 
@@ -218,7 +221,7 @@ self: EnvironmentPassingCombiner[(K, V), ParHashMap[K, V]] =>
   import UnrolledBuffer.Unrolled
 
   class FillBlocks(buckets: Array[Unrolled[DefaultEntry[K, V]]], table: AddingHashTable, offset: Int, howmany: Int)
-  extends super.Task[Int, FillBlocks] {
+  extends Task[Int, FillBlocks] {
     var result = Int.MinValue
     def leaf(prev: Option[Int]) = {
       var i = offset

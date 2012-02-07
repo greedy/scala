@@ -56,19 +56,21 @@ object Predef extends LowPriorityImplicits {
   def implicitly[T](implicit e: T) = e    // for summoning implicit values from the nether world
   @inline def locally[T](x: T): T  = x    // to communicate intent and avoid unmoored statements
 
+  // Deprecated
+
+  @deprecated("Use system.error(message) instead")
+  def error(message: String): Nothing = system.error(message)
+
+  @deprecated("Use system.exit() instead")
+  def exit(): Nothing = system.exit()
+
+  @deprecated("Use system.exit(status) instead")
+  def exit(status: Int): Nothing = system.exit(status)
+
+  @deprecated("Use formatString.format(args: _*) or arg.formatted(formatString) instead")
+  def format(text: String, xs: Any*) = augmentString(text).format(xs: _*)
+
   // errors and asserts -------------------------------------------------
-
-  // @deprecated("Throw your own exceptions") // deprecation waiting for 2.9
-  def error(message: String): Nothing = throw new RuntimeException(message)
-
-  // @deprecated("Use System.exit instead") // deprecation waiting for 2.9
-  def exit(): Nothing = exit(0)
-
-  // @deprecated("Use System.exit(status) instead") // deprecation waiting for 2.9
-  def exit(status: Int): Nothing = {
-    java.lang.System.exit(status)
-    throw new Throwable()
-  }
 
   /** Tests an expression, throwing an AssertionError if false.
    *  Calls to this method will not be generated if -Xelide-below
@@ -184,10 +186,7 @@ object Predef extends LowPriorityImplicits {
   def print(x: Any) = Console.print(x)
   def println() = Console.println()
   def println(x: Any) = Console.println(x)
-  def printf(text: String, xs: Any*) = Console.print(format(text, xs: _*))
-  // deprecation waiting for 2.9
-  // @deprecated("Use formatString.format(args: _*) or arg.formatted(formatString) instead")
-  def format(text: String, xs: Any*) = augmentString(text).format(xs: _*)
+  def printf(text: String, xs: Any*) = Console.print(text.format(xs: _*))
 
   def readLine(): String = Console.readLine()
   def readLine(text: String, args: Any*) = Console.readLine(text, args)
@@ -355,8 +354,7 @@ object Predef extends LowPriorityImplicits {
   }
 
   // less useful due to #2781
-  // @deprecated("Use From => To instead")
-  // ...intended for 2.9 unless someone can point out anything <%< offers over =>
+  @deprecated("Use From => To instead")
   sealed abstract class <%<[-From, +To] extends (From => To)
   object <%< {
     implicit def conformsOrViewsAs[A <% B, B]: A <%< B = new (A <%< B) {def apply(x: A) = x}

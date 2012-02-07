@@ -1127,8 +1127,8 @@ trait Types extends reflect.generic.Types { self: SymbolTable =>
     override def isHigherKinded = sym.isRefinementClass && underlying.isHigherKinded
     override def prefixString =
       if (settings.debug.value) sym.nameString + ".this."
-      else if (sym.isRoot || sym.isEmptyPackageClass || sym.isInterpreterWrapper || sym.isScalaPackageClass) ""
-      else if (sym.isAnonymousClass || sym.isRefinementClass) "this."
+      else if (sym.isAnonOrRefinementClass) "this."
+      else if (sym.printWithoutPrefix) ""
       else if (sym.isModuleClass) sym.fullName + "."
       else sym.nameString + ".this."
     override def safeToString: String =
@@ -1211,10 +1211,7 @@ trait Types extends reflect.generic.Types { self: SymbolTable =>
     override def typeSymbol = thistpe.typeSymbol
     override def underlying = supertpe
     override def prefix: Type = supertpe.prefix
-    override def prefixString =
-      if (thistpe.prefixString.endsWith("this."))
-        thistpe.prefixString.substring(0, thistpe.prefixString.length() - 5) + "super."
-      else thistpe.prefixString;
+    override def prefixString = thistpe.prefixString.replaceAll("""this\.$""", "super.")
     override def narrow: Type = thistpe.narrow
     override def kind = "SuperType"
   }
@@ -1367,7 +1364,7 @@ trait Types extends reflect.generic.Types { self: SymbolTable =>
     override def isNotNull: Boolean = parents exists (_.isNotNull)
 
     override def isStructuralRefinement: Boolean =
-      (typeSymbol.isRefinementClass || typeSymbol.isAnonymousClass) &&
+      typeSymbol.isAnonOrRefinementClass &&
         (decls.toList exists { entry => !entry.isConstructor && entry.allOverriddenSymbols.isEmpty })
 
     // override def isNullable: Boolean =
@@ -1952,13 +1949,12 @@ A type's typeSymbol should never be inspected directly.
     override def prefixString =
       if (settings.debug.value)
         super.prefixString
-      else if (sym.isRoot || sym.isEmptyPackageClass || sym.isInterpreterWrapper ||
-               sym.isAnonymousClass || sym.isRefinementClass || sym.isScalaPackageClass)
+      else if (sym.printWithoutPrefix)
         ""
       else if (sym.isPackageClass)
         sym.fullName + "."
-      else if (isStable && (sym.name.toString endsWith ".type"))
-        sym.name.toString.substring(0, sym.name.length - 4)
+      else if (isStable && (sym.name endsWith ".type"))
+        sym.name.toString dropRight 4
       else
         super.prefixString
 
@@ -3284,7 +3280,7 @@ A type's typeSymbol should never be inspected directly.
                 val termSym =
                   pre.typeSymbol.owner.newValue(
                     pre.typeSymbol.pos,
-                    pre.typeSymbol.name).setInfo(pre)  // what symbol should really be used?
+                    pre.typeSymbol.name.toTermName).setInfo(pre)  // what symbol should really be used?
                 mkAttributedQualifier(pre, termSym)
               } else
                 giveup()
@@ -3790,12 +3786,11 @@ A type's typeSymbol should never be inspected directly.
   object adaptToNewRunMap extends TypeMap {
     private def adaptToNewRun(pre: Type, sym: Symbol): Symbol = {
       if (phase.flatClasses) {
-	sym
+        sym
       } else if (sym.isModuleClass) {
-        if (!sym.owner.isPackageClass)
-          sym // Nested lazy object
-        else
-          adaptToNewRun(pre, sym.sourceModule).moduleClass
+        val adaptedSym = adaptToNewRun(pre, sym.sourceModule)
+        // Handle nested objects properly
+        if (adaptedSym.isLazy) adaptedSym.lazyAccessor else adaptedSym.moduleClass
       } else if ((pre eq NoPrefix) || (pre eq NoType) || sym.isPackageClass) {
         sym
       } else {
@@ -4575,7 +4570,7 @@ A type's typeSymbol should never be inspected directly.
             tp1.isStable || fourthTry
           else if (isRaw(sym2, tp2.args))
             isSubType(tp1, rawToExistential(tp2), depth)
-          else if (sym2.name == nme.REFINE_CLASS_NAME.toTypeName)
+          else if (sym2.name == tpnme.REFINE_CLASS_NAME)
             isSubType(tp1, sym2.info, depth)
           else
             fourthTry
@@ -4657,7 +4652,7 @@ A type's typeSymbol should never be inspected directly.
             else if (isRaw(sym1, tr1.args))
               isSubType(rawToExistential(tp1), tp2, depth)
             else
-              sym1.name == nme.REFINE_CLASS_NAME.toTypeName &&
+              sym1.name == tpnme.REFINE_CLASS_NAME &&
               isSubType(sym1.info, tp2, depth)
           case _: TypeSymbol =>
             if (sym1 hasFlag DEFERRED) {

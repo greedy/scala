@@ -35,8 +35,8 @@ import parallel.immutable.ParHashMap
  *  @define mayNotTerminateInf
  *  @define willNotTerminateInf
  */
-@serializable @SerialVersionUID(2L)
-class HashMap[A, +B] extends Map[A,B] with MapLike[A, B, HashMap[A, B]] with Parallelizable[ParHashMap[A, B]] {
+@SerialVersionUID(2L)
+class HashMap[A, +B] extends Map[A,B] with MapLike[A, B, HashMap[A, B]] with Parallelizable[ParHashMap[A, B]] with Serializable {
 
   override def size: Int = 0
 
@@ -91,6 +91,11 @@ class HashMap[A, +B] extends Map[A,B] with MapLike[A, B, HashMap[A, B]] with Par
   protected def merge0[B1 >: B](that: HashMap[A, B1], level: Int, merger: Merger[B1]): HashMap[A, B1] = that
 
   def par = ParHashMap.fromTrie(this)
+
+  override def toParIterable = par
+
+  private type C = (A, B)
+  override def toParMap[D, E](implicit ev: C <:< (D, E)) = par.asInstanceOf[ParHashMap[D, E]]
 
 }
 
@@ -462,7 +467,7 @@ time { mNew.iterator.foreach( p => ()) }
         new HashTrieMap[A, B1](this.bitmap | that.bitmap, merged, totalelems)
       case hm: HashMapCollision1[_, _] => that.merge0(this, level, merger)
       case hm: HashMap[_, _] => this
-      case _ => error("section supposed to be unreachable.")
+      case _ => system.error("section supposed to be unreachable.")
     }
 
   }
@@ -581,7 +586,7 @@ time { mNew.iterator.foreach( p => ()) }
             val arr: Array[HashMap[A, B]] = arrayD(posD) match {
               case c: HashMapCollision1[a, b] => collisionToArray(c).asInstanceOf[Array[HashMap[A, B]]]
               case ht: HashTrieMap[_, _] => ht.asInstanceOf[HashTrieMap[A, B]].elems
-              case _ => error("cannot divide single element")
+              case _ => system.error("cannot divide single element")
             }
             arrayToIterators(arr)
           } else {
@@ -615,7 +620,7 @@ time { mNew.iterator.foreach( p => ()) }
     } else true
   }
 
-  @serializable  @SerialVersionUID(2L) private class SerializationProxy[A,B](@transient private var orig: HashMap[A, B]) {
+  @SerialVersionUID(2L) private class SerializationProxy[A,B](@transient private var orig: HashMap[A, B]) extends Serializable {
     private def writeObject(out: java.io.ObjectOutputStream) {
       val s = orig.size
       out.writeInt(s)

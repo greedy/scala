@@ -138,16 +138,17 @@ trait Symbols { self: Universe =>
     final def isImplClass = isClass && hasFlag(IMPLCLASS) // Is this symbol an implementation class for a mixin?
     final def isLazyAccessor = isLazy && lazyAccessor != NoSymbol
     final def isMethod = isTerm && hasFlag(METHOD)
+    final def isVarargsMethod = isMethod && hasFlag(VARARGS)
     final def isModule = isTerm && hasFlag(MODULE)
     final def isModuleClass = isClass && hasFlag(MODULE)
     final def isOverloaded = hasFlag(OVERLOADED)
-    final def isRefinementClass = isClass && name == mkTypeName(nme.REFINE_CLASS_NAME)
+    final def isRefinementClass = isClass && name == tpnme.REFINE_CLASS_NAME
     final def isSourceMethod = isMethod && !hasFlag(STABLE) // exclude all accessors!!!
     final def isTypeParameter = isType && isParameter && !isSkolem
 
     /** Package tests */
     final def isEmptyPackage = isPackage && name == nme.EMPTY_PACKAGE_NAME
-    final def isEmptyPackageClass = isPackageClass && name == mkTypeName(nme.EMPTY_PACKAGE_NAME)
+    final def isEmptyPackageClass = isPackageClass && name == tpnme.EMPTY_PACKAGE_NAME
     final def isPackage = isModule && hasFlag(PACKAGE)
     final def isPackageClass = isClass && hasFlag(PACKAGE)
     final def isRoot = isPackageClass && owner == NoSymbol
@@ -157,15 +158,19 @@ trait Symbols { self: Universe =>
      */
     def isEffectiveRoot = isRoot || isEmptyPackageClass
 
+    /** If this is NoSymbol, evaluate the argument: otherwise, this.
+     */
+    def orElse[T](alt: => Symbol): Symbol = if (this ne NoSymbol) this else alt
+
     // creators
 
-    def newAbstractType(name: Name, pos: Position = NoPosition): Symbol
-    def newAliasType(name: Name, pos: Position = NoPosition): Symbol
-    def newClass(name: Name, pos: Position = NoPosition): Symbol
-    def newMethod(name: Name, pos: Position = NoPosition): Symbol
-    def newModule(name: Name, clazz: Symbol, pos: Position = NoPosition): Symbol
-    def newModuleClass(name: Name, pos: Position = NoPosition): Symbol
-    def newValue(name: Name, pos: Position = NoPosition): Symbol
+    def newAbstractType(name: TypeName, pos: Position = NoPosition): Symbol
+    def newAliasType(name: TypeName, pos: Position = NoPosition): Symbol
+    def newClass(name: TypeName, pos: Position = NoPosition): Symbol
+    def newMethod(name: TermName, pos: Position = NoPosition): Symbol
+    def newModule(name: TermName, clazz: Symbol, pos: Position = NoPosition): Symbol
+    def newModuleClass(name: TypeName, pos: Position = NoPosition): Symbol
+    def newValue(name: TermName, pos: Position = NoPosition): Symbol
 
     // access to related symbols
 

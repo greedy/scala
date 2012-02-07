@@ -17,10 +17,12 @@ trait InteractiveReader {
   protected def readOneLine(prompt: String): String
   val interactive: Boolean
   def init(): Unit = ()
+  def redrawLine(): Unit = ()
+  def currentLine = ""    // the current buffer contents, if available
 
   def readLine(prompt: String): String = {
     def handler: Catcher[String] = {
-      case e: ClosedByInterruptException          => error("Reader closed by interrupt.")
+      case e: ClosedByInterruptException          => system.error("Reader closed by interrupt.")
       // Terminal has to be re-initialized after SIGSTP or up arrow etc. stop working.
       case e: IOException if restartSystemCall(e) => init() ; readLine(prompt)
     }

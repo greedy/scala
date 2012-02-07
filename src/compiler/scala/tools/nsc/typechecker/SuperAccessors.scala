@@ -87,12 +87,12 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
 
         if (sym.isDeferred) {
           val member = sym.overridingSymbol(clazz);
-          if (mix != nme.EMPTY.toTypeName || member == NoSymbol ||
+          if (mix != tpnme.EMPTY || member == NoSymbol ||
               !((member hasFlag ABSOVERRIDE) && member.isIncompleteIn(clazz)))
             unit.error(tree.pos, ""+sym+sym.locationString+" is accessed from super. It may not be abstract "+
                                  "unless it is overridden by a member declared `abstract' and `override'");
         }
-        if (tree.isTerm && mix == nme.EMPTY.toTypeName &&
+        if (tree.isTerm && mix == tpnme.EMPTY &&
             (clazz.isTrait || clazz != currentOwner.enclClass || !validCurrentOwner)) {
           val supername = nme.superName(sym.name)
           var superAcc = clazz.info.decl(supername).suchThat(_.alias == sym)
@@ -144,6 +144,10 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
         else tree
 
       try tree match {
+        // Don't transform patterns or strange trees will reach the matcher (ticket #4062)
+        case CaseDef(pat, guard, body) =>
+          treeCopy.CaseDef(tree, pat, transform(guard), transform(body))
+
         case ClassDef(_, _, _, _) =>
           checkCompanionNameClashes(sym)
           val decls = sym.info.decls
@@ -191,7 +195,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
            if (sym.isParamAccessor && sym.alias != NoSymbol) {
             val result = localTyper.typed {
                 Select(
-                  Super(qual.symbol, nme.EMPTY.toTypeName/*qual.symbol.info.parents.head.symbol.name*/) setPos qual.pos,
+                  Super(qual.symbol, tpnme.EMPTY/*qual.symbol.info.parents.head.symbol.name*/) setPos qual.pos,
                   sym.alias) setPos tree.pos
             }
             if (settings.debug.value)
@@ -417,13 +421,19 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
       def accessibleThroughSubclassing =
         validCurrentOwner && clazz.thisSym.isSubClass(sym.owner) && !clazz.isTrait
 
+      def packageAccessBoundry(sym: Symbol) = {
+        val b = sym.accessBoundary(sym.owner)
+        if (b.isPackageClass) b
+        else b.enclosingPackageClass
+      }
+
       val isCandidate = (
            sym.isProtected
         && sym.isJavaDefined
         && !sym.definedInPackage
         && !accessibleThroughSubclassing
         && (sym.owner.enclosingPackageClass != currentOwner.enclosingPackageClass)
-        && (sym.owner.enclosingPackageClass == sym.accessBoundary(sym.owner).enclosingPackageClass)
+        && (sym.owner.enclosingPackageClass == packageAccessBoundry(sym))
       )
       val host = hostForAccessorOf(sym, clazz)
       def isSelfType = (host.thisSym != host) && {

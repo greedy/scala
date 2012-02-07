@@ -36,6 +36,8 @@ package object parallel {
 
   private[parallel] def outofbounds(idx: Int) = throw new IndexOutOfBoundsException(idx.toString)
 
+  private[parallel] def getTaskSupport: TaskSupport = new TaskSupport {}
+
   /* implicit conversions */
 
   /** An implicit conversion providing arrays with a `par` method, which
@@ -209,7 +211,7 @@ package object parallel {
         afterCombine(other)
 
         this
-      } else error("Unexpected combiner type.")
+      } else system.error("Unexpected combiner type.")
     } else this
 
   }
