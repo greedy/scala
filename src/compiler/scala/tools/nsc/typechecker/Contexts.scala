@@ -138,6 +138,13 @@ trait Contexts { self: Analyzer =>
       tparams
     }
 
+    def withImplicitsDisabled[T](op: => T): T = {
+      val saved = implicitsEnabled
+      implicitsEnabled = false
+      try op
+      finally implicitsEnabled = saved
+    }
+
     /**
      *  @param unit    ...
      *  @param tree    ...
@@ -364,6 +371,7 @@ trait Contexts { self: Analyzer =>
      */
     def isAccessible(sym: Symbol, pre: Type, superAccess: Boolean): Boolean = {
       lastAccessCheckDetails = ""
+      // Console.println("isAccessible(%s, %s, %s)".format(sym, pre, superAccess))
 
       @inline def accessWithinLinked(ab: Symbol) = {
         val linked = ab.linkedClassOfClass
@@ -438,7 +446,6 @@ trait Contexts { self: Analyzer =>
         || sym.isProtected &&
              (  superAccess
              || pre.isInstanceOf[ThisType]
-             || sym.isConstructor
              || phase.erasedTypes
              || isProtectedAccessOK(sym)
              || (sym.allOverriddenSymbols exists isProtectedAccessOK)

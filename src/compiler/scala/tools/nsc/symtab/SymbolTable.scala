@@ -15,6 +15,7 @@ abstract class SymbolTable extends reflect.generic.Universe
                               with Symbols
                               with Types
                               with Scopes
+                              with Caches
                               with Definitions
                               with reflect.generic.Constants
                               with BaseTypeSeqs
@@ -26,6 +27,7 @@ abstract class SymbolTable extends reflect.generic.Universe
                               with TreePrinters
                               with Positions
                               with DocComments
+                              with TypeDebugging
 {
   def settings: Settings
   def rootLoader: LazyType
@@ -90,12 +92,9 @@ abstract class SymbolTable extends reflect.generic.Universe
   final def atPhase[T](ph: Phase)(op: => T): T = {
     // Eugene: insert same thread assertion here
     val current = phase
-    try {
-      phase = ph
-      op
-    } finally {
-      phase = current
-    }
+    phase = ph
+    try op
+    finally phase = current
   }
   final def afterPhase[T](ph: Phase)(op: => T): T =
     atPhase(ph.next)(op)

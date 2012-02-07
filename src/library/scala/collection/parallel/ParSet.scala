@@ -22,7 +22,7 @@ extends Set[T]
    with ParSetLike[T, ParSet[T], Set[T]]
 {
 self =>
-  override def empty: ParSet[T] = immutable.ParHashSet[T]()
+  override def empty: ParSet[T] = mutable.ParHashSet[T]()
 
   override def companion: GenericCompanion[ParSet] with GenericParCompanion[ParSet] = ParSet
 
@@ -32,7 +32,7 @@ self =>
 
 
 object ParSet extends ParSetFactory[ParSet] {
-  def newCombiner[T]: Combiner[T, ParSet[T]] = immutable.HashSetCombiner[T]
+  def newCombiner[T]: Combiner[T, ParSet[T]] = mutable.ParHashSetCombiner[T]
 
   implicit def canBuildFrom[T]: CanCombineFrom[Coll, T, ParSet[T]] = new GenericCanCombineFrom[T]
 }

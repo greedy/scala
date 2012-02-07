@@ -1,11 +1,15 @@
+/* FJBG -- Fast Java Bytecode Generator
+ * Copyright 2002-2011 LAMP/EPFL
+ * @author  Michel Schinz
+ */
 
 package ch.epfl.lamp.fjbg;
 
 /**
  * Types for Java objects.
  *
- * @version 1.0
  * @author Michel Schinz
+ * @version 1.0
  */
 
 public class JObjectType extends JReferenceType {
@@ -48,5 +52,14 @@ public class JObjectType extends JReferenceType {
     public boolean isCompatibleWith(JType other) {
         return other instanceof JObjectType
             || other == JType.REFERENCE;
+    }
+    public boolean equals(Object o) {
+        if (o instanceof JObjectType)
+            return ((JObjectType)o).getSignature().equals(this.getSignature());
+        else
+            return false;
+    }
+    public int hashCode() {
+        return name.hashCode();
     }
 }

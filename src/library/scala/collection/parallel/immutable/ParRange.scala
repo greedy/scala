@@ -3,7 +3,6 @@ package scala.collection.parallel.immutable
 
 
 import scala.collection.immutable.Range
-import scala.collection.immutable.RangeUtils
 import scala.collection.parallel.ParSeq
 import scala.collection.parallel.Combiner
 import scala.collection.generic.CanCombineFrom
@@ -14,20 +13,23 @@ import scala.collection.parallel.ParIterableIterator
 @SerialVersionUID(1L)
 class ParRange(val range: Range)
 extends ParSeq[Int]
-   with Serializable {
+   with Serializable
+{
 self =>
 
   def seq = range
 
-  @inline
-  final def length = range.length
+  @inline final def length = range.length
 
-  @inline
-  final def apply(idx: Int) = range.apply(idx)
+  @inline final def apply(idx: Int) = range.apply(idx);
 
   def parallelIterator = new ParRangeIterator with SCPI
 
   type SCPI = SignalContextPassingIterator[ParRangeIterator]
+
+  override def toParSeq = this // TODO remove when we have ParSeq, when ParVector is in place
+
+  override def toParSet[U >: Int] = toParCollection[U, ParSet[U]](() => HashSetCombiner[U]) // TODO remove when we have ParSeq, when ParVector is in place
 
   class ParRangeIterator(range: Range = self.range)
   extends ParIterator {
@@ -90,7 +92,6 @@ self =>
       }
       cb
     }
-
   }
 
 }

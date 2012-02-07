@@ -47,8 +47,10 @@ trait Namers { self: Analyzer =>
   // synthetic `copy' (reps `apply', `unapply') methods are added. To compute
   // their signatures, the corresponding ClassDef is needed.
   // During naming, for each case class module symbol, the corresponding ClassDef
-  // is stored in this map.
-  private[typechecker] val caseClassOfModuleClass = new HashMap[Symbol, ClassDef]
+  // is stored in this map. The map is cleared lazily, i.e. when the new symbol
+  // is created with the same name, the old one (if present) is wiped out, or the
+  // entry is deleted when it is used and no longer needed.
+  private val caseClassOfModuleClass = new HashMap[Symbol, ClassDef]
 
   // Default getters of constructors are added to the companion object in the
   // typeCompleter of the constructor (methodSig). To compute the signature,
@@ -59,7 +61,6 @@ trait Namers { self: Analyzer =>
   private[typechecker] val classAndNamerOfModule = new HashMap[Symbol, (ClassDef, Namer)]
 
   def resetNamer() {
-    caseClassOfModuleClass.clear
     classAndNamerOfModule.clear
   }
 
@@ -189,7 +190,7 @@ trait Namers { self: Analyzer =>
       }
       var pkg = owner.info.decls.lookup(pid.name)
       if (!pkg.isPackage || owner != pkg.owner) {
-        pkg = owner.newPackage(pos, pid.name)
+        pkg = owner.newPackage(pos, pid.name.toTermName)
         pkg.moduleClass.setInfo(new PackageClassInfoType(new Scope, pkg.moduleClass))
         pkg.setInfo(pkg.moduleClass.tpe)
         enterInScope(pkg, owner.info.decls)
@@ -203,6 +204,7 @@ trait Namers { self: Analyzer =>
         updatePosFlags(c, tree.pos, tree.mods.flags)
         setPrivateWithin(tree, c, tree.mods)
       } else {
+        caseClassOfModuleClass -= c
         var sym = context.owner.newClass(tree.pos, tree.name)
         sym = sym.setFlag(tree.mods.flags | inConstructorFlag)
         sym = setPrivateWithin(tree, sym, tree.mods)
@@ -466,7 +468,7 @@ trait Namers { self: Analyzer =>
     }
 
     def enterNewMethod(tree: Tree, name: Name, flags: Long, mods: Modifiers, pos: Position): TermSymbol = {
-      val sym = context.owner.newMethod(pos, name).setFlag(flags)
+      val sym = context.owner.newMethod(pos, name.toTermName).setFlag(flags)
       setPrivateWithin(tree, sym, mods)
       enterInScope(sym)
       sym
@@ -504,7 +506,7 @@ trait Namers { self: Analyzer =>
           val beanGetterDef = atPos(vd.pos.focus) {
             DefDef(getterMods, getterName, Nil, List(Nil), tpt.duplicate,
                    if (mods.isDeferred) EmptyTree
-                   else Select(This(getter.owner.name), name)) }
+                   else Select(This(getter.owner.name.toTypeName), name)) }
           enterSyntheticSym(beanGetterDef)
 
           if (mods.isMutable) {
@@ -1350,7 +1352,7 @@ trait Namers { self: Analyzer =>
     if (member.hasAccessorFlag) {
       if (member.isDeferred) {
         val getter = if (member.isSetter) member.getter(member.owner) else member
-        val result = getter.owner.newValue(getter.pos, getter.name)
+        val result = getter.owner.newValue(getter.pos, getter.name.toTermName)
           .setInfo(getter.tpe.resultType)
           .setFlag(DEFERRED)
         if (getter.setter(member.owner) != NoSymbol) result.setFlag(MUTABLE)

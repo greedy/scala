@@ -239,22 +239,23 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     // scalac -Dscala.timings will make this true.
     def timings       = system.props contains "scala.timings"
 
-    def debug         = settings.debug.value
-    def deprecation   = settings.deprecation.value
-    def experimental  = settings.Xexperimental.value
-    def fatalWarnings = settings.Xwarnfatal.value
-    def logClasspath  = settings.Ylogcp.value
-    def printLate     = settings.printLate.value
-    def printStats    = settings.Ystatistics.value
-    def profileClass  = settings.YprofileClass.value
-    def richExes      = settings.YrichExes.value
-    def showTrees     = settings.Xshowtrees.value
-    def target        = settings.target.value
-    def typerDebug    = settings.Ytyperdebug.value
-    def unchecked     = settings.unchecked.value
-    def verbose       = settings.verbose.value
-    def writeICode    = settings.writeICode.value
-    def declsOnly     = false
+    def debug           = settings.debug.value
+    def deprecation     = settings.deprecation.value
+    def experimental    = settings.Xexperimental.value
+    def fatalWarnings   = settings.Xwarnfatal.value
+    def logClasspath    = settings.Ylogcp.value
+    def printLate       = settings.printLate.value
+    def printStats      = settings.Ystatistics.value
+    def profileClass    = settings.YprofileClass.value
+    def profileMem      = settings.YprofileMem.value
+    def richExes        = settings.YrichExes.value
+    def showTrees       = settings.Xshowtrees.value
+    def target          = settings.target.value
+    def typerDebug      = settings.Ytyperdebug.value
+    def unchecked       = settings.unchecked.value
+    def verbose         = settings.verbose.value
+    def writeICode      = settings.writeICode.value
+    def declsOnly       = false
 
     /** Flags as applied to the current or previous phase */
     def browsePhase  = isActive(settings.browse)
@@ -262,11 +263,13 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     def logPhase     = isActive(settings.log)
     def printPhase   = isActive(settings.Xprint)
     def showPhase    = isActive(settings.Yshow)
-    def profilePhase = isActive(settings.Yprofile) && !profileAll
+    def profCPUPhase = isActive(settings.Yprofile) && !profileAll
 
     /** Derived values */
+    def noShow        = settings.Yshow.isDefault
     def showNames     = List(showClass, showObject).flatten
     def profileAll    = settings.Yprofile.doAllPhases
+    def profileAny    = !settings.Yprofile.isDefault || !settings.YprofileMem.isDefault
     def jvm           = target startsWith "jvm"
     def msil          = target == "msil"
     def llvm          = target == "llvm"
@@ -314,8 +317,8 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     override def erasedTypes: Boolean = isErased
     private val isFlat = prev.name == "flatten" || prev.flatClasses
     override def flatClasses: Boolean = isFlat
-    private val isDevirtualized = prev.name == "devirtualize" || prev.devirtualized
-    override def devirtualized: Boolean = isDevirtualized  // (part of DEVIRTUALIZE)
+    // private val isDevirtualized = prev.name == "devirtualize" || prev.devirtualized
+    // override def devirtualized: Boolean = isDevirtualized  // (part of DEVIRTUALIZE)
     private val isSpecialized = prev.name == "specialize" || prev.specialized
     override def specialized: Boolean = isSpecialized
     private val isRefChecked = prev.name == "refchecks" || prev.refChecked
@@ -665,12 +668,6 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     /** To be initialized from firstPhase. */
     private var terminalPhase: Phase = NoPhase
 
-    if (settings.YprofileRes.value) {
-      System.gc();
-      println("Saving snapshot")
-      profiler.captureSnapshot()
-    }
-
     /** Whether compilation should stop at or skip the phase with given name. */
     protected def stopPhase(name: String) = settings.stop contains name
     protected def skipPhase(name: String) = settings.skip contains name
@@ -872,11 +869,15 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
         val startTime = currentTime
         phase = globalPhase
 
-        if (opt.profilePhase) {
+        if (opt.profCPUPhase) {
           inform("starting CPU profiling on phase " + globalPhase.name)
           profiler profile globalPhase.run
         }
         else globalPhase.run
+
+        // Create a profiling generation for each phase's allocations
+        if (opt.profileAny)
+          profiler.advanceGeneration(globalPhase.name)
 
         // progress update
         informTime(globalPhase.description, startTime)
@@ -912,15 +913,14 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
 
         advancePhase
       }
-      if (opt.profileAll) {
+      if (opt.profileAll)
         profiler.stopProfiling()
-        profiler.captureSnapshot()
-      }
+
       if (opt.timings)
         inform(phaseTimings.formatted)
 
-      // If no phase was specified for -Xshow-class/object, show it now.
-      if (settings.Yshow.isDefault)
+      // In case no phase was specified for -Xshow-class/object, show it now for sure.
+      if (opt.noShow)
         showMembers()
 
       if (reporter.hasErrors) {
@@ -943,12 +943,21 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
       symSource.keys foreach (x => resetPackageClass(x.owner))
       informTime("total", startTime)
 
+      // save heap snapshot if requested
+      if (opt.profileMem) {
+        inform("Saving heap snapshot, this could take a while...")
+        System.gc()
+        profiler.captureSnapshot()
+        inform("...done saving heap snapshot.")
+        specializeTypes.printSpecStats()
+      }
+
       // record dependency data
       if (!dependencyAnalysis.off)
         dependencyAnalysis.saveDependencyAnalysis()
     }
 
-    /** Compile list of abstract files */
+    /** Compile list of abstract files. */
     def compileFiles(files: List[AbstractFile]) {
       try compileSources(files map getSourceFile)
       catch { case ex: IOException => globalError(ex.getMessage()) }
@@ -1147,6 +1156,6 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
   def forMSIL          = opt.msil
   def forLLVM          = opt.llvm
   def forInteractive   = false
-  def onlyPresentation = false
+  def forScaladoc      = false
   def createJavadoc    = false
 }

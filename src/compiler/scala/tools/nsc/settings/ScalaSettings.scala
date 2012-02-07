@@ -81,10 +81,6 @@ trait ScalaSettings extends AbsScalaSettings with StandardScalaSettings {
   // Experimental Extensions
   val Xexperimental = BooleanSetting    ("-Xexperimental", "Enable experimental extensions.") .
                           withPostSetHook(set => List(YdepMethTpes, YmethodInfer) foreach (_.value = set.value)) //YvirtClasses,
-  val YdepMethTpes  = BooleanSetting    ("-Ydependent-method-types", "Allow dependent method types.")
-  val YmethodInfer  = BooleanSetting    ("-Yinfer-argument-types", "Infer types for arguments of overriden methods.")
-  val noSelfCheck   = BooleanSetting    ("-Yno-self-type-checks", "Suppress check for self-type conformance among inherited members.")
-  val YvirtClasses  = false // too embryonic to even expose as a -Y //BooleanSetting    ("-Yvirtual-classes", "Support virtual classes")
 
   /** Compatibility stubs for options whose value name did
    *  not previously match the option name.
@@ -118,8 +114,8 @@ trait ScalaSettings extends AbsScalaSettings with StandardScalaSettings {
   val noimports     = BooleanSetting    ("-Yno-imports", "Compile without any implicit imports.")
   // Not actually doing anything, so disabled.
   // val nopredefs     = BooleanSetting    ("-Yno-predefs", "Compile without any implicit predefined values.")
-  val Yprofile      = PhasesSetting     ("-Yprofile", "(Requires jvm -agentpath to contain yjgpagent) Profile")
-  val YprofileRes   = BooleanSetting    ("-Yprofile-resident", "Profile memory, get heap snapshot after each compiler run (requires yjpagent, see above).")
+  val Yprofile      = PhasesSetting     ("-Yprofile", "(Requires jvm -agentpath to contain yjgpagent) Profile CPU usage of given phases.")
+  val YprofileMem   = BooleanSetting    ("-Yprofile-memory", "Profile memory, get heap snapshot after each compiler run (requires yjpagent, see above).")
   val YprofileClass = StringSetting     ("-Yprofile-class", "class", "Name of profiler class.", "scala.tools.util.YourkitProfiling")
   val Yrecursion    = IntSetting        ("-Yrecursion", "Set recursion depth used when locking symbols.", 0, Some(0, Int.MaxValue), (_: String) => None)
   val selfInAnnots  = BooleanSetting    ("-Yself-in-annots", "Include a \"self\" identifier inside of annotations.")
@@ -146,10 +142,24 @@ trait ScalaSettings extends AbsScalaSettings with StandardScalaSettings {
   val Ypmatnaive    = BooleanSetting    ("-Ypmat-naive", "Desugar matches as naively as possible.")
   val Ymurmur       = BooleanSetting    ("-Ymurmur", "Use Murmur hash algorithm for case class generated hashCodes.")
   val Ynotnull      = BooleanSetting    ("-Ynotnull", "Enable (experimental and incomplete) scala.NotNull.")
+  val YdepMethTpes  = BooleanSetting    ("-Ydependent-method-types", "Allow dependent method types.")
+  val YmethodInfer  = BooleanSetting    ("-Yinfer-argument-types", "Infer types for arguments of overriden methods.")
+  val noSelfCheck   = BooleanSetting    ("-Yno-self-type-checks", "Suppress check for self-type conformance among inherited members.")
+  val YvirtClasses  = false // too embryonic to even expose as a -Y //BooleanSetting    ("-Yvirtual-classes", "Support virtual classes")
 
-  // Warnings
+  /**
+   * Warnings
+   */
   val Ywarndeadcode = BooleanSetting    ("-Ywarn-dead-code", "Emit warnings for dead code")
 
+  /**
+   * IDE-specific settings
+   */
+  val YpresentationVerbose = BooleanSetting("-Ypresentation-verbose", "Print information about presentation compiler tasks.")
+  val YpresentationDebug   = BooleanSetting("-Ypresentation-debug",  "Enable debugging output for the presentation compiler.")
+
+  val YpresentationLog     = StringSetting("-Ypresentation-log", "file", "Log presentation comnpiler events into file", "")
+  val YpresentationReplay  = StringSetting("-Ypresentation-replay", "file", "Replay presentation comnpiler events from file", "")
   /**
    * "fsc-specific" settings.
    */

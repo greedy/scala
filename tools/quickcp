@@ -2,7 +2,9 @@
 #
 
 THISDIR=`dirname $0`
-cp=`${THISDIR}/cpof ${THISDIR}/../build/quick/classes`
-fjbg=`${THISDIR}/abspath ${THISDIR}/../lib/fjbg.jar`
+ABS=${THISDIR}/abspath
+LIBDIR=`$ABS $THISDIR/../lib`
 
-echo ${cp}:${fjbg}
+cp=`${THISDIR}/cpof ${THISDIR}/../build/quick/classes`
+
+echo ${cp}:$LIBDIR/fjbg.jar:$LIBDIR/msil.jar:$LIBDIR/forkjoin.jar:$LIBDIR/jline.jar:$LIBDIR/extra/'*'

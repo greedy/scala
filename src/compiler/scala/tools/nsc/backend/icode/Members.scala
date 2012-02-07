@@ -9,7 +9,6 @@ package backend
 package icode
 
 import java.io.PrintWriter
-
 import scala.collection.{ mutable, immutable }
 import mutable.{ HashMap, ListBuffer }
 import symtab.Flags.{ DEFERRED }
@@ -27,6 +26,7 @@ trait Members { self: ICodes =>
    * other multi-block piece of code, like exception handlers.
    */
   class Code(label: String, method: IMethod) {
+    def this(method: IMethod) = this(method.symbol.simpleName.toString, method)
 
     /** The set of all blocks */
     val blocks: ListBuffer[BasicBlock] = new ListBuffer
@@ -219,8 +219,7 @@ trait Members { self: ICodes =>
      * This method should be most effective after heavy inlining.
      */
     def normalize: Unit = if (this.code ne null) {
-      import scala.collection.mutable.{Map, HashMap}
-      val nextBlock: Map[BasicBlock, BasicBlock] = HashMap.empty
+      val nextBlock: mutable.Map[BasicBlock, BasicBlock] = mutable.HashMap.empty
       for (b <- code.blocks.toList
         if b.successors.length == 1;
         val succ = b.successors.head;

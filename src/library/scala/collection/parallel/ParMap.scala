@@ -26,7 +26,7 @@ self =>
 
   def mapCompanion: GenericParMapCompanion[ParMap] = ParMap
 
-  override def empty: ParMap[K, V] = new immutable.ParHashMap[K, V]
+  override def empty: ParMap[K, V] = new mutable.ParHashMap[K, V]
 
   override def stringPrefix = "ParMap"
 }
@@ -34,9 +34,9 @@ self =>
 
 
 object ParMap extends ParMapFactory[ParMap] {
-  def empty[K, V]: ParMap[K, V] = new immutable.ParHashMap[K, V]
+  def empty[K, V]: ParMap[K, V] = new mutable.ParHashMap[K, V]
 
-  def newCombiner[K, V]: Combiner[(K, V), ParMap[K, V]] = immutable.HashMapCombiner[K, V]
+  def newCombiner[K, V]: Combiner[(K, V), ParMap[K, V]] = mutable.ParHashMapCombiner[K, V]
 
   implicit def canBuildFrom[K, V]: CanCombineFrom[Coll, (K, V), ParMap[K, V]] = new CanCombineFromMap[K, V]
 

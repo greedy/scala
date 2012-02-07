@@ -7,10 +7,11 @@
 package scala.tools.nsc
 package matching
 
+import PartialFunction._
+import scala.collection.{ mutable, immutable }
 import util.Position
 import transform.ExplicitOuter
 import symtab.Flags
-import collection._
 import mutable.ListBuffer
 import immutable.IntMap
 import annotation.elidable
@@ -28,7 +29,6 @@ trait ParallelMatching extends ast.TreeDSL
   import CODE._
   import Types._
   import Debug._
-  import PartialFunction._
 
   /** Transition **/
   def toPats(xs: List[Tree]): List[Pattern] = xs map Pattern.apply
@@ -231,10 +231,6 @@ trait ParallelMatching extends ast.TreeDSL
     /***** Rule Applications *****/
 
     sealed abstract class RuleApplication {
-      // def isFinal = false
-      // def body = tree
-      // def freeVars = (scrut.pv :: rest.tvars).syms
-
       def pmatch: PatternMatch
       def rest: Rep
       def cond: Tree
@@ -243,7 +239,7 @@ trait ParallelMatching extends ast.TreeDSL
 
       lazy val PatternMatch(scrut, patterns) = pmatch
       lazy val head = pmatch.head
-      def codegen: Tree = IF (cond) THEN (success) ELSE (failure)
+      lazy val codegen: Tree = IF (cond) THEN (success) ELSE (failure)
 
       def mkFail(xs: List[Row]): Tree =
         if (xs.isEmpty) failTree
@@ -687,10 +683,10 @@ trait ParallelMatching extends ast.TreeDSL
     object ExpandedMatrix {
       def unapply(x: ExpandedMatrix) = Some((x.rows, x.targets))
       def apply(rowz: List[(Row, FinalState)]) =
-        new ExpandedMatrix(rowz map (_._1), rowz map (_._2))
+        new ExpandedMatrix(rowz map (_._1), rowz map (_._2) toIndexedSeq)
     }
 
-    class ExpandedMatrix(val rows: List[Row], val targets: List[FinalState]) {
+    class ExpandedMatrix(val rows: List[Row], val targets: IndexedSeq[FinalState]) {
       require(rows.size == targets.size)
 
       override def toString() = {
@@ -818,7 +814,7 @@ trait ParallelMatching extends ast.TreeDSL
 
       def ppn(x: Any) = pp(x, newlines = true)
       override def toString() =
-        if (tvars.size == 0) "Rep(%d) = %s".format(rows.size, ppn(rows))
+        if (tvars.isEmpty) "Rep(%d) = %s".format(rows.size, ppn(rows))
         else "Rep(%dx%d)%s%s".format(tvars.size, rows.size, ppn(tvars), ppn(rows))
     }
 
