@@ -14,7 +14,6 @@ import java.util.zip.{ ZipEntry, ZipFile, ZipInputStream }
 import PartialFunction._
 
 import scala.collection.mutable.{ Map, HashMap }
-import scala.collection.JavaConversions.asIterator
 import annotation.tailrec
 
 /**
@@ -47,7 +46,11 @@ object ZipArchive {
    */
   def fromURL(url: URL): AbstractFile = new URLZipArchive(url)
 
-  private[io] class ZipEntryTraversableClass(in: InputStream) extends Traversable[ZipEntry] {
+  private[io] trait ZipTrav extends Traversable[ZipEntry] {
+    def zis: () => ZipInputStream
+  }
+
+  private[io] class ZipEntryTraversableClass(in: InputStream) extends ZipTrav {
     val zis = () => new ZipInputStream(in)
 
     def foreach[U](f: ZipEntry => U) = {
@@ -72,6 +75,7 @@ object ZipArchive {
     }
   }
 }
+import ZipArchive.ZipTrav
 
 /** This abstraction aims to factor out the common code between
  *  ZipArchive (backed by a zip file) and URLZipArchive (backed
@@ -81,7 +85,6 @@ private[io] trait ZipContainer extends AbstractFile {
   /** Abstract types */
   type SourceType             // InputStream or AbstractFile
   type CreationType           // InputStream or ZipFile
-  type ZipTrav = Traversable[ZipEntry] { def zis: () => ZipInputStream }
 
   /** Abstract values */
   protected val creationSource: CreationType
@@ -245,7 +248,7 @@ final class ZipArchive(file: File, val archive: ZipFile) extends PlainFile(file)
   }
 
   private def zipTraversableFromZipFile(z: ZipFile): ZipTrav =
-    new Iterable[ZipEntry] {
+    new Iterable[ZipEntry] with ZipTrav {
       def zis: () => ZipInputStream = null    // not valid for this type
       def iterator = new Iterator[ZipEntry] {
         val enum    = z.entries()

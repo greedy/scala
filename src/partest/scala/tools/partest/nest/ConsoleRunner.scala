@@ -28,7 +28,7 @@ class ConsoleRunner extends DirectRunner {
     List(
       TestSet("pos", pathFilter, "Testing compiler (on files whose compilation should succeed)"),
       TestSet("neg", pathFilter, "Testing compiler (on files whose compilation should fail)"),
-      TestSet("run", pathFilter, "Testing JVM backend"),
+      TestSet("run", pathFilter, "Testing interpreter and backend"),
       TestSet("jvm", pathFilter, "Testing JVM backend"),
       TestSet("res", x => x.isFile && (x hasExtension "res"), "Testing resident compiler"),
       TestSet("buildmanager", _.isDirectory, "Testing Build Manager"),
@@ -56,7 +56,7 @@ class ConsoleRunner extends DirectRunner {
 
   private val unaryArgs = List(
     "--pack", "--all", "--verbose", "--show-diff", "--show-log",
-    "--failed", "--version", "--ansi", "--debug"
+    "--failed", "--update-check", "--version", "--ansi", "--debug"
   ) ::: testSetArgs
 
   private val binaryArgs = List(
@@ -86,10 +86,11 @@ class ConsoleRunner extends DirectRunner {
 
     def argNarrowsTests(x: String) = denotesTestSet(x) || denotesTestFile(x) || denotesTestDir(x)
 
-    NestUI._verbose       = parsed isSet "--verbose"
-    fileManager.showDiff  = parsed isSet "--show-diff"
-    fileManager.showLog   = parsed isSet "--show-log"
-    fileManager.failed    = parsed isSet "--failed"
+    NestUI._verbose         = parsed isSet "--verbose"
+    fileManager.showDiff    = parsed isSet "--show-diff"
+    fileManager.updateCheck = parsed isSet "--update-check"
+    fileManager.showLog     = parsed isSet "--show-log"
+    fileManager.failed      = parsed isSet "--failed"
 
     if (parsed isSet "--ansi") NestUI initialize NestUI.MANY
     if (parsed isSet "--timeout") fileManager.timeout = parsed("--timeout")

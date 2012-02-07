@@ -148,7 +148,7 @@ trait NamesDefaults { self: Analyzer =>
 
       // never used for constructor calls, they always have a stable qualifier
       def blockWithQualifier(qual: Tree, selected: Name) = {
-        val sym = blockTyper.context.owner.newValue(qual.pos, unit.fresh.newName(qual.pos, "qual$"))
+        val sym = blockTyper.context.owner.newValue(qual.pos, unit.fresh.newName("qual$"))
                             .setInfo(qual.tpe)
         blockTyper.context.scope.enter(sym)
         val vd = atPos(sym.pos)(ValDef(sym, qual).setType(NoType))
@@ -250,15 +250,15 @@ trait NamesDefaults { self: Analyzer =>
     def argValDefs(args: List[Tree], paramTypes: List[Type], blockTyper: Typer): List[ValDef] = {
       val context = blockTyper.context
       val symPs = (args, paramTypes).zipped map ((arg, tpe) => {
-        val byName = tpe.typeSymbol == ByNameParamClass
+        val byName = isByNameParamType(tpe)
         val (argTpe, repeated) =
-          if (tpe.typeSymbol == RepeatedParamClass) arg match {
-            case Typed(expr, tpt @ Ident(name)) if name == nme.WILDCARD_STAR.toTypeName =>
+          if (isScalaRepeatedParamType(tpe)) arg match {
+            case Typed(expr, Ident(nme.WILDCARD_STAR)) =>
               (expr.tpe, true)
             case _ =>
               (seqType(arg.tpe), true)
           } else (arg.tpe, false)
-        val s = context.owner.newValue(arg.pos, unit.fresh.newName(arg.pos, "x$"))
+        val s = context.owner.newValue(arg.pos, unit.fresh.newName("x$"))
         val valType = if (byName) functionType(List(), argTpe)
                       else if (repeated) argTpe
                       else argTpe
@@ -271,7 +271,7 @@ trait NamesDefaults { self: Analyzer =>
         // () => { val x = 1; x }, the owner of symbol x must change (to the apply method of the function).
         val body = if (byName) blockTyper.typed(Function(List(), resetLocalAttrs(arg)))
                    else if (repeated) arg match {
-                     case Typed(expr, tpt @ Ident(name)) if name == nme.WILDCARD_STAR.toTypeName =>
+                     case Typed(expr, Ident(nme.WILDCARD_STAR)) =>
                        expr
                      case _ =>
                        val factory = Select(gen.mkAttributedRef(SeqModule), nme.apply)
@@ -314,8 +314,8 @@ trait NamesDefaults { self: Analyzer =>
                 val ref = gen.mkAttributedRef(vDef.symbol)
                 atPos(vDef.pos.focus) {
                   // for by-name parameters, the local value is a nullary function returning the argument
-                  if (tpe.typeSymbol == ByNameParamClass) Apply(ref, List())
-                  else if (tpe.typeSymbol == RepeatedParamClass) Typed(ref, Ident(nme.WILDCARD_STAR.toTypeName))
+                  if (isByNameParamType(tpe)) Apply(ref, List())
+                  else if (isScalaRepeatedParamType(tpe)) Typed(ref, Ident(nme.WILDCARD_STAR))
                   else ref
                 }
               })
@@ -364,7 +364,7 @@ trait NamesDefaults { self: Analyzer =>
                   pos: util.Position, context: Context): (List[Tree], List[Symbol]) = {
     if (givenArgs.length < params.length) {
       val (missing, positional) = missingParams(givenArgs, params)
-      if (missing forall (_.hasFlag(DEFAULTPARAM))) {
+      if (missing forall (_.hasDefaultFlag)) {
         val defaultArgs = missing map (p => {
           var default1 = qual match {
             case Some(q) => gen.mkAttributedSelect(q.duplicate, defaultGetter(p, context))
@@ -380,7 +380,7 @@ trait NamesDefaults { self: Analyzer =>
           }
         })
         (givenArgs ::: defaultArgs, Nil)
-      } else (givenArgs, missing filter (! _.hasFlag(DEFAULTPARAM)))
+      } else (givenArgs, missing filterNot (_.hasDefaultFlag))
     } else (givenArgs, Nil)
   }
 
@@ -453,7 +453,7 @@ trait NamesDefaults { self: Analyzer =>
           val udp = typer.context.extractUndetparams()
           val subst = new SubstTypeMap(udp, udp map (_ => WildcardType)) {
             override def apply(tp: Type): Type = tp match {
-              case TypeRef(_, sym, List(arg)) if (sym == ByNameParamClass) => super.apply(arg)
+              case TypeRef(_, ByNameParamClass, List(arg))  => super.apply(arg)
               case _ => super.apply(tp)
             }
           }
@@ -515,7 +515,7 @@ trait NamesDefaults { self: Analyzer =>
     var rest = params
     while (!rest.isEmpty) {
       val p = rest.head
-      if (!p.hasFlag(SYNTHETIC)) {
+      if (!p.isSynthetic) {
         if (p.name == name) return (i, None)
         if (deprecatedName(p) == Some(name)) return (i, Some(p.name))
       }

@@ -149,6 +149,10 @@ x = ArrayBuilder.ofFloat
 y = ArrayBuilder.ofFloat
 x equals y: true, y equals x: true
 
+x = ArraySeq(1, 2, 3)
+y = ArraySeq(1, 2, 3)
+x equals y: true, y equals x: true
+
 x = ArrayStack(3, 2, 20)
 y = ArrayStack(3, 2, 20)
 x equals y: true, y equals x: true
@@ -161,8 +165,8 @@ x = Map(C -> 3, B -> 2, A -> 1)
 y = Map(C -> 3, A -> 1, B -> 2)
 x equals y: true, y equals x: true
 
-x = Set(layers, buffers, title)
-y = Set(layers, buffers, title)
+x = Set(layers, title, buffers)
+y = Set(layers, title, buffers)
 x equals y: true, y equals x: true
 
 x = History()
@@ -263,3 +267,7 @@ x = Paul
 y = Paul
 x equals y: true, y equals x: true
 
+1
+2
+1
+2

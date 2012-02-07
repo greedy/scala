@@ -102,7 +102,7 @@ trait Types extends reflect.generic.Types { self: SymbolTable =>
    */
   object undoLog {
     private type UndoLog = List[(TypeVar, TypeConstraint)]
-    private var log: UndoLog = List()
+    private[nsc] var log: UndoLog = List()
 
     /** Undo all changes to constraints to type variables upto `limit'
      */
@@ -115,7 +115,7 @@ trait Types extends reflect.generic.Types { self: SymbolTable =>
     }
 
     private[Types] def record(tv: TypeVar) = {log = (tv, tv.constr.cloneInternal) :: log}
-    private[Types] def clear() { log = List() } // TODO: what's the point of this method? -- we roll back the log (using undoTo) in the combinators below anyway, see comments at clear() calls below
+    private[nsc] def clear() { log = List() }
 
     // `block` should not affect constraints on typevars
     def undo[T](block: => T): T = {
@@ -818,10 +818,6 @@ trait Types extends reflect.generic.Types { self: SymbolTable =>
         typeVarToOriginMap(this) eq this
     }
 
-    /** Is this type a varargs parameter?
-     */
-    def isVarargs: Boolean = typeSymbol == RepeatedParamClass
-
     /** If this is a symbol loader type, load and assign a new type to
      *  `sym'.
      */
@@ -899,12 +895,12 @@ trait Types extends reflect.generic.Types { self: SymbolTable =>
             if (name == nme.ANYNAME) decls.elems else decls.lookupEntry(name)
           while (entry ne null) {
             val sym = entry.sym
-            if (sym.getFlag(requiredFlags) == requiredFlags) {
+            if (sym hasAllFlags requiredFlags) {
               val excl = sym.getFlag(excluded)
               if (excl == 0L &&
                   (// omit PRIVATE LOCALS unless selector class is contained in class owning the def.
                    (bcs eq bcs0) ||
-                   sym.getFlag(PRIVATE | LOCAL) != (PRIVATE | LOCAL).toLong ||
+                   !sym.isPrivateLocal ||
                    (bcs0.head.hasTransOwner(bcs.head)))) {
                 if (name.isTypeName || stableOnly && sym.isStable) {
                   stopTimer(findMemberNanos, start)
@@ -916,7 +912,7 @@ trait Types extends reflect.generic.Types { self: SymbolTable =>
                   if (member.name != sym.name ||
                       !(member == sym ||
                         member.owner != sym.owner &&
-                        !sym.hasFlag(PRIVATE) && {
+                        !sym.isPrivate && {
                           if (self eq null) self = this.narrow
                           if (membertpe eq null) membertpe = self.memberType(member)
                           (membertpe matches self.memberType(sym))
@@ -1183,7 +1179,7 @@ trait Types extends reflect.generic.Types { self: SymbolTable =>
     // more precise conceptually, but causes cyclic errors:    (paramss exists (_ contains sym))
     override def isImmediatelyDependent = (sym ne NoSymbol) && (sym.owner.isMethod && sym.isValueParameter)
 
-    override def isVolatile : Boolean = underlying.isVolatile && (!sym.isStable)
+    override def isVolatile : Boolean = underlying.isVolatile && !sym.isStable
 /*
     override def narrow: Type = {
       if (phase.erasedTypes) this
@@ -1910,17 +1906,18 @@ A type's typeSymbol should never be inspected directly.
 
     override def safeToString: String = {
       if (!settings.debug.value) {
-        if (sym == RepeatedParamClass && !args.isEmpty)
-          return args(0).toString + "*"
-        if (sym == ByNameParamClass && !args.isEmpty)
-          return "=> " + args(0).toString
-        if (isFunctionType(this))
-          return normalize.typeArgs.init.mkString("(", ", ", ")") + " => " + normalize.typeArgs.last
-        if (isTupleTypeOrSubtype(this))
-          return normalize.typeArgs.mkString("(", ", ", if (normalize.typeArgs.length == 1) ",)" else ")")
-        if (sym.isAliasType && (prefixChain exists (_.termSymbol hasFlag SYNTHETIC))) {
-          val normed = normalize;
-          if (normed ne this) return normed.toString
+        this match {
+          case TypeRef(_, RepeatedParamClass, arg :: _) => return arg + "*"
+          case TypeRef(_, ByNameParamClass, arg :: _)   => return "=> " + arg
+          case _ =>
+            if (isFunctionType(this))
+              return normalize.typeArgs.init.mkString("(", ", ", ")") + " => " + normalize.typeArgs.last
+            else if (isTupleTypeOrSubtype(this))
+              return normalize.typeArgs.mkString("(", ", ", if (normalize.typeArgs.length == 1) ",)" else ")")
+            else if (sym.isAliasType && prefixChain.exists(_.termSymbol.isSynthetic)) {
+              val normed = normalize;
+              if (normed ne this) return normed.toString
+            }
         }
       }
       val monopart =
@@ -1942,7 +1939,7 @@ A type's typeSymbol should never be inspected directly.
         thisInfo.parents.mkString(" with ") + {
           if (sym.isStructuralRefinement)
             ((decls.toList filter { entry =>
-              !entry.isConstructor && entry.allOverriddenSymbols.isEmpty && !entry.hasFlag(PRIVATE)
+              !entry.isConstructor && entry.allOverriddenSymbols.isEmpty && !entry.isPrivate
             }) map { entry => entry.defString }).mkString("{", "; ", "}")
           else
             ""
@@ -3236,7 +3233,7 @@ A type's typeSymbol should never be inspected directly.
   //  note: it's important to write the two tests in this order,
   //  as only typeParams forces the classfile to be read. See #400
   private def isRawIfWithoutArgs(sym: Symbol) =
-    sym.isClass && !sym.typeParams.isEmpty && sym.hasFlag(JAVA)
+    sym.isClass && sym.typeParams.nonEmpty && sym.isJavaDefined
 
   def isRaw(sym: Symbol, args: List[Type]) =
     !phase.erasedTypes && isRawIfWithoutArgs(sym) && args.isEmpty
@@ -3792,12 +3789,14 @@ A type's typeSymbol should never be inspected directly.
 
   object adaptToNewRunMap extends TypeMap {
     private def adaptToNewRun(pre: Type, sym: Symbol): Symbol = {
-      if (sym.isModuleClass && !phase.flatClasses) {
+      if (phase.flatClasses) {
+	sym
+      } else if (sym.isModuleClass) {
         if (!sym.owner.isPackageClass)
           sym // Nested lazy object
         else
           adaptToNewRun(pre, sym.sourceModule).moduleClass
-      } else if ((pre eq NoPrefix) || (pre eq NoType) || sym.owner.isPackageClass) {
+      } else if ((pre eq NoPrefix) || (pre eq NoType) || sym.isPackageClass) {
         sym
       } else {
         var rebind0 = pre.findMember(sym.name, BRIDGE, 0, true)
@@ -3836,7 +3835,7 @@ A type's typeSymbol should never be inspected directly.
       }
     }
     def apply(tp: Type): Type = tp match {
-      case ThisType(sym) if (sym.isModuleClass) =>
+      case ThisType(sym) =>
         val sym1 = adaptToNewRun(sym.owner.thisType, sym)
         if (sym1 == sym) tp else ThisType(sym1)
       case SingleType(pre, sym) =>
@@ -4036,7 +4035,7 @@ A type's typeSymbol should never be inspected directly.
   }
 
   private def equalSymsAndPrefixes(sym1: Symbol, pre1: Type, sym2: Symbol, pre2: Type): Boolean =
-    if (sym1 == sym2) sym1.hasFlag(PACKAGE) || phase.erasedTypes || pre1 =:= pre2
+    if (sym1 == sym2) sym1.hasPackageFlag || phase.erasedTypes || pre1 =:= pre2
     else (sym1.name == sym2.name) && isUnifiable(pre1, pre2)
 
   /** Do `tp1' and `tp2' denote equivalent types?
@@ -4084,7 +4083,7 @@ A type's typeSymbol should never be inspected directly.
   def normalizePlus(tp: Type) = tp match {
     case TypeRef(pre, sym, List()) =>
       if (!sym.isInitialized) sym.rawInfo.load(sym)
-      if (sym.hasFlag(JAVA) && !sym.typeParams.isEmpty) rawToExistential(tp)
+      if (sym.isJavaDefined && !sym.typeParams.isEmpty) rawToExistential(tp)
       else tp.normalize
     case _ => tp.normalize
   }

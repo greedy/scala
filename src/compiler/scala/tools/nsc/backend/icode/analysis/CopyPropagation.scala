@@ -7,8 +7,7 @@
 package scala.tools.nsc
 package backend.icode.analysis
 
-import scala.collection.mutable.{Map, HashMap}
-import scala.tools.nsc.symtab.Flags.DEFERRED
+import scala.collection.mutable.{ Map, HashMap }
 
 /** A modified copy-propagation like analysis. It
  *  is augmented with a record-like value which is used
@@ -407,7 +406,7 @@ abstract class CopyPropagation {
           if (kind != UNIT)
             out.stack = out.stack.drop(1)
 
-        case THROW() =>
+        case THROW(_) =>
           out.stack = out.stack.drop(1)
 
         case DROP(kind) =>
@@ -425,7 +424,7 @@ abstract class CopyPropagation {
         case SCOPE_ENTER(_) | SCOPE_EXIT(_) =>
           ()
 
-        case LOAD_EXCEPTION() =>
+        case LOAD_EXCEPTION(_) =>
           out.stack = Unknown :: Nil
 
         case _ =>
@@ -508,9 +507,9 @@ abstract class CopyPropagation {
      */
     final def invalidateRecords(state: copyLattice.State) {
       def shouldRetain(sym: Symbol): Boolean = {
-        if (sym.hasFlag(symtab.Flags.MUTABLE))
+        if (sym.isMutable)
           log("dropping binding for " + sym.fullName)
-        !sym.hasFlag(symtab.Flags.MUTABLE)
+        !sym.isMutable
       }
       state.stack = state.stack map { v => v match {
         case Record(cls, bindings) =>

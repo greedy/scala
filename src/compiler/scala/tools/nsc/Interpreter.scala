@@ -18,14 +18,14 @@ import scala.PartialFunction.{ cond, condOpt }
 import scala.tools.util.PathResolver
 import scala.reflect.Manifest
 import scala.collection.mutable.{ ListBuffer, HashSet, HashMap, ArrayBuffer }
-import scala.tools.nsc.util.ScalaClassLoader
+import scala.tools.nsc.util.{ ScalaClassLoader, Exceptional }
 import ScalaClassLoader.URLClassLoader
-import scala.util.control.Exception.{ Catcher, catching, ultimately, unwrapping }
+import scala.util.control.Exception.{ Catcher, catching, catchingPromiscuously, ultimately, unwrapping }
 
 import io.{ PlainFile, VirtualDirectory }
 import reporters.{ ConsoleReporter, Reporter }
 import symtab.{ Flags, Names }
-import util.{ SourceFile, BatchSourceFile, ScriptSourceFile, ClassPath, Chars, stringFromWriter }
+import util.{ ScalaPrefs, JavaStackFrame, SourceFile, BatchSourceFile, ScriptSourceFile, ClassPath, Chars, stringFromWriter }
 import scala.reflect.NameTransformer
 import scala.tools.nsc.{ InterpreterResults => IR }
 import interpreter._
@@ -150,7 +150,7 @@ class Interpreter(val settings: Settings, out: PrintWriter) {
     Tree, TermTree, ValOrDefDef, ValDef, DefDef, Assign, ClassDef,
     ModuleDef, Ident, Select, TypeDef, Import, MemberDef, DocDef,
     ImportSelector, EmptyTree, NoType }
-  import compiler.{ nme, newTermName, newTypeName }
+  import compiler.{ opt, nme, newTermName, newTypeName }
   import nme.{
     INTERPRETER_VAR_PREFIX, INTERPRETER_SYNTHVAR_PREFIX, INTERPRETER_LINE_PREFIX,
     INTERPRETER_IMPORT_WRAPPER, INTERPRETER_WRAPPER_SUFFIX, USCOREkw
@@ -337,10 +337,10 @@ class Interpreter(val settings: Settings, out: PrintWriter) {
   }
 
   /** Clean up a string for output */
-  private def clean(str: String) = truncPrintString(
+  private def clean(str: String) = truncPrintString(cleanNoTruncate(str))
+  private def cleanNoTruncate(str: String) =
     if (isettings.unwrapStrings) stripWrapperGunk(str)
     else str
-  )
 
   /** Indent some code by the width of the scala> prompt.
    *  This way, compiler error messages read better.
@@ -577,8 +577,9 @@ class Interpreter(val settings: Settings, out: PrintWriter) {
   def interpret(line: String, synthetic: Boolean): IR.Result = {
     def loadAndRunReq(req: Request) = {
       val (result, succeeded) = req.loadAndRun
-      if (printResults || !succeeded)
-        out print clean(result)
+      // don't truncate stack traces
+      if (!succeeded) out print cleanNoTruncate(result)
+      else if (printResults) out print clean(result)
 
       // book-keeping
       if (succeeded && !synthetic)
@@ -627,6 +628,8 @@ class Interpreter(val settings: Settings, out: PrintWriter) {
     interpret("val %s = %s.value".format(name, binderName))
   }
 
+  def quietBind(name: String, clazz: Class[_], value: Any): IR.Result =
+    quietBind(name, clazz.getName, value) // XXX need to port toTypeString
   def quietBind(name: String, boundType: String, value: Any): IR.Result =
     beQuietDuring { bind(name, boundType, value) }
 
@@ -673,7 +676,7 @@ class Interpreter(val settings: Settings, out: PrintWriter) {
     }
     def boundNames: List[Name] = Nil
     val definesImplicit = cond(member) {
-      case tree: MemberDef => tree.mods hasFlag Flags.IMPLICIT
+      case tree: MemberDef => tree.mods.isImplicit
     }
     def generatesValue: Option[Name] = None
 
@@ -689,7 +692,6 @@ class Interpreter(val settings: Settings, out: PrintWriter) {
     val maxStringElements = 1000  // no need to mkString billions of elements
     lazy val ValDef(mods, vname, _, _) = member
     lazy val prettyName = NameTransformer.decode(vname)
-    lazy val isLazy = mods hasFlag Flags.LAZY
 
     override lazy val boundNames = List(vname)
     override def generatesValue = Some(vname)
@@ -701,7 +703,7 @@ class Interpreter(val settings: Settings, out: PrintWriter) {
       lazy val extractor = "scala.runtime.ScalaRunTime.stringOf(%s, %s)".format(req fullPath vname, maxStringElements)
 
       // if this is a lazy val we avoid evaluating it here
-      val resultString = if (isLazy) codegenln(false, "<lazy>") else extractor
+      val resultString = if (mods.isLazy) codegenln(false, "<lazy>") else extractor
       val codeToPrint =
         """ + "%s: %s = " + %s""".format(prettyName, string2code(req typeOf vname), resultString)
 
@@ -751,7 +753,7 @@ class Interpreter(val settings: Settings, out: PrintWriter) {
   private class ClassHandler(classdef: ClassDef) extends MemberHandler(classdef) {
     lazy val ClassDef(mods, name, _, _) = classdef
     override lazy val boundNames =
-      name :: (if (mods hasFlag Flags.CASE) List(name.toTermName) else Nil)
+      name :: (if (mods.isCase) List(name.toTermName) else Nil)
 
     override def resultExtractionCode(req: Request, code: PrintWriter) =
       code print codegenln("defined %s %s".format(classdef.keyword, name))
@@ -964,24 +966,40 @@ class Interpreter(val settings: Settings, out: PrintWriter) {
 
       getTypes(valueNames, nme.getterToLocal(_)) ++ getTypes(defNames, identity)
     }
+    private def bindExceptionally(t: Throwable) = {
+      val ex: Exceptional =
+        if (isettings.showInternalStackTraces) Exceptional(t)
+        else new Exceptional(t) {
+          override def spanFn(frame: JavaStackFrame) = !(frame.className startsWith resultObjectName)
+          override def contextPrelude = super.contextPrelude + "/* The repl internal portion of the stack trace is elided. */\n"
+        }
+
+      quietBind("lastException", classOf[Exceptional], ex)
+      ex.contextHead + "\n(access lastException for the full trace)"
+    }
+    private def bindUnexceptionally(t: Throwable) = {
+      quietBind("lastException", classOf[Throwable], t)
+      stringFromWriter(t printStackTrace _)
+    }
 
     /** load and run the code using reflection */
     def loadAndRun: (String, Boolean) = {
-      val resultValMethod: reflect.Method = loadedResultObject getMethod "scala_repl_result"
-      // XXX if wrapperExceptions isn't type-annotated we crash scalac
-      val wrapperExceptions: List[Class[_ <: Throwable]] =
-        List(classOf[InvocationTargetException], classOf[ExceptionInInitializerError])
+      val resultValMethod   = loadedResultObject getMethod "scala_repl_result"
+      val wrapperExceptions = List(classOf[InvocationTargetException], classOf[ExceptionInInitializerError])
 
       /** We turn off the binding to accomodate ticket #2817 */
       def onErr: Catcher[(String, Boolean)] = {
         case t: Throwable if bindLastException =>
           withoutBindingLastException {
-            quietBind("lastException", "java.lang.Throwable", t)
-            (stringFromWriter(t.printStackTrace(_)), false)
+            val message =
+              if (opt.richExes) bindExceptionally(t)
+              else bindUnexceptionally(t)
+
+            (message, false)
           }
       }
 
-      catching(onErr) {
+      catchingPromiscuously(onErr) {
         unwrapping(wrapperExceptions: _*) {
           (resultValMethod.invoke(loadedResultObject).toString, true)
         }

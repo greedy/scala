@@ -10,6 +10,7 @@ import scala.collection.mutable.{HashMap, HashSet}
 import scala.tools.nsc.util.NoPosition
 import Flags._
 import PartialFunction._
+import classfile.ClassfileConstants
 
 trait Definitions extends reflect.generic.StandardDefinitions {
   self: SymbolTable =>
@@ -39,9 +40,6 @@ trait Definitions extends reflect.generic.StandardDefinitions {
 
     lazy val RuntimePackage       = getModule("scala.runtime")
     lazy val RuntimePackageClass  = RuntimePackage.tpe.typeSymbol
-
-    lazy val ScalaCollectionImmutablePackage: Symbol = getModule("scala.collection.immutable")
-    lazy val ScalaCollectionImmutablePackageClass: Symbol = ScalaCollectionImmutablePackage.tpe.typeSymbol
 
     // convenient one-argument parameter lists
     lazy val anyparam     = List(AnyClass.typeConstructor)
@@ -74,18 +72,17 @@ trait Definitions extends reflect.generic.StandardDefinitions {
     lazy val ObjectClass  = getClass(sn.Object)
 
     // bottom types
-    lazy val NullClass    = newClass(ScalaPackageClass, nme.Null, anyrefparam) setFlag (ABSTRACT | TRAIT | FINAL)
-    lazy val NothingClass = newClass(ScalaPackageClass, nme.Nothing, anyparam) setFlag (ABSTRACT | TRAIT | FINAL)
-    lazy val RuntimeNothingClass  = getClass("scala.runtime.Nothing$")
-    lazy val RuntimeNullClass     = getClass("scala.runtime.Null$")
-
+    lazy val NullClass            = newClass(ScalaPackageClass, nme.Null, anyrefparam) setFlag (ABSTRACT | TRAIT | FINAL)
+    lazy val NothingClass         = newClass(ScalaPackageClass, nme.Nothing, anyparam) setFlag (ABSTRACT | TRAIT | FINAL)
+    lazy val RuntimeNothingClass  = getClass(ClassfileConstants.SCALA_NOTHING)
+    lazy val RuntimeNullClass     = getClass(ClassfileConstants.SCALA_NULL)
     lazy val AnyValCompanionClass = getClass("scala.runtime.AnyValCompanion").setFlag(SEALED | ABSTRACT | TRAIT)
 
     // the scala value classes
     lazy val UnitClass    =
       newClass(ScalaPackageClass, nme.Unit, anyvalparam).setFlag(ABSTRACT | FINAL)
 
-    import classfile.ClassfileConstants._
+    import ClassfileConstants._
 
     lazy val ByteClass    = newValueClass(nme.Byte,    BYTE_TAG, 2)
     lazy val ShortClass   = newValueClass(nme.Short,   SHORT_TAG, 4)
@@ -111,16 +108,14 @@ trait Definitions extends reflect.generic.StandardDefinitions {
     )
 
     // exceptions and other throwables
-    lazy val ThrowableClass                 = getClass(sn.Throwable)
-    lazy val NullPointerExceptionClass      = getClass(sn.NPException)
-    lazy val NonLocalReturnControlClass   = getClass(sn.NLRControl)
+    lazy val ClassCastExceptionClass        = getClass("java.lang.ClassCastException")
     lazy val IndexOutOfBoundsExceptionClass = getClass(sn.IOOBException)
-    lazy val UninitializedErrorClass        = getClass("scala.UninitializedFieldError")
+    lazy val InvocationTargetExceptionClass = getClass(sn.InvTargetException)
     lazy val MatchErrorClass                = getClass("scala.MatchError")
-    lazy val InvocationTargetExceptionClass = getClass(if   (forMSIL) "System.Reflection.TargetInvocationException"
-                                                       else           "java.lang.reflect.InvocationTargetException")
-    // java is hard coded because only used by structural values
-    lazy val NoSuchMethodExceptionClass     = getClass("java.lang.NoSuchMethodException")
+    lazy val NonLocalReturnControlClass     = getClass(sn.NLRControl)
+    lazy val NullPointerExceptionClass      = getClass(sn.NPException)
+    lazy val ThrowableClass                 = getClass(sn.Throwable)
+    lazy val UninitializedErrorClass        = getClass("scala.UninitializedFieldError")
 
     // annotations
     lazy val AnnotationClass            = getClass("scala.Annotation")
@@ -142,8 +137,7 @@ trait Definitions extends reflect.generic.StandardDefinitions {
     lazy val ParamTargetClass           = getClass("scala.annotation.target.param")
     lazy val ScalaInlineClass           = getClass("scala.inline")
     lazy val ScalaNoInlineClass         = getClass("scala.noinline")
-    lazy val SpecializedClass           = definitions.getClass("scala.specialized")
-
+    lazy val SpecializedClass           = getClass("scala.specialized")
 
     // fundamental reference classes
     lazy val ScalaObjectClass     = getClass("scala.ScalaObject")
@@ -156,6 +150,7 @@ trait Definitions extends reflect.generic.StandardDefinitions {
 
     // fundamental modules
     lazy val PredefModule: Symbol = getModule("scala.Predef")
+    lazy val PredefModuleClass = PredefModule.tpe.typeSymbol
       def Predef_classOf = getMember(PredefModule, nme.classOf)
       def Predef_error    = getMember(PredefModule, nme.error)
       def Predef_identity = getMember(PredefModule, nme.identity)
@@ -190,8 +185,23 @@ trait Definitions extends reflect.generic.StandardDefinitions {
       tparam => arrayType(tparam.typeConstructor)
     )
 
-    def isRepeatedParamType(tp: Type) =
-      tp.typeSymbol == RepeatedParamClass || tp.typeSymbol == JavaRepeatedParamClass
+    def isByNameParamType(tp: Type)        = tp.typeSymbol == ByNameParamClass
+    def isScalaRepeatedParamType(tp: Type) = tp.typeSymbol == RepeatedParamClass
+    def isJavaRepeatedParamType(tp: Type)  = tp.typeSymbol == JavaRepeatedParamClass
+    def isRepeatedParamType(tp: Type)      = isScalaRepeatedParamType(tp) || isJavaRepeatedParamType(tp)
+
+    def isScalaVarArgs(params: List[Symbol]) = params.nonEmpty && isScalaRepeatedParamType(params.last.tpe)
+    def isVarArgsList(params: List[Symbol])  = params.nonEmpty && isRepeatedParamType(params.last.tpe)
+    def isVarArgTypes(formals: List[Type])   = formals.nonEmpty && isRepeatedParamType(formals.last)
+
+    def isPrimitiveArray(tp: Type) = tp match {
+      case TypeRef(_, ArrayClass, arg :: Nil) => isValueClass(arg.typeSymbol)
+      case _                                  => false
+    }
+    def isArrayOfSymbol(tp: Type, elem: Symbol) = tp match {
+      case TypeRef(_, ArrayClass, arg :: Nil) => arg.typeSymbol == elem
+      case _                                  => false
+    }
 
     lazy val ByNameParamClass = newCovariantPolyClass(
       ScalaPackageClass,
@@ -215,8 +225,6 @@ trait Definitions extends reflect.generic.StandardDefinitions {
     lazy val SeqClass   = getClass2("scala.Seq", "scala.collection.Seq")
     lazy val SeqModule  = getModule2("scala.Seq", "scala.collection.Seq")
       def Seq_length = getMember(SeqClass, nme.length)
-    lazy val RandomAccessSeqMutableClass = getMember(
-      getModule2("scala.RandomAccessSeq", "scala.collection.IndexedSeq"), nme.Mutable)
 
     lazy val ListModule   = getModule2("scala.List", "scala.collection.immutable.List")
       def List_apply = getMember(ListModule, nme.apply)
@@ -227,12 +235,13 @@ trait Definitions extends reflect.generic.StandardDefinitions {
     lazy val ConsClass    = getClass2("scala.$colon$colon", "scala.collection.immutable.$colon$colon")
     lazy val NilModule    = getModule2("scala.Nil", "scala.collection.immutable.Nil")
 
-    lazy val ArrayClass   = getClass("scala.Array")
-      def Array_apply   = getMember(ArrayClass, nme.apply)
-      def Array_update  = getMember(ArrayClass, nme.update)
-      def Array_length  = getMember(ArrayClass, nme.length)
-      lazy val Array_clone   = getMember(ArrayClass, nme.clone_)
+    // arrays and their members
     lazy val ArrayModule  = getModule("scala.Array")
+    lazy val ArrayClass   = getClass("scala.Array")
+      def Array_apply      = getMember(ArrayClass, nme.apply)
+      def Array_update     = getMember(ArrayClass, nme.update)
+      def Array_length     = getMember(ArrayClass, nme.length)
+      lazy val Array_clone = getMember(ArrayClass, nme.clone_)
 
     // reflection / structural types
     lazy val SoftReferenceClass     = getClass("java.lang.ref.SoftReference")
@@ -245,14 +254,14 @@ trait Definitions extends reflect.generic.StandardDefinitions {
       def methodCache_add   = getMember(MethodCacheClass, nme.add_)
 
     // scala.reflect
-    lazy val PartialManifestClass = getClass("scala.reflect.ClassManifest")
-    lazy val PartialManifestModule       = getModule("scala.reflect.ClassManifest")
-    lazy val FullManifestClass   = getClass("scala.reflect.Manifest")
-    lazy val FullManifestModule  = getModule("scala.reflect.Manifest")
-    lazy val OptManifestClass     = getClass("scala.reflect.OptManifest")
-    lazy val NoManifest           = getModule("scala.reflect.NoManifest")
-    lazy val CodeClass            = getClass(sn.Code)
-    lazy val CodeModule           = getModule(sn.Code)
+    lazy val PartialManifestClass  = getClass("scala.reflect.ClassManifest")
+    lazy val PartialManifestModule = getModule("scala.reflect.ClassManifest")
+    lazy val FullManifestClass     = getClass("scala.reflect.Manifest")
+    lazy val FullManifestModule    = getModule("scala.reflect.Manifest")
+    lazy val OptManifestClass      = getClass("scala.reflect.OptManifest")
+    lazy val NoManifest            = getModule("scala.reflect.NoManifest")
+    lazy val CodeClass             = getClass(sn.Code)
+    lazy val CodeModule            = getModule(sn.Code)
       def Code_lift = getMember(CodeModule, nme.lift_)
 
     lazy val ScalaSignatureAnnotation = getClass("scala.reflect.ScalaSignature")
@@ -319,7 +328,7 @@ trait Definitions extends reflect.generic.StandardDefinitions {
       def Product_productPrefix = getMember(ProductRootClass, nme.productPrefix)
       def Product_canEqual = getMember(ProductRootClass, nme.canEqual_)
 
-      def productProj(z:Symbol, j: Int): Symbol = getMember(z, nme.Product_(j))
+      def productProj(z:Symbol, j: Int): Symbol = getMember(z, nme.productAccessorName(j))
       def productProj(n: Int,   j: Int): Symbol = productProj(ProductClass(n), j)
 
       /** returns true if this type is exactly ProductN[T1,...,Tn], not some subclass */
@@ -371,7 +380,7 @@ trait Definitions extends reflect.generic.StandardDefinitions {
         false
     }
 
-    def seqType(arg: Type) = typeRef(SeqClass.typeConstructor.prefix, SeqClass, List(arg))
+    def seqType(arg: Type)   = typeRef(SeqClass.typeConstructor.prefix, SeqClass, List(arg))
     def arrayType(arg: Type) = typeRef(ArrayClass.typeConstructor.prefix, ArrayClass, List(arg))
 
     def ClassType(arg: Type) =
@@ -471,6 +480,8 @@ trait Definitions extends reflect.generic.StandardDefinitions {
     lazy val MigrationAnnotationClass: Symbol   = getClass("scala.annotation.migration")
     lazy val NativeAttr: Symbol                 = getClass("scala.native")
     lazy val RemoteAttr: Symbol                 = getClass("scala.remote")
+    lazy val ScalaNumberClass: Symbol           = getClass("scala.math.ScalaNumber")
+    lazy val ScalaStrictFPAttr: Symbol          = getClass("scala.annotation.strictfp")
     lazy val SerialVersionUIDAttr: Symbol       = getClass("scala.SerialVersionUID")
     lazy val SerializableAttr: Symbol           = getClass("scala.serializable")
     lazy val TraitSetterAnnotationClass: Symbol = getClass("scala.runtime.TraitSetter")

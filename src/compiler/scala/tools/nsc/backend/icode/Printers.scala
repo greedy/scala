@@ -81,7 +81,7 @@ trait Printers { self: ICodes =>
       print("("); printList(printParam)(m.params, ", "); print(")");
       print(": "); print(m.symbol.info.resultType)
 
-      if (!m.isDeferred) {
+      if (!m.isAbstractMethod) {
         println(" {")
         println("locals: " + m.locals.mkString("", ", ", ""))
         println("startBlock: " + m.code.startBlock)
@@ -125,7 +125,7 @@ trait Printers { self: ICodes =>
     def printInstruction(i: Instruction) {
 //      if (settings.Xdce.value)
 //        print(if (i.useful) "   " else " * ");
-      if (i.pos.isDefined) print(i.pos.line.toString + "\t") else print("undef\t")
+      if (i.pos.isDefined) print(i.pos.line.toString + "\t") else print("?\t")
       println(i.toString())
     }
   }

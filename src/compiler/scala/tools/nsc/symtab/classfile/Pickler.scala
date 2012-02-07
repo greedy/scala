@@ -9,15 +9,15 @@ package classfile
 
 import java.lang.Float.floatToIntBits
 import java.lang.Double.doubleToLongBits
-import util.{ ShowPickled }
 import reflect.generic.{ PickleBuffer, PickleFormat }
+import scala.collection.mutable.LinkedHashMap
 import PickleFormat._
 import Flags._
 
 /**
  * Serialize a top-level module and/or class.
  *
- * @see <code>EntryTags.scala</code> for symbol table attribute format.
+ * @see EntryTags.scala for symbol table attribute format.
  *
  * @author Martin Odersky
  * @version 1.0
@@ -34,11 +34,10 @@ abstract class Pickler extends SubComponent {
   class PicklePhase(prev: Phase) extends StdPhase(prev) {
     def apply(unit: CompilationUnit) {
       def pickle(tree: Tree) {
-
         def add(sym: Symbol, pickle: Pickle) = {
           if (currentRun.compiles(sym) && !currentRun.symData.contains(sym)) {
             if (settings.debug.value) log("pickling " + sym)
-            pickle.putSymbol(sym)
+            pickle putSymbol sym
             currentRun.symData(sym) = pickle
           }
         }
@@ -48,10 +47,11 @@ abstract class Pickler extends SubComponent {
             stats foreach pickle
           case ClassDef(_, _, _, _) | ModuleDef(_, _, _) =>
             val sym = tree.symbol
-            val pickle = new Pickle(sym, sym.name.toTermName, sym.owner)
+            val pickle = new Pickle(sym)
             add(sym, pickle)
             add(sym.companionSymbol, pickle)
-            pickle.finish
+            pickle.writeArray()
+            currentRun registerPickle sym
           case _ =>
         }
       }
@@ -59,17 +59,12 @@ abstract class Pickler extends SubComponent {
     }
   }
 
-  private class Pickle(root: Symbol, rootName: Name, rootOwner: Symbol)
-        extends PickleBuffer(new Array[Byte](4096), -1, 0) {
-    import scala.collection.mutable.LinkedHashMap
-    private var entries = new Array[AnyRef](256)
-    private var ep = 0
-    private val index = new LinkedHashMap[AnyRef, Int]
-
-    // collect higher-order type params
-    //private var locals: Set[Symbol] = Set()
-
-//    private var boundSyms: List[Symbol] = Nil
+  private class Pickle(root: Symbol) extends PickleBuffer(new Array[Byte](4096), -1, 0) {
+    private val rootName  = root.name.toTermName
+    private val rootOwner = root.owner
+    private var entries   = new Array[AnyRef](256)
+    private var ep        = 0
+    private val index     = new LinkedHashMap[AnyRef, Int]
 
     private def isRootSym(sym: Symbol) =
       sym.name.toTermName == rootName && sym.owner == rootOwner
@@ -91,7 +86,7 @@ abstract class Pickler extends SubComponent {
       (isRootSym(sym) ||
        sym.isRefinementClass ||
        sym.isAbstractType && sym.hasFlag(EXISTENTIAL) || // existential param
-       (sym hasFlag PARAM) ||
+       sym.isParameter ||
        isLocal(sym.owner))
 
     private def staticAnnotations(annots: List[AnnotationInfo]) =
@@ -100,11 +95,10 @@ abstract class Pickler extends SubComponent {
 
     // Phase 1 methods: Populate entries/index ------------------------------------
 
-    /** Store entry <code>e</code> in index at next available position unless
+    /** Store entry e in index at next available position unless
      *  it is already there.
      *
-     *  @param entry ...
-     *  @return      <code>true</code> iff entry is new.
+     *  @return      true iff entry is new.
      */
     private def putEntry(entry: AnyRef): Boolean = index.get(entry) match {
       case Some(_) => false
@@ -120,8 +114,7 @@ abstract class Pickler extends SubComponent {
         true
     }
 
-    /** Store symbol in <code>index</code>. If symbol is local, also store
-     * everything it refers to.
+    /** Store symbol in index. If symbol is local, also store everything it references.
      *
      *  @param sym ...
      */
@@ -158,9 +151,7 @@ abstract class Pickler extends SubComponent {
     private def putSymbols(syms: List[Symbol]) =
       syms foreach putSymbol
 
-    /** Store type and everything it refers to in map <code>index</code>.
-     *
-     *  @param tp ...
+    /** Store type and everything it refers to in map index.
      */
     private def putType(tp: Type): Unit = if (putEntry(tp)) {
       tp match {
@@ -416,8 +407,7 @@ abstract class Pickler extends SubComponent {
       putEntry(privateWithin)
     }
 
-    /** Store a constant in map <code>index</code> along with
-     *  anything it references.
+    /** Store a constant in map index, along with anything it references.
      */
     private def putConstant(c: Constant) {
       if (putEntry(c)) {
@@ -479,10 +469,7 @@ abstract class Pickler extends SubComponent {
 
     // Phase 2 methods: Write all entries to byte array ------------------------------
 
-    /** Write a reference to object, i.e., the object's number in the map
-     *  <code>index</code>.
-     *
-     *  @param ref ...
+    /** Write a reference to object, i.e., the object's number in the map index.
      */
     private def writeRef(ref: AnyRef) { writeNat(index(ref)) }
     private def writeRefs(refs: List[AnyRef]) { refs foreach writeRef }
@@ -497,7 +484,7 @@ abstract class Pickler extends SubComponent {
       writeRef(sym.name)
       writeRef(localizedOwner(sym))
       writeLongNat((rawFlagsToPickled(sym.flags & PickledFlags)))
-      if (sym.privateWithin != NoSymbol) writeRef(sym.privateWithin)
+      if (sym.hasAccessBoundary) writeRef(sym.privateWithin)
       writeRef(sym.info)
     }
 
@@ -979,7 +966,8 @@ abstract class Pickler extends SubComponent {
     }
 
     /** Print entry for diagnostics */
-    private def printEntry(entry: AnyRef) {
+    def printEntryAtIndex(idx: Int) = printEntry(entries(idx))
+    def printEntry(entry: AnyRef) {
       def printRef(ref: AnyRef) {
         print(index(ref)+
               (if (ref.isInstanceOf[Name]) "("+ref+") " else " "))
@@ -990,7 +978,7 @@ abstract class Pickler extends SubComponent {
         printRef(sym.name)
         printRef(localizedOwner(sym))
         print(flagsToString(sym.flags & PickledFlags)+" ")
-        if (sym.privateWithin != NoSymbol) printRef(sym.privateWithin)
+        if (sym.hasAccessBoundary) printRef(sym.privateWithin)
         printRef(sym.info)
       }
       def printBody(entry: AnyRef) = entry match {
@@ -1088,27 +1076,15 @@ abstract class Pickler extends SubComponent {
     }
 
     /** Write byte array */
-    def finish {
+    def writeArray() {
       assert(writeIndex == 0)
       writeNat(MajorVersion)
       writeNat(MinorVersion)
       writeNat(ep)
-      if (showSig) {
-        println("Pickled info for "+rootName+" V"+MajorVersion+"."+MinorVersion)
-      }
-      for (i <- 0 until ep) {
-        if (showSig/* || rootName.toString == "StaticCompletion"*/) {
-          print((i formatted "%3d: ")+(writeIndex formatted "%5d: "))
-          printEntry(entries(i))
-        }
-        writeEntry(entries(i))
-      }
-      if (settings.Xshowcls.value == rootName.toString) {
-        readIndex = 0
-        ShowPickled.printFile(this, Console.out)
-      }
+
+      entries take ep foreach writeEntry
     }
 
-    override def toString() = "" + rootName + " in " + rootOwner
+    override def toString = "" + rootName + " in " + rootOwner
   }
 }

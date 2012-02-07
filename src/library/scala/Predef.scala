@@ -6,8 +6,6 @@
 **                          |/                                          **
 \*                                                                      */
 
-
-
 package scala
 
 import scala.collection.{ mutable, immutable, generic }
@@ -41,25 +39,32 @@ object Predef extends LowPriorityImplicits {
   val Map         = immutable.Map
   val Set         = immutable.Set
 
-  type Manifest[T] = scala.reflect.Manifest[T]
+  // Manifest types, companions, and incantations for summoning
   type ClassManifest[T] = scala.reflect.ClassManifest[T]
-  def implicitly[T](implicit e: T) = e
-  def manifest[T](implicit m: Manifest[T]) = m
+  type Manifest[T]      = scala.reflect.Manifest[T]
+  type OptManifest[T]   = scala.reflect.OptManifest[T]
+  val ClassManifest     = scala.reflect.ClassManifest
+  val Manifest          = scala.reflect.Manifest
+  val NoManifest        = scala.reflect.NoManifest
+
+  def manifest[T](implicit m: Manifest[T])           = m
   def classManifest[T](implicit m: ClassManifest[T]) = m
+  def optManifest[T](implicit m: OptManifest[T])     = m
 
-  // @see `conforms` for the implicit version
-  def identity[A](x: A): A = x
-
-  def currentThread = java.lang.Thread.currentThread()
-
-  @inline def locally[T](x: T): T = x
+  // Minor variations on identity functions
+  def identity[A](x: A): A         = x    // @see `conforms` for the implicit version
+  def implicitly[T](implicit e: T) = e    // for summoning implicit values from the nether world
+  @inline def locally[T](x: T): T  = x    // to communicate intent and avoid unmoored statements
 
   // errors and asserts -------------------------------------------------
 
+  // @deprecated("Throw your own exceptions") // deprecation waiting for 2.9
   def error(message: String): Nothing = throw new RuntimeException(message)
 
+  // @deprecated("Use System.exit instead") // deprecation waiting for 2.9
   def exit(): Nothing = exit(0)
 
+  // @deprecated("Use System.exit(status) instead") // deprecation waiting for 2.9
   def exit(status: Int): Nothing = {
     java.lang.System.exit(status)
     throw new Throwable()
@@ -180,6 +185,8 @@ object Predef extends LowPriorityImplicits {
   def println() = Console.println()
   def println(x: Any) = Console.println(x)
   def printf(text: String, xs: Any*) = Console.print(format(text, xs: _*))
+  // deprecation waiting for 2.9
+  // @deprecated("Use formatString.format(args: _*) or arg.formatted(formatString) instead")
   def format(text: String, xs: Any*) = augmentString(text).format(xs: _*)
 
   def readLine(): String = Console.readLine()
@@ -199,18 +206,7 @@ object Predef extends LowPriorityImplicits {
 
   // views --------------------------------------------------------------
 
-  implicit def byteWrapper(x: Byte)     = new runtime.RichByte(x)
-  implicit def shortWrapper(x: Short)   = new runtime.RichShort(x)
-  implicit def intWrapper(x: Int)       = new runtime.RichInt(x)
-  implicit def charWrapper(c: Char)     = new runtime.RichChar(c)
-  implicit def longWrapper(x: Long)     = new runtime.RichLong(x)
-  implicit def floatWrapper(x: Float)   = new runtime.RichFloat(x)
-  implicit def doubleWrapper(x: Double) = new runtime.RichDouble(x)
-  implicit def booleanWrapper(x: Boolean) = new runtime.RichBoolean(x)
-
   implicit def exceptionWrapper(exc: Throwable) = new runtime.RichException(exc)
-
-  // tuple zip views
 
   implicit def zipped2ToTraversable[El1, El2](zz: Tuple2[_, _]#Zipped[_, El1, _, El2]): Traversable[(El1, El2)] =
     new Traversable[(El1, El2)] {
@@ -222,18 +218,18 @@ object Predef extends LowPriorityImplicits {
       def foreach[U](f: ((El1, El2, El3)) => U): Unit = zz foreach Function.untupled(f)
     }
 
-  implicit def genericArrayOps[T](xs: Array[T]): ArrayOps[T] = (xs: AnyRef) match { // !!! drop the AnyRef and get unreachable code errors!
-    case x: Array[AnyRef] => refArrayOps[AnyRef](x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Int] => intArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Double] => doubleArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Long] => longArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Float] => floatArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Char] => charArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Byte] => byteArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Short] => shortArrayOps(x).asInstanceOf[ArrayOps[T]]
+  implicit def genericArrayOps[T](xs: Array[T]): ArrayOps[T] = xs match {
+    case x: Array[AnyRef]  => refArrayOps[AnyRef](x).asInstanceOf[ArrayOps[T]]
+    case x: Array[Int]     => intArrayOps(x).asInstanceOf[ArrayOps[T]]
+    case x: Array[Double]  => doubleArrayOps(x).asInstanceOf[ArrayOps[T]]
+    case x: Array[Long]    => longArrayOps(x).asInstanceOf[ArrayOps[T]]
+    case x: Array[Float]   => floatArrayOps(x).asInstanceOf[ArrayOps[T]]
+    case x: Array[Char]    => charArrayOps(x).asInstanceOf[ArrayOps[T]]
+    case x: Array[Byte]    => byteArrayOps(x).asInstanceOf[ArrayOps[T]]
+    case x: Array[Short]   => shortArrayOps(x).asInstanceOf[ArrayOps[T]]
     case x: Array[Boolean] => booleanArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Unit] => unitArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case null => null
+    case x: Array[Unit]    => unitArrayOps(x).asInstanceOf[ArrayOps[T]]
+    case null              => null
   }
 
   implicit def refArrayOps[T <: AnyRef](xs: Array[T]): ArrayOps[T] = new ArrayOps.ofRef[T](xs)
@@ -284,6 +280,19 @@ object Predef extends LowPriorityImplicits {
   implicit def float2Float(x: Float)        = java.lang.Float.valueOf(x)
   implicit def double2Double(x: Double)     = java.lang.Double.valueOf(x)
   implicit def boolean2Boolean(x: Boolean)  = java.lang.Boolean.valueOf(x)
+
+  // These next eight implicits exist solely to exclude AnyRef methods from the
+  // eight implicits above so that primitives are not coerced to AnyRefs.  They
+  // only create such conflict for AnyRef methods, so the methods on the java.lang
+  // boxed types are unambiguously reachable.
+  implicit def byte2ByteConflict(x: Byte)           = new AnyRef
+  implicit def short2ShortConflict(x: Short)        = new AnyRef
+  implicit def char2CharacterConflict(x: Char)      = new AnyRef
+  implicit def int2IntegerConflict(x: Int)          = new AnyRef
+  implicit def long2LongConflict(x: Long)           = new AnyRef
+  implicit def float2FloatConflict(x: Float)        = new AnyRef
+  implicit def double2DoubleConflict(x: Double)     = new AnyRef
+  implicit def boolean2BooleanConflict(x: Boolean)  = new AnyRef
 
   implicit def Byte2byte(x: java.lang.Byte): Byte             = x.byteValue
   implicit def Short2short(x: java.lang.Short): Short         = x.shortValue
@@ -346,6 +355,8 @@ object Predef extends LowPriorityImplicits {
   }
 
   // less useful due to #2781
+  // @deprecated("Use From => To instead")
+  // ...intended for 2.9 unless someone can point out anything <%< offers over =>
   sealed abstract class <%<[-From, +To] extends (From => To)
   object <%< {
     implicit def conformsOrViewsAs[A <% B, B]: A <%< B = new (A <%< B) {def apply(x: A) = x}

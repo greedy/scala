@@ -25,10 +25,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
   // inherits abstract value `global' and class `Phase' from Transform
 
   import global._
-  import definitions.{
-    IntClass, UnitClass, ByNameParamClass, Any_asInstanceOf,
-    Any_isInstanceOf, Object_isInstanceOf, Object_##, Object_==, Object_!=
-  }
+  import definitions.{ UnitClass, isRepeatedParamType, isByNameParamType, Any_asInstanceOf }
   import analyzer.{ restrictionError }
 
   /** the following two members override abstract members in Transform */
@@ -48,7 +45,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
 
     private def transformArgs(args: List[Tree], params: List[Symbol]) =
       ((args, params).zipped map { (arg, param) =>
-        if (param.tpe.typeSymbol == ByNameParamClass)
+        if (isByNameParamType(param.tpe))
           withInvalidOwner { checkPackedConforms(transform(arg), param.tpe.typeArgs.head) }
         else transform(arg)
       }) :::
@@ -128,13 +125,10 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
 
     // Disallow some super.XX calls targeting Any methods which would
     // otherwise lead to either a compiler crash or runtime failure.
-    private def isDisallowed(sym: Symbol) = (
-      (sym == Any_isInstanceOf) ||
-      (sym == Object_isInstanceOf) ||
-      (sym == Object_==) ||
-      (sym == Object_!=) ||
-      (sym == Object_##)
-    )
+    private lazy val isDisallowed = {
+      import definitions._
+      Set(Any_isInstanceOf, Object_isInstanceOf, Object_==, Object_!=, Object_##)
+    }
 
     override def transform(tree: Tree): Tree = {
       val sym = tree.symbol
@@ -194,8 +188,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
           mayNeedProtectedAccessor(sel, args, false)
 
         case sel @ Select(qual @ This(_), name) =>
-           if ((sym hasFlag PARAMACCESSOR)
-               && (sym.alias != NoSymbol)) {
+           if (sym.isParamAccessor && sym.alias != NoSymbol) {
             val result = localTyper.typed {
                 Select(
                   Super(qual.symbol, nme.EMPTY.toTypeName/*qual.symbol.info.parents.head.symbol.name*/) setPos qual.pos,
@@ -208,9 +201,9 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
           else mayNeedProtectedAccessor(sel, List(EmptyTree), false)
 
         case Select(sup @ Super(_, mix), name) =>
-          if (sym.isValue && !sym.isMethod || sym.hasFlag(ACCESSOR)) {
+          if (sym.isValue && !sym.isMethod || sym.hasAccessorFlag) {
             unit.error(tree.pos, "super may be not be used on "+
-                       (if (sym.hasFlag(ACCESSOR)) sym.accessed else sym))
+                       (if (sym.hasAccessorFlag) sym.accessed else sym))
           }
           else if (isDisallowed(sym)) {
             unit.error(tree.pos, "super not allowed here: use this." + name.decode + " instead")
@@ -225,7 +218,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
 
         case Assign(lhs @ Select(qual, name), rhs) =>
           if (lhs.symbol.isVariable &&
-              lhs.symbol.hasFlag(JAVA) &&
+              lhs.symbol.isJavaDefined &&
               needsProtectedAccessor(lhs.symbol, tree.pos)) {
             if (settings.debug.value) log("Adding protected setter for " + tree)
             val setter = makeSetter(lhs);
@@ -356,7 +349,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
           if (sym.isSubClass(ownerClass)) true else false
         case _ => false
       }
-      if (definitions.isRepeatedParamType(v.info)) {
+      if (isRepeatedParamType(v.info)) {
         res = gen.wildcardStar(res)
         log("adapted to wildcard star: " + res)
       }

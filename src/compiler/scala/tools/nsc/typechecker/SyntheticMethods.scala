@@ -182,7 +182,7 @@ trait SyntheticMethods extends ast.TreeDSL {
 
       // returns (Apply, Bind)
       def makeTrees(acc: Symbol, cpt: Type): (Tree, Bind) = {
-        val varName     = context.unit.fresh.newName(clazz.pos.focus, acc.name + "$")
+        val varName     = context.unit.fresh.newName(acc.name + "$")
         val isRepeated  = isRepeatedParamType(cpt)
         val binding     = if (isRepeated) Star(WILD()) else WILD()
         val eqMethod: Tree  =
@@ -221,7 +221,7 @@ trait SyntheticMethods extends ast.TreeDSL {
     def newAccessorMethod(tree: Tree): Tree = tree match {
       case DefDef(_, _, _, _, _, rhs) =>
         var newAcc = tree.symbol.cloneSymbol
-        newAcc.name = context.unit.fresh.newName(tree.symbol.pos.focus, tree.symbol.name + "$")
+        newAcc.name = context.unit.fresh.newName(tree.symbol.name + "$")
         newAcc setFlag SYNTHETIC resetFlag (ACCESSOR | PARAMACCESSOR | PRIVATE | PROTECTED)
         newAcc.privateWithin = NoSymbol
         newAcc = newAcc.owner.info.decls enter newAcc
@@ -234,8 +234,7 @@ trait SyntheticMethods extends ast.TreeDSL {
       // only nested objects inside objects should get readResolve automatically
       // otherwise after de-serialization we get null references for lazy accessors (nested object -> lazy val + class def)
       // since the bitmap gets serialized but the moduleVar not
-      clazz.isSerializable &&
-      ((!clazz.owner.isPackageClass && clazz.owner.isModuleClass) || clazz.owner.isPackageClass)
+      clazz.isSerializable && (clazz.owner.isPackageClass || clazz.owner.isModuleClass)
     )
 
     // A buffer collecting additional methods for the template body

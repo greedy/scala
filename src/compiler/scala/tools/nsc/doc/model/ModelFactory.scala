@@ -59,6 +59,7 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
     def toRoot: List[EntityImpl] = this :: inTpl.toRoot
     def qualifiedName = name
     val universe = thisFactory.universe
+    def annotations = sym.annotations.map(makeAnnotation)
   }
 
   /** Provides a default implementation for instances of the `WeakTemplateEntity` type. It must be instantiated as a
@@ -70,7 +71,7 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
     def isTrait = sym.isTrait
     def isClass = sym.isClass && !sym.isTrait
     def isObject = sym.isModule && !sym.isPackage
-    def isCaseClass = sym.isClass && sym.hasFlag(Flags.CASE)
+    def isCaseClass = sym.isCaseClass
     def isRootPackage = false
     def selfType = if (sym.thisSym eq sym) None else Some(makeType(sym.thisSym.typeOfThis, this))
   }
@@ -98,7 +99,7 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
       else if (sym.isProtectedLocal) ProtectedInInstance()
       else {
         val qual =
-          if (sym.privateWithin != null && sym.privateWithin != NoSymbol)
+          if (sym.hasAccessBoundary)
             Some(makeTemplate(sym.privateWithin))
           else None
         if (sym.isPrivate) PrivateInTemplate(inTpl)
@@ -110,7 +111,7 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
     def flags = {
       val fgs = mutable.ListBuffer.empty[Paragraph]
       if (sym.isImplicit) fgs += Paragraph(Text("implicit"))
-      if (sym hasFlag Flags.SEALED) fgs += Paragraph(Text("sealed"))
+      if (sym.isSealed) fgs += Paragraph(Text("sealed"))
       if (!sym.isTrait && (sym hasFlag Flags.ABSTRACT)) fgs += Paragraph(Text("abstract"))
       if (!sym.isTrait && (sym hasFlag Flags.DEFERRED)) fgs += Paragraph(Text("abstract"))
       if (!sym.isModule && (sym hasFlag Flags.FINAL)) fgs += Paragraph(Text("final"))
@@ -162,7 +163,7 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
     templatesCache += (sym -> this)
     lazy val definitionName = optimize(inDefinitionTemplates.head.qualifiedName + "." + name)
     override def toRoot: List[DocTemplateImpl] = this :: inTpl.toRoot
-    def inSource = if (sym.sourceFile != null) Some(sym.sourceFile, sym.pos.line) else None
+    def inSource = if (sym.sourceFile != null) Some((sym.sourceFile, sym.pos.line)) else None
     def sourceUrl = {
       def fixPath(s: String) = s.replaceAll("\\" + java.io.File.separator, "/")
       val assumedSourceRoot: String = {
@@ -376,6 +377,37 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
   }
 
   /** */
+  def makeAnnotation(annot: AnnotationInfo): Annotation = {
+    val aSym = annot.atp.typeSymbol
+    new EntityImpl(aSym, makeTemplate(aSym.owner)) with Annotation {
+      def annotationClass =
+        makeTemplate(annot.atp.typeSymbol)
+      def arguments =
+        annotationClass match {
+          case aClass: Class =>
+            aClass.valueParams match {
+              case Nil => Nil
+              case vp :: vps =>
+                (vp zip annot.args) map { case (param, arg) =>
+                  new ValueArgument {
+                    def parameter = Some(param)
+                    def value = makeTree(arg)
+                  }
+                }
+            }
+          case _ =>
+            annot.args map { arg =>
+              new ValueArgument {
+                def parameter = None
+                def value = makeTree(arg)
+              }
+            }
+        }
+
+    }
+  }
+
+  /** */
   def makeMember(aSym: Symbol, inTpl: => DocTemplateImpl): List[MemberImpl] = {
 
     def makeMember0(bSym: Symbol): Option[MemberImpl] = {
@@ -392,7 +424,7 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
         Some(new NonTemplateMemberImpl(bSym, inTpl) with Val {
           override def isVar = true
         })
-      else if (bSym.isMethod && !bSym.isGetterOrSetter && !bSym.isConstructor && !bSym.isModule)
+      else if (bSym.isMethod && !bSym.hasAccessorFlag && !bSym.isConstructor && !bSym.isModule)
         Some(new NonTemplateParamMemberImpl(bSym, inTpl) with HigherKindedImpl with Def {
           override def isDef = true
         })
@@ -457,17 +489,17 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
       def isTypeParam = false
       def isValueParam = true
       def defaultValue =
-        if (aSym.hasDefault)
+        if (aSym.hasDefault) {
           // units.filter should return only one element
           (currentRun.units filter (_.source.file == aSym.sourceFile)).toList match {
             case List(unit) =>
               (unit.body find (_.symbol == aSym)) match {
-                case Some(ValDef(_,_,_,rhs)) =>
-                  Some(makeTree(rhs))
+                case Some(ValDef(_,_,_,rhs)) => Some(makeTree(rhs))
                 case _ => None
               }
             case _ => None
           }
+        }
         else None
       def resultType =
         makeType(sym.tpe, inTpl, sym)
@@ -514,13 +546,13 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
           appendTypes0(tp.args.init, ", ")
           nameBuffer append ") ⇒ "
           appendType0(tp.args.last)
-        case tp: TypeRef if (tp.typeSymbol == definitions.RepeatedParamClass) =>
+        case tp: TypeRef if definitions.isScalaRepeatedParamType(tp) =>
           appendType0(tp.args.head)
           nameBuffer append '*'
-        case tp: TypeRef if (tp.typeSymbol == definitions.ByNameParamClass) =>
+        case tp: TypeRef if definitions.isByNameParamType(tp) =>
           nameBuffer append "⇒ "
           appendType0(tp.args.head)
-        case tp: TypeRef if (definitions.isTupleTypeOrSubtype(tp)) =>
+        case tp: TypeRef if definitions.isTupleTypeOrSubtype(tp) =>
           nameBuffer append '('
           appendTypes0(tp.args, ", ")
           nameBuffer append ')'
@@ -572,12 +604,12 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
   }
 
   def isNestedObjectLazyVal(aSym: Symbol): Boolean = {
-    aSym.isLazy && !aSym.isRootPackage && !aSym.owner.isPackageClass && (aSym.lazyAccessor != NoSymbol)
+    aSym.isLazyAccessor && !aSym.isRootPackage && !aSym.owner.isPackageClass
   }
 
   def isEmptyJavaObject(aSym: Symbol): Boolean = {
     def hasMembers = aSym.info.members.exists(s => localShouldDocument(s) && (!s.isConstructor || s.owner == aSym))
-    aSym.isModule && aSym.hasFlag(Flags.JAVA) && !hasMembers
+    aSym.isModule && aSym.isJavaDefined && !hasMembers
   }
 
   def localShouldDocument(aSym: Symbol): Boolean = {

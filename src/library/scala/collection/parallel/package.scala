@@ -19,7 +19,6 @@ package object parallel {
   val CHECK_RATE = 512
   val SQRT2 = math.sqrt(2)
   val availableProcessors = java.lang.Runtime.getRuntime.availableProcessors
-  private[parallel] val unrolledsize = 16
 
   /* functions */
 
@@ -35,6 +34,8 @@ package object parallel {
 
   private[parallel] def unsupportedop(msg: String) = throw new UnsupportedOperationException(msg)
 
+  private[parallel] def outofbounds(idx: Int) = throw new IndexOutOfBoundsException(idx.toString)
+
   /* implicit conversions */
 
   /** An implicit conversion providing arrays with a `par` method, which
@@ -48,21 +49,45 @@ package object parallel {
     def par = mutable.ParArray.handoff[T](array)
   }
 
-  implicit def factory2ops[From, Elem, To](bf: CanBuildFrom[From, Elem, To]) = new {
+  trait FactoryOps[From, Elem, To] {
+    trait Otherwise[R] {
+      def otherwise(notbody: => R): R
+    }
+
+    def isParallel: Boolean
+    def asParallel: CanCombineFrom[From, Elem, To]
+    def ifParallel[R](isbody: CanCombineFrom[From, Elem, To] => R): Otherwise[R]
+  }
+
+  implicit def factory2ops[From, Elem, To](bf: CanBuildFrom[From, Elem, To]) = new FactoryOps[From, Elem, To] {
     def isParallel = bf.isInstanceOf[Parallel]
     def asParallel = bf.asInstanceOf[CanCombineFrom[From, Elem, To]]
-    def ifParallel[R](isbody: CanCombineFrom[From, Elem, To] => R) = new {
+    def ifParallel[R](isbody: CanCombineFrom[From, Elem, To] => R) = new Otherwise[R] {
       def otherwise(notbody: => R) = if (isParallel) isbody(asParallel) else notbody
     }
   }
 
-  implicit def traversable2ops[T](t: TraversableOnce[T]) = new {
+  trait TraversableOps[T] {
+    trait Otherwise[R] {
+      def otherwise(notbody: => R): R
+    }
+
+    def isParallel: Boolean
+    def isParIterable: Boolean
+    def asParIterable: ParIterable[T]
+    def isParSeq: Boolean
+    def asParSeq: ParSeq[T]
+    def ifParSeq[R](isbody: ParSeq[T] => R): Otherwise[R]
+    def toParArray: ParArray[T]
+  }
+
+  implicit def traversable2ops[T](t: TraversableOnce[T]) = new TraversableOps[T] {
     def isParallel = t.isInstanceOf[Parallel]
     def isParIterable = t.isInstanceOf[ParIterable[_]]
     def asParIterable = t.asInstanceOf[ParIterable[T]]
     def isParSeq = t.isInstanceOf[ParSeq[_]]
     def asParSeq = t.asInstanceOf[ParSeq[T]]
-    def ifParSeq[R](isbody: ParSeq[T] => R) = new {
+    def ifParSeq[R](isbody: ParSeq[T] => R) = new Otherwise[R] {
       def otherwise(notbody: => R) = if (isParallel) isbody(asParSeq) else notbody
     }
     def toParArray = if (t.isInstanceOf[ParArray[_]]) t.asInstanceOf[ParArray[T]] else {
@@ -73,7 +98,11 @@ package object parallel {
     }
   }
 
-  implicit def throwable2ops(self: Throwable) = new {
+  trait ThrowableOps {
+    def alongWith(that: Throwable): Throwable
+  }
+
+  implicit def throwable2ops(self: Throwable) = new ThrowableOps {
     def alongWith(that: Throwable) = self match {
       case ct: CompositeThrowable => new CompositeThrowable(ct.throwables + that)
       case _ => new CompositeThrowable(Set(self, that))
@@ -86,38 +115,6 @@ package object parallel {
   final class CompositeThrowable(val throwables: Set[Throwable])
   extends Throwable("Multiple exceptions thrown during a parallel computation: " + throwables.mkString(", "))
 
-  /** Unrolled list node.
-   */
-  private[parallel] class Unrolled[T: ClassManifest] {
-    var size = 0
-    var array = new Array[T](unrolledsize)
-    var next: Unrolled[T] = null
-    // adds and returns itself or the new unrolled if full
-    def add(elem: T): Unrolled[T] = if (size < unrolledsize) {
-      array(size) = elem
-      size += 1
-      this
-    } else {
-      next = new Unrolled[T]
-      next.add(elem)
-    }
-    def foreach[U](f: T => U) {
-      var unrolled = this
-      var i = 0
-      while (unrolled ne null) {
-        val chunkarr = unrolled.array
-        val chunksz = unrolled.size
-        while (i < chunksz) {
-          val elem = chunkarr(i)
-          f(elem)
-          i += 1
-        }
-        i = 0
-        unrolled = unrolled.next
-      }
-    }
-    override def toString = array.take(size).mkString("Unrolled(", ", ", ")") + (if (next ne null) next.toString else "")
-  }
 
   /** A helper iterator for iterating very small array buffers.
    *  Automatically forwards the signal delegate when splitting.
@@ -156,12 +153,13 @@ package object parallel {
    *  are unrolled linked lists. Some parallel collections are constructed by
    *  sorting their result set according to some criteria.
    *
-   *  A reference `heads` to bucket heads is maintained, as well as a reference
-   *  `lasts` to the last unrolled list node. Size is kept in `sz` and maintained
-   *  whenever 2 bucket combiners are combined.
+   *  A reference `buckets` to buckets is maintained. Total size of all buckets
+   *  is kept in `sz` and maintained whenever 2 bucket combiners are combined.
    *
    *  Clients decide how to maintain these by implementing `+=` and `result`.
-   *  Populating and using the buckets is up to the client.
+   *  Populating and using the buckets is up to the client. While populating them,
+   *  the client should update `sz` accordingly. Note that a bucket is by default
+   *  set to `null` to save space - the client should initialize it.
    *  Note that in general the type of the elements contained in the buckets `Buck`
    *  doesn't have to correspond to combiner element type `Elem`.
    *
@@ -179,15 +177,13 @@ package object parallel {
     (private val bucketnumber: Int)
   extends Combiner[Elem, To] {
   self: EnvironmentPassingCombiner[Elem, To] =>
-    protected var heads: Array[Unrolled[Buck]] @uncheckedVariance = new Array[Unrolled[Buck]](bucketnumber)
-    protected var lasts: Array[Unrolled[Buck]] @uncheckedVariance = new Array[Unrolled[Buck]](bucketnumber)
+    protected var buckets: Array[UnrolledBuffer[Buck]] @uncheckedVariance = new Array[UnrolledBuffer[Buck]](bucketnumber)
     protected var sz: Int = 0
 
     def size = sz
 
     def clear = {
-      heads = new Array[Unrolled[Buck]](bucketnumber)
-      lasts = new Array[Unrolled[Buck]](bucketnumber)
+      buckets = new Array[UnrolledBuffer[Buck]](bucketnumber)
       sz = 0
     }
 
@@ -201,12 +197,10 @@ package object parallel {
         val that = other.asInstanceOf[BucketCombiner[Elem, To, Buck, CombinerType]]
         var i = 0
         while (i < bucketnumber) {
-          if (lasts(i) eq null) {
-            heads(i) = that.heads(i)
-            lasts(i) = that.lasts(i)
+          if (buckets(i) eq null) {
+            buckets(i) = that.buckets(i)
           } else {
-            lasts(i).next = that.heads(i)
-            if (that.lasts(i) ne null) lasts(i) = that.lasts(i)
+            if (that.buckets(i) ne null) buckets(i) concat that.buckets(i)
           }
           i += 1
         }

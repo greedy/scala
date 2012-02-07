@@ -81,7 +81,7 @@ abstract class RefChecks extends InfoTransform {
 
   val toScalaRepeatedParam = new TypeMap {
     def apply(tp: Type): Type = tp match {
-      case tp @ TypeRef(pre, JavaRepeatedParamClass, args) =>
+      case TypeRef(pre, JavaRepeatedParamClass, args) =>
         typeRef(pre, RepeatedParamClass, args)
       case _ =>
         mapOver(tp)
@@ -96,13 +96,13 @@ abstract class RefChecks extends InfoTransform {
     var checkedCombinations = Set[List[Type]]()
 
     // only one overloaded alternative is allowed to define default arguments
-    private def checkDefaultsInOverloaded(clazz: Symbol) {
+    private def checkOverloadedRestrictions(clazz: Symbol) {
       def check(members: List[Symbol]): Unit = members match {
         case x :: xs =>
-          if (x.paramss.exists(_.exists(p => p.hasFlag(DEFAULTPARAM))) && !nme.isProtectedAccessor(x.name)) {
+          if (x.hasParamWhich(_.hasDefaultFlag) && !nme.isProtectedAccessorName(x.name)) {
             val others = xs.filter(alt => {
               alt.name == x.name &&
-              alt.paramss.exists(_.exists(_.hasFlag(DEFAULTPARAM))) &&
+              (alt hasParamWhich (_.hasDefaultFlag)) &&
               (!alt.isConstructor || alt.owner == x.owner) // constructors of different classes are allowed to have defaults
             })
             if (!others.isEmpty) {
@@ -116,26 +116,26 @@ abstract class RefChecks extends InfoTransform {
           check(xs)
         case _ => ()
       }
+      clazz.info.decls filter (x => x.isImplicit && x.typeParams.nonEmpty) foreach { sym =>
+        val alts = clazz.info.decl(sym.name).alternatives
+        if (alts.size > 1)
+          alts foreach (x => unit.warning(x.pos, "parameterized overloaded implicit methods are not visible as view bounds"))
+      }
       check(clazz.info.members)
     }
 
 // Override checking ------------------------------------------------------------
 
     def hasRepeatedParam(tp: Type): Boolean = tp match {
-      case MethodType(formals, restpe) =>
-        formals.nonEmpty && formals.last.tpe.typeSymbol == RepeatedParamClass ||
-        hasRepeatedParam(restpe)
-      case PolyType(_, restpe) =>
-        hasRepeatedParam(restpe)
-      case _ =>
-        false
+      case MethodType(formals, restpe) => isScalaVarArgs(formals) || hasRepeatedParam(restpe)
+      case PolyType(_, restpe)         => hasRepeatedParam(restpe)
+      case _                           => false
     }
 
     /** Add bridges for vararg methods that extend Java vararg methods
      */
     def addVarargBridges(clazz: Symbol): List[Tree] = {
       val self = clazz.thisType
-
       val bridges = new ListBuffer[Tree]
 
       def varargBridge(member: Symbol, bridgetpe: Type): Tree = {
@@ -281,8 +281,10 @@ abstract class RefChecks extends InfoTransform {
           }
         }
 
-        def accessFlagsToString(sym: Symbol)
-          = flagsToString(sym getFlag (PRIVATE | PROTECTED), if (!sym.hasAccessBoundary) "" else sym.privateWithin.name.toString)
+        def accessFlagsToString(sym: Symbol) = flagsToString(
+          sym getFlag (PRIVATE | PROTECTED),
+          if (sym.hasAccessBoundary) "" + sym.privateWithin.name else ""
+        )
 
         def overrideAccessError() {
           val otherAccess = accessFlagsToString(other)
@@ -344,7 +346,7 @@ abstract class RefChecks extends InfoTransform {
           } else if ((other hasFlag ABSOVERRIDE) && other.isIncompleteIn(clazz) && !(member hasFlag ABSOVERRIDE)) {
             overrideError("needs `abstract override' modifiers")
           } else if ((member hasFlag (OVERRIDE | ABSOVERRIDE)) &&
-                     (other hasFlag ACCESSOR) && other.accessed.isVariable && !other.accessed.hasFlag(LAZY)) {
+                     (other hasFlag ACCESSOR) && other.accessed.isVariable && !other.accessed.isLazy) {
             overrideError("cannot override a mutable variable")
           } else if ((member hasFlag (OVERRIDE | ABSOVERRIDE)) &&
                      !(member.owner.thisType.baseClasses exists (_ isSubClass other.owner)) &&
@@ -681,7 +683,7 @@ abstract class RefChecks extends InfoTransform {
             // Flip occurrences of type parameters and parameters, unless
             //  - it's a constructor, or case class factory or extractor
             //  - it's a type parameter of tvar's owner.
-            if ((sym hasFlag PARAM) && !sym.owner.isConstructor && !sym.owner.isCaseApplyOrUnapply &&
+            if (sym.isParameter && !sym.owner.isConstructor && !sym.owner.isCaseApplyOrUnapply &&
                 !(tvar.isTypeParameterOrSkolem && sym.isTypeParameterOrSkolem &&
                   tvar.owner == sym.owner)) state = -state;
             else if (!sym.owner.isClass ||
@@ -883,7 +885,7 @@ abstract class RefChecks extends InfoTransform {
         }
         // Whether the operands+operator represent a warnable combo (assuming anyrefs)
         def isWarnable                = isReferenceOp || (isUsingDefaultEquals && isUsingDefaultScalaOp)
-        def isValueOrBoxed(s: Symbol) = isNumericValueClass(s) || (s isSubClass BoxedNumberClass)
+        def isScalaNumber(s: Symbol)  = isNumericValueClass(s) || (s isSubClass BoxedNumberClass) || (s isSubClass ScalaNumberClass)
         def isEitherNull              = (receiver == NullClass) || (actual == NullClass)
         def isEitherNullable          = (NullClass.tpe <:< receiver.info) || (NullClass.tpe <:< actual.info)
 
@@ -901,8 +903,10 @@ abstract class RefChecks extends InfoTransform {
           nonSensible("", false)
         else if (receiver == UnitClass && actual == UnitClass)  // () == ()
           nonSensible("", true)
-        else if (isNumericValueClass(receiver) && !isValueOrBoxed(actual) && !forMSIL) // 5 == "abc"
-          nonSensible("", false)
+        else if (isNumericValueClass(receiver)) {
+          if (!isScalaNumber(actual) && !forMSIL) // 5 == "abc"
+            nonSensible("", false)
+        }
         else if (isWarnable) {
           if (receiver.isFinal && !isEitherNull && !(receiver isSubClass actual)) // object X, Y; X == Y
             nonSensible((if (isEitherNullable) "non-null " else ""), false)
@@ -963,7 +967,7 @@ abstract class RefChecks extends InfoTransform {
               val ddef =
                 atPhase(phase.next) {
                   localTyper.typed {
-                    gen.mkModuleAccessDef(factory, sym.tpe)
+                    gen.mkModuleAccessDef(factory, sym)
                   }
                 }
               transformTrees(List(cdef, ddef))
@@ -972,6 +976,10 @@ abstract class RefChecks extends InfoTransform {
             }
           } else {
             def lazyNestedObjectTrees(transformedInfo: Boolean) = {
+              // transformedInfo flag is necessary here because it is possible
+              // that the object info was already run through the transformInfo.
+              // Since we do not want to have duplicate lazy accessors
+              // (through duplicate nested object -> lazy val transformation) we have this check here.
               val cdef = ClassDef(mods | MODULE, name, List(), impl)
                 .setPos(tree.pos)
                 .setSymbol(if (!transformedInfo) sym.moduleClass else sym.lazyAccessor)
@@ -1076,7 +1084,7 @@ abstract class RefChecks extends InfoTransform {
         case Apply(_, args) =>
           val clazz = pat.tpe.typeSymbol;
           clazz == seltpe.typeSymbol &&
-          clazz.isClass && (clazz hasFlag CASE) &&
+          clazz.isCaseClass &&
           (args corresponds clazz.primaryConstructor.tpe.asSeenFrom(seltpe, clazz).paramTypes)(isIrrefutable) // @PP: corresponds
         case Typed(pat, tpt) =>
           seltpe <:< tpt.tpe
@@ -1136,7 +1144,7 @@ abstract class RefChecks extends InfoTransform {
     private def checkTypeRef(tp: Type, pos: Position) = tp match {
       case TypeRef(pre, sym, args) =>
         checkDeprecated(sym, pos)
-        if(sym.hasFlag(JAVA))
+        if(sym.isJavaDefined)
           sym.typeParams foreach (_.cookJavaRawInfo())
         if (!tp.isHigherKinded)
           checkBounds(pre, sym.owner, sym.typeParams, args, pos)
@@ -1237,7 +1245,7 @@ abstract class RefChecks extends InfoTransform {
       if (settings.Xmigration28.value)
         checkMigration(sym, tree.pos)
 
-      if (currentClass != sym.owner && (sym hasFlag LOCAL)) {
+      if (currentClass != sym.owner && sym.hasLocalFlag) {
         var o = currentClass
         var hidden = false
         while (!hidden && o != sym.owner && o != sym.owner.moduleClass && !o.isPackage) {
@@ -1294,7 +1302,7 @@ abstract class RefChecks extends InfoTransform {
           case Template(parents, self, body) =>
             localTyper = localTyper.atOwner(tree, currentOwner)
             validateBaseTypes(currentOwner)
-            checkDefaultsInOverloaded(currentOwner)
+            checkOverloadedRestrictions(currentOwner)
             val bridges = addVarargBridges(currentOwner)
             checkAllOverrides(currentOwner)
 
@@ -1339,14 +1347,14 @@ abstract class RefChecks extends InfoTransform {
             enterReference(tree.pos, tpt.tpe.typeSymbol)
             tree
 
-          case Typed(expr, tpt @ Ident(name)) if name == nme.WILDCARD_STAR.toTypeName && !isRepeatedParamArg(tree) =>
+          case Typed(_, Ident(nme.WILDCARD_STAR)) if !isRepeatedParamArg(tree) =>
             unit.error(tree.pos, "no `: _*' annotation allowed here\n"+
               "(such annotations are only allowed in arguments to *-parameters)")
             tree
 
           case Ident(name) =>
             transformCaseApply(tree,
-              if (name != nme.WILDCARD && name != nme.WILDCARD_STAR.toTypeName) {
+              if (name != nme.WILDCARD && name != nme.WILDCARD_STAR) {
                 assert(sym != NoSymbol, tree) //debug
                 enterReference(tree.pos, sym)
               }

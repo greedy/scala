@@ -28,7 +28,7 @@ self =>
   val debugIDE = false
 
   /** Print msg only when debugIDE is true. */
-  @inline def debugLog(msg: => String) =
+  @inline final def debugLog(msg: => String) =
     if (debugIDE) println(msg)
 
   override def onlyPresentation = true
@@ -145,7 +145,13 @@ self =>
   def pollForWork() {
     scheduler.pollInterrupt() match {
       case Some(ir) =>
-        ir.execute(); pollForWork()
+	try {
+	  activeLocks += 1
+          ir.execute()
+	} finally {
+	  activeLocks -= 1
+	}
+        pollForWork()
       case _ =>
     }
     if (pendingResponse.isCancelled)
@@ -212,7 +218,8 @@ self =>
   // ----------------- The Background Runner Thread -----------------------
 
   /** The current presentation compiler runner */
-  protected var compileRunner = newRunnerThread
+  @volatile protected var compileRunner = newRunnerThread
+  compileRunner.start()
 
   private var threadId = 1
 
@@ -239,6 +246,7 @@ self =>
         case ex =>
           outOfDate = false
           compileRunner = newRunnerThread
+          compileRunner.start()
           ex match {
             case FreshRunReq =>   // This shouldn't be reported
             case _ : ValidateException => // This will have been reported elsewhere
@@ -247,7 +255,6 @@ self =>
       }
     }
     threadId += 1
-    start()
   }
 
   /** Compile all given units
@@ -287,6 +294,7 @@ self =>
     currentTyperRun.compileLate(unit)
     if (!reporter.hasErrors) validatePositions(unit.body)
     //println("parsed: [["+unit.body+"]]")
+    if (!unit.isJava) syncTopLevelSyms(unit)
     unit.status = JustParsed
   }
 
@@ -303,13 +311,14 @@ self =>
       activeLocks = 0
       currentTyperRun.typeCheck(unit)
       unit.status = currentRunId
-      if (!unit.isJava) syncTopLevelSyms(unit)
     }
   }
 
   def syncTopLevelSyms(unit: RichCompilationUnit) {
     val deleted = currentTopLevelSyms filter { sym =>
-      sym.sourceFile == unit.source.file && runId(sym.validTo) < currentRunId
+      /** We sync after namer phase and it resets all the top-level symbols that survive the new parsing
+       * round to NoPeriod. */
+      sym.sourceFile == unit.source.file && sym.validTo != NoPeriod && runId(sym.validTo) < currentRunId
     }
     for (d <- deleted) {
       d.owner.info.decls unlink d
@@ -443,7 +452,7 @@ self =>
     val locals = new LinkedHashMap[Name, ScopeMember]
     def addScopeMember(sym: Symbol, pre: Type, viaImport: Tree) =
       if (!sym.name.decode.containsName(Dollar) &&
-          !sym.hasFlag(Flags.SYNTHETIC) &&
+          !sym.isSynthetic &&
           !locals.contains(sym.name)) {
         locals(sym.name) = new ScopeMember(
           sym,
@@ -596,7 +605,7 @@ self =>
 
 
     /** Return fully attributed tree at given position
-     *  (i.e. largest tree that's contained by position)
+     *  (i.e. smallest tree containing position)
      */
     def typedTreeAt(pos: Position): Tree = {
       debugLog("starting typedTreeAt")

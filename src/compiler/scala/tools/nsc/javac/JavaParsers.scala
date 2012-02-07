@@ -487,7 +487,7 @@ trait JavaParsers extends JavaScanners {
       if (in.token == DOTDOTDOT) {
         in.nextToken
         t = atPos(t.pos) {
-          AppliedTypeTree(scalaDot(nme.JAVA_REPEATED_PARAM_CLASS_NAME.toTypeName), List(t))
+          AppliedTypeTree(scalaDot(nme.JAVA_REPEATED_PARAM_CLASS_NAME), List(t))
         }
       }
      varDecl(in.currentPos, Modifiers(Flags.JAVA | Flags.PARAM), t, ident())
@@ -615,8 +615,8 @@ trait JavaParsers extends JavaScanners {
 
     def varDecl(pos: Position, mods: Modifiers, tpt: Tree, name: Name): ValDef = {
       val tpt1 = optArrayBrackets(tpt)
-      if (in.token == ASSIGN && !(mods hasFlag Flags.PARAM)) skipTo(COMMA, SEMI)
-      val mods1 = if (mods hasFlag Flags.FINAL) mods &~ Flags.FINAL else mods | Flags.MUTABLE
+      if (in.token == ASSIGN && !mods.isParameter) skipTo(COMMA, SEMI)
+      val mods1 = if (mods.isFinal) mods &~ Flags.FINAL else mods | Flags.MUTABLE
       atPos(pos) {
         ValDef(mods1, name, tpt1, blankExpr)
       }
@@ -771,7 +771,7 @@ trait JavaParsers extends JavaScanners {
         } else {
           if (in.token == ENUM || definesInterface(in.token)) mods |= Flags.STATIC
           val decls = memberDecl(mods, parentToken)
-          (if ((mods hasFlag Flags.STATIC) || inInterface && !(decls exists (_.isInstanceOf[DefDef])))
+          (if (mods.hasStaticFlag || inInterface && !(decls exists (_.isInstanceOf[DefDef])))
              statics
            else
              members) ++= decls

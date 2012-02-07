@@ -114,8 +114,7 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
    *    </li>
    *  </ul>
    */
-  val erasure = new TypeMap {
-
+  object erasure extends TypeMap {
     // Compute the dominant part of the intersection type with given `parents` according to new spec.
     def intersectionDominator(parents: List[Type]): Type =
       if (parents.isEmpty) ObjectClass.tpe
@@ -132,6 +131,7 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
             !(psyms exists (qsym => (psym ne qsym) && (qsym isNonBottomSubClass psym)))
           val cs = parents.iterator.filter { p => // isUnshadowed is a bit expensive, so try classes first
             val psym = p.typeSymbol
+            psym.initialize
             psym.isClass && !psym.isTrait && isUnshadowed(psym)
           }
           (if (cs.hasNext) cs else parents.iterator.filter(p => isUnshadowed(p.typeSymbol))).next()
@@ -250,9 +250,7 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
             else ARRAY_TAG.toString+(args map jsig).mkString
           else if (sym.isTypeParameterOrSkolem &&
                   // only refer to type params that will actually make it into the sig, this excludes:
-                  !sym.owner.isTypeParameterOrSkolem && // higher-order type parameters (!sym.owner.isTypeParameterOrSkolem), and parameters of methods
-                  (!sym0.isClass || sym.owner.isClass) // if we're generating the sig for a class, type params must be owned by a class (not a method -- #3249)
-                  )
+                  !sym.owner.isTypeParameterOrSkolem) // higher-order type parameters (!sym.owner.isTypeParameterOrSkolem), and parameters of methods
             TVAR_TAG.toString+sym.name+";"
           else if (sym == AnyClass || sym == AnyValClass || sym == SingletonClass)
             jsig(ObjectClass.tpe)
@@ -672,7 +670,7 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
         case Try(block, catches, finalizer) =>
           treeCopy.Try(tree1, adaptBranch(block), catches map adaptCase, finalizer)
         case Ident(_) | Select(_, _) =>
-          if (tree1.symbol hasFlag OVERLOADED) {
+          if (tree1.symbol.isOverloaded) {
             val first = tree1.symbol.alternatives.head
             val sym1 = tree1.symbol.filter {
               alt => alt == first || !(first.tpe looselyMatches alt.tpe)
@@ -746,7 +744,7 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
 
       val opc = new overridingPairs.Cursor(root) {
         override def exclude(sym: Symbol): Boolean =
-          (!sym.isTerm || sym.hasFlag(PRIVATE) || super.exclude(sym)
+          (!sym.isTerm || sym.isPrivate || super.exclude(sym)
            // specialized members have no type history before 'specialize', causing double def errors for curried defs
            || !sym.hasTypeAt(currentRun.refchecksPhase.id))
 
@@ -810,18 +808,18 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
       val bridgesScope = new Scope
       val bridgeTarget = new mutable.HashMap[Symbol, Symbol]
       var bridges: List[Tree] = List()
-      val opc = atPhase(currentRun.explicitOuterPhase) {
+      val opc = atPhase(currentRun.explicitouterPhase) {
         new overridingPairs.Cursor(owner) {
           override def parents: List[Type] = List(owner.info.parents.head)
           override def exclude(sym: Symbol): Boolean =
-            !sym.isMethod || sym.hasFlag(PRIVATE) || super.exclude(sym)
+            !sym.isMethod || sym.isPrivate || super.exclude(sym)
         }
       }
       while (opc.hasNext) {
         val member = opc.overriding
         val other = opc.overridden
         //Console.println("bridge? " + member + ":" + member.tpe + member.locationString + " to " + other + ":" + other.tpe + other.locationString);//DEBUG
-        if (atPhase(currentRun.explicitOuterPhase)(!member.isDeferred)) {
+        if (atPhase(currentRun.explicitouterPhase)(!member.isDeferred)) {
           val otpe = erasure(other.tpe);
           val bridgeNeeded = atPhase(phase.next) (
             !(other.tpe =:= member.tpe) &&

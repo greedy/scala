@@ -8,7 +8,7 @@ package scala.tools
 package nsc
 package settings
 
-import io.{AbstractFile, VirtualDirectory}
+import io.{ AbstractFile, VirtualDirectory }
 import scala.tools.util.StringOps
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
@@ -87,7 +87,7 @@ class MutableSettings(val errorFn: String => Unit) extends AbsSettings with Scal
 
   /** Returns any unprocessed arguments.
    */
-  def parseParams(args: List[String]): List[String] = {
+  protected def parseParams(args: List[String]): List[String] = {
     // verify command exists and call setter
     def tryToSetIfExists(
       cmd: String,
@@ -95,7 +95,8 @@ class MutableSettings(val errorFn: String => Unit) extends AbsSettings with Scal
       setter: (Setting) => (List[String] => Option[List[String]])
     ): Option[List[String]] =
       lookupSetting(cmd) match {
-        case None       => errorFn("Parameter '" + cmd + "' is not recognised by Scalac.") ; None
+        //case None       => errorFn("Parameter '" + cmd + "' is not recognised by Scalac.") ; None
+        case None       => None //error reported in processArguments
         case Some(cmd)  => setter(cmd)(args)
       }
 

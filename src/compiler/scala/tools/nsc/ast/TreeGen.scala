@@ -293,10 +293,8 @@ abstract class TreeGen {
   def mkCachedModuleAccessDef(accessor: Symbol, mvar: Symbol) =
     DefDef(accessor, mkCached(mvar, newModule(accessor, mvar.tpe)))
 
-  // def m: T = new tpe(...)
-  // where (...) are eventual outer accessors
-  def mkModuleAccessDef(accessor: Symbol, tpe: Type) =
-    DefDef(accessor, newModule(accessor, tpe))
+  def mkModuleAccessDef(accessor: Symbol, msym: Symbol) =
+    DefDef(accessor, Select(This(msym.owner), msym))
 
   def newModule(accessor: Symbol, tpe: Type) =
     New(TypeTree(tpe),
@@ -318,7 +316,7 @@ abstract class TreeGen {
     Apply(Select(monitor, Object_synchronized), List(body))
 
   def wildcardStar(tree: Tree) =
-    atPos(tree.pos) { Typed(tree, Ident(nme.WILDCARD_STAR.toTypeName)) }
+    atPos(tree.pos) { Typed(tree, Ident(nme.WILDCARD_STAR)) }
 
   def paramToArg(vparam: Symbol) = {
     val arg = Ident(vparam)
@@ -380,7 +378,7 @@ abstract class TreeGen {
     if (treeInfo.isPureExpr(expr)) {
       within(() => if (used) expr.duplicate else { used = true; expr })
     } else {
-      val temp = owner.newValue(expr.pos.makeTransparent, unit.fresh.newName(expr.pos, "ev$"))
+      val temp = owner.newValue(expr.pos.makeTransparent, unit.fresh.newName("ev$"))
         .setFlag(SYNTHETIC).setInfo(expr.tpe)
       val containing = within(() => Ident(temp) setPos temp.pos.focus setType expr.tpe)
       ensureNonOverlapping(containing, List(expr))
@@ -400,7 +398,7 @@ abstract class TreeGen {
           () => if (used(idx)) expr.duplicate else { used(idx) = true; expr }
         }
       } else {
-        val temp = owner.newValue(expr.pos.makeTransparent, unit.fresh.newName(expr.pos, "ev$"))
+        val temp = owner.newValue(expr.pos.makeTransparent, unit.fresh.newName("ev$"))
           .setFlag(SYNTHETIC).setInfo(expr.tpe)
         vdefs += ValDef(temp, expr)
         exprs1 += (() => Ident(temp) setPos temp.pos.focus setType expr.tpe)

@@ -39,7 +39,7 @@ trait ScalaSettings extends AbsScalaSettings with StandardScalaSettings {
   val defines       = DefinesSetting()
   val optimise      = BooleanSetting    ("-optimise", "Generates faster bytecode by applying optimisations to the program") .
                                             withAbbreviation("-optimize") .
-                                            withPostSetHook(_ => List(inline, Xcloselim, Xdce) foreach (_.value = true))
+                                            withPostSetHook(set => List(inline, Xcloselim, Xdce) foreach (_.value = set.value))
   val nospecialization = BooleanSetting    ("-no-specialization", "Ignore @specialize annotations.")
 
 
@@ -77,7 +77,7 @@ trait ScalaSettings extends AbsScalaSettings with StandardScalaSettings {
   val Xshowcls      = StringSetting     ("-Xshow-class", "class", "Show class info", "")
   val Xshowobj      = StringSetting     ("-Xshow-object", "object", "Show object info", "")
   val showPhases    = BooleanSetting    ("-Xshow-phases", "Print a synopsis of compiler phases")
-  val sourceReader  = StringSetting     ("-Xsource-reader", "classname", "Specify a custom method for reading source files", "scala.tools.nsc.io.SourceReader")
+  val sourceReader  = StringSetting     ("-Xsource-reader", "classname", "Specify a custom method for reading source files", "")
 
   val Xwarnfatal    = BooleanSetting    ("-Xfatal-warnings", "Fail the compilation if there are any warnings.")
   val Xwarninit     = BooleanSetting    ("-Xwarninit", "Warn about possible changes in initialization semantics")
@@ -86,7 +86,7 @@ trait ScalaSettings extends AbsScalaSettings with StandardScalaSettings {
 
   // Experimental Extensions
   val Xexperimental = BooleanSetting    ("-Xexperimental", "Enable experimental extensions") .
-                          withPostSetHook(_ => List(YdepMethTpes, YmethodInfer) foreach (_.value = true)) //YvirtClasses,
+                          withPostSetHook(set => List(YdepMethTpes, YmethodInfer) foreach (_.value = set.value)) //YvirtClasses,
   val YdepMethTpes  = BooleanSetting    ("-Ydependent-method-types", "Allow dependent method types")
   val YmethodInfer  = BooleanSetting    ("-Yinfer-argument-types", "Infer types for arguments of overriden methods")
   val YvirtClasses  = false // too embryonic to even expose as a -Y //BooleanSetting    ("-Yvirtual-classes", "Support virtual classes")
@@ -107,13 +107,12 @@ trait ScalaSettings extends AbsScalaSettings with StandardScalaSettings {
   val Yhelp         = BooleanSetting    ("-Y", "Print a synopsis of private options")
   val browse        = PhasesSetting     ("-Ybrowse", "Browse the abstract syntax tree after")
   val check         = PhasesSetting     ("-Ycheck", "Check the tree at the end of")
-  val checkDebug    = BooleanSetting    ("-Ycheck-debug", "Lots of extra output for -Ycheck")
+  val Yshow         = PhasesSetting     ("-Yshow", "Specifies show phases in conjunction with -Xshow-class or -Xshow-object")
   val Xcloselim     = BooleanSetting    ("-Yclosure-elim", "Perform closure elimination")
   val Ycompacttrees = BooleanSetting    ("-Ycompact-trees", "Use compact tree printer when displaying trees")
   val noCompletion  = BooleanSetting    ("-Yno-completion", "Disable tab-completion in the REPL")
   val Xdce          = BooleanSetting    ("-Ydead-code", "Perform dead code elimination")
   val debug         = BooleanSetting    ("-Ydebug", "Output debugging messages")
-  val Xdetach       = BooleanSetting    ("-Ydetach", "Perform detaching of remote closures")
   // val doc           = BooleanSetting    ("-Ydoc", "Generate documentation")
   val inline        = BooleanSetting    ("-Yinline", "Perform inlining when possible")
   val Xlinearizer   = ChoiceSetting     ("-Ylinearizer", "Linearizer to use", List("normal", "dfs", "rpo", "dump"), "rpo") .
@@ -123,6 +122,8 @@ trait ScalaSettings extends AbsScalaSettings with StandardScalaSettings {
   val Ynogenericsig = BooleanSetting    ("-Yno-generic-signatures", "Suppress generation of generic signatures for Java")
   val noimports     = BooleanSetting    ("-Yno-imports", "Compile without any implicit imports")
   val nopredefs     = BooleanSetting    ("-Yno-predefs", "Compile without any implicit predefined values")
+  val Yprofile      = PhasesSetting     ("-Yprofile", "Profile the given phase. Needs yjpagent to run.")
+  val YprofileClass = StringSetting     ("-Yprofile-class", "class", "Name of profiler class", "scala.tools.util.YourkitProfiling")
   val Yrecursion    = IntSetting        ("-Yrecursion", "Recursion depth used when locking symbols", 0, Some(0, Int.MaxValue), (_: String) => None)
   val selfInAnnots  = BooleanSetting    ("-Yself-in-annots", "Include a \"self\" identifier inside of annotations")
   val Xshowtrees    = BooleanSetting    ("-Yshow-trees", "Show detailed trees when used in connection with -Xprint:<phase>")
@@ -130,13 +131,14 @@ trait ScalaSettings extends AbsScalaSettings with StandardScalaSettings {
   val Xsqueeze      = ChoiceSetting     ("-Ysqueeze", "if on, creates compact code in matching", List("on","off"), "on") .
                                           withHelpSyntax("-Ysqueeze:<enabled>")
   val Ystatistics   = BooleanSetting    ("-Ystatistics", "Print compiler statistics") .
-                                          withPostSetHook(_ => util.Statistics.enabled = true)
+                                          withPostSetHook(set => util.Statistics.enabled = set.value)
   val stop          = PhasesSetting     ("-Ystop", "Stop after phase")
   val refinementMethodDispatch =
                       ChoiceSetting     ("-Ystruct-dispatch", "Selects dispatch method for structural refinement method calls",
                         List("no-cache", "mono-cache", "poly-cache", "invoke-dynamic"), "poly-cache") .
                         withHelpSyntax("-Ystruct-dispatch:<method>")
   val Yrangepos     = BooleanSetting    ("-Yrangepos", "Use range positions for syntax trees.")
+  val YrichExes     = BooleanSetting    ("-Yrich-exceptions", "More revealing exceptions.  Set SOURCEPATH to java/scala source jars.")
   val Yidedebug     = BooleanSetting    ("-Yide-debug", "Generate, validate and output trees using the interactive compiler.")
   val Ybuilderdebug = ChoiceSetting     ("-Ybuilder-debug", "Compile using the specified build manager", List("none", "refined", "simple"), "none") .
                         withHelpSyntax("-Ybuilder-debug:<method>")

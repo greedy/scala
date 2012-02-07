@@ -68,8 +68,8 @@ abstract class GenJVM extends SubComponent {
 
   /** Return the suffix of a class name */
   def moduleSuffix(sym: Symbol) =
-    if (sym.hasFlag(Flags.MODULE) && !sym.isMethod &&
-       !sym.isImplClass && !sym.hasFlag(Flags.JAVA)) "$"
+    if (sym.hasModuleFlag && !sym.isMethod &&
+       !sym.isImplClass && !sym.isJavaDefined) "$"
     else "";
 
 
@@ -199,6 +199,9 @@ abstract class GenJVM extends SubComponent {
     var isParcelableClass = false
 
     def genClass(c: IClass) {
+      val needsEnclosingMethod: Boolean =
+        c.symbol.isClass && (c.symbol.originalEnclosingMethod != NoSymbol)
+
       clasz = c
       innerClasses = immutable.ListSet.empty
 
@@ -260,12 +263,12 @@ abstract class GenJVM extends SubComponent {
         // it must be a top level class (name contains no $s)
         def isCandidateForForwarders(sym: Symbol): Boolean =
           atPhase (currentRun.picklerPhase.next) {
-            !(sym.name.toString contains '$') && (sym hasFlag Flags.MODULE) && !sym.isImplClass && !sym.isNestedClass
+            !(sym.name.toString contains '$') && sym.hasModuleFlag && !sym.isImplClass && !sym.isNestedClass
           }
 
         val lmoc = c.symbol.companionModule
         // add static forwarders if there are no name conflicts; see bugs #363 and #1735
-        if (lmoc != NoSymbol && !c.symbol.hasFlag(Flags.INTERFACE)) {
+        if (lmoc != NoSymbol && !c.symbol.isInterface) {
           if (isCandidateForForwarders(lmoc) && !settings.noForwarders.value) {
             log("Adding static forwarders from '%s' to implementations in '%s'".format(c.symbol, lmoc))
             addForwarders(jclass, lmoc.moduleClass)
@@ -282,12 +285,22 @@ abstract class GenJVM extends SubComponent {
       val ssa = scalaSignatureAddingMarker(jclass, c.symbol)
       addGenericSignature(jclass, c.symbol, c.symbol.owner)
       addAnnotations(jclass, c.symbol.annotations ++ ssa)
+      if (needsEnclosingMethod)  addEnclosingMethodAttribute(jclass, c.symbol)
       emitClass(jclass, c.symbol)
 
       if (c.symbol hasAnnotation BeanInfoAttr)
         genBeanInfoClass(c)
     }
 
+    def addEnclosingMethodAttribute(jclass: JClass, clazz: Symbol) {
+      val sym = clazz.originalEnclosingMethod
+      if (sym.isMethod) {
+        log("enclosing method for %s is %s".format(clazz, sym))
+        var outerName = javaName(sym.enclClass)
+        if (outerName.endsWith("$")) outerName = outerName.dropRight(1)
+        jclass.addAttribute(fjbgContext.JEnclosingMethodAttribute(jclass, outerName, javaName(sym), javaType(sym)))
+      }
+    }
 
     /**
      * Generate a bean info class that describes the given class.
@@ -394,7 +407,7 @@ abstract class GenJVM extends SubComponent {
      *   .initialize: if 'annot' is read from pickle, atp might be un-initialized
      */
     private def shouldEmitAnnotation(annot: AnnotationInfo) =
-      (annot.atp.typeSymbol.initialize.hasFlag(Flags.JAVA) &&
+      (annot.atp.typeSymbol.initialize.isJavaDefined &&
        annot.atp.typeSymbol.isNonBottomSubClass(ClassfileAnnotationClass) &&
        annot.args.isEmpty)
 
@@ -491,10 +504,19 @@ abstract class GenJVM extends SubComponent {
       nannots
     }
 
+    // @M don't generate java generics sigs for (members of) implementation classes, as they are monomorphic (TODO: ok?)
+    private def noGenericSignature(sym: Symbol) = (
+      // PP: This condition used to include sym.hasExpandedName, but this leads to the total loss
+      // of generic information if a private member is accessed from a closure: both the field and
+      // the accessor were generated without it.  This is particularly bad because the availability
+      // of generic information could disappear as a consequence of a seemingly unrelated change.
+         sym.isSynthetic
+      || sym.isLiftedMethod
+      || (sym.ownerChain exists (_.isImplClass))
+    )
     def addGenericSignature(jmember: JMember, sym: Symbol, owner: Symbol) {
-      if (!sym.hasFlag(Flags.EXPANDEDNAME | Flags.SYNTHETIC)
-          && !(sym.isMethod && sym.hasFlag(Flags.LIFTED))
-          && !(sym.ownerChain exists (_.isImplClass))) {  // @M don't generate java generics sigs for (members of) implementation classes, as they are monomorphic (TODO: ok?)
+      if (noGenericSignature(sym)) ()
+      else {
         val memberTpe = atPhase(currentRun.erasurePhase)(owner.thisType.memberInfo(sym))
         // println("addGenericSignature sym: " + sym.fullName + " : " + memberTpe + " sym.info: " + sym.info)
         // println("addGenericSignature: "+ (sym.ownerChain map (x => (x.name, x.isImplClass))))
@@ -560,6 +582,28 @@ abstract class GenJVM extends SubComponent {
       def addOwnInnerClasses(cls: Symbol): Unit =
         innerClasses ++= (cls.info.decls filter (_.isClass))
 
+      /** The outer name for this inner class. Note that it returns null
+       *  when the inner class should not get an index in the constant pool.
+       *  That means non-member classes (anonymous). See Section 4.7.5 in the JVMS.
+       */
+      def outerName(innerSym: Symbol): String = {
+        if (innerSym.isAnonymousClass || innerSym.isAnonymousFunction || innerSym.originalEnclosingMethod != NoSymbol)
+          null
+        else {
+          var outerName = javaName(innerSym.rawowner)
+          // remove the trailing '$'
+          if (outerName.endsWith("$") && isTopLevelModule(innerSym.rawowner))
+            outerName = outerName dropRight 1
+          outerName
+        }
+      }
+
+      def innerName(innerSym: Symbol): String =
+        if (innerSym.isAnonymousClass || innerSym.isAnonymousFunction)
+          null
+        else
+          innerSym.rawname.toString
+
       // add inner classes which might not have been referenced yet
       atPhase(currentRun.erasurePhase.next) {
         addOwnInnerClasses(clasz.symbol)
@@ -571,17 +615,13 @@ abstract class GenJVM extends SubComponent {
         // sort them so inner classes succeed their enclosing class
         // to satisfy the Eclipse Java compiler
         for (innerSym <- innerClasses.toList sortBy (_.name.length)) {
-          var outerName = javaName(innerSym.rawowner)
-          // remove the trailing '$'
-          if (outerName.endsWith("$") && isTopLevelModule(innerSym.rawowner))
-            outerName = outerName dropRight 1
           var flags = javaFlags(innerSym)
-          if (innerSym.rawowner.hasFlag(Flags.MODULE))
+          if (innerSym.rawowner.hasModuleFlag)
             flags |= ACC_STATIC
 
           innerClassesAttr.addEntry(javaName(innerSym),
-              outerName,
-              innerSym.rawname.toString,
+              outerName(innerSym),
+              innerName(innerSym),
               (flags & INNER_CLASSES_FLAGS));
         }
       }
@@ -593,7 +633,7 @@ abstract class GenJVM extends SubComponent {
       }
 
     def isStaticModule(sym: Symbol): Boolean = {
-      sym.isModuleClass && !sym.isImplClass && !sym.hasFlag(Flags.LIFTED)
+      sym.isModuleClass && !sym.isImplClass && !sym.isLifted
     }
 
     def genField(f: IField) {
@@ -635,6 +675,9 @@ abstract class GenJVM extends SubComponent {
       if (jclass.isInterface())
         flags |= ACC_ABSTRACT
 
+      if (m.symbol.isStrictFP)
+        flags |= ACC_STRICT
+
       // native methods of objects are generated in mirror classes
       if (method.native)
         flags |= ACC_NATIVE
@@ -656,7 +699,7 @@ abstract class GenJVM extends SubComponent {
           if (outerField != NoSymbol) {
             log("Adding fake local to represent outer 'this' for closure " + clasz)
             val _this = new Local(
-              method.symbol.newVariable(NoPosition, "this$"), toTypeKind(outerField.tpe), false)
+              method.symbol.newVariable(NoPosition, nme.FAKE_LOCAL_THIS), toTypeKind(outerField.tpe), false)
             m.locals = m.locals ::: List(_this)
             computeLocalVarsIndex(m) // since we added a new local, we need to recompute indexes
 
@@ -719,7 +762,7 @@ abstract class GenJVM extends SubComponent {
 
     private def isClosureApply(sym: Symbol): Boolean = {
       (sym.name == nme.apply) &&
-      sym.owner.hasFlag(Flags.SYNTHETIC) &&
+      sym.owner.isSynthetic &&
       sym.owner.tpe.parents.exists { t =>
         val TypeRef(_, sym, _) = t;
         FunctionClass contains sym
@@ -880,7 +923,7 @@ abstract class GenJVM extends SubComponent {
 
       addRemoteException(mirrorMethod, m)
       // only add generic signature if the method is concrete; bug #1745
-      if (!m.hasFlag(Flags.DEFERRED))
+      if (!m.isDeferred)
         addGenericSignature(mirrorMethod, m, module)
 
       val (throws, others) = splitAnnotations(m.annotations, ThrowsClass)
@@ -914,12 +957,11 @@ abstract class GenJVM extends SubComponent {
        *  then all matching names.
        */
       def memberNames(sym: Symbol) = sym.info.members map (_.name.toString) toSet
-      lazy val membersInCommon     = atPhase(currentRun.picklerPhase)(
+      lazy val membersInCommon     =
         memberNames(linkedModule) intersect memberNames(linkedClass)
-      )
 
       /** Should method `m' get a forwarder in the mirror class? */
-      def shouldForward(m: Symbol): Boolean = atPhase(currentRun.picklerPhase)(
+      def shouldForward(m: Symbol): Boolean = (
         m.owner != ObjectClass
         && m.isMethod
         && m.isPublic
@@ -1122,7 +1164,6 @@ abstract class GenJVM extends SubComponent {
 
           case LOAD_FIELD(field, isStatic) =>
             var owner = javaName(field.owner)
-//            if (field.owner.hasFlag(Flags.MODULE)) owner = owner + "$";
             if (settings.debug.value)
               log("LOAD_FIELD with owner: " + owner +
                   " flags: " + Flags.flagsToString(field.owner.flags))
@@ -1159,7 +1200,7 @@ abstract class GenJVM extends SubComponent {
             jcode.emitASTORE_0()
 
           case STORE_FIELD(field, isStatic) =>
-            val owner = javaName(field.owner) // + (if (field.owner.hasFlag(Flags.MODULE)) "$" else "");
+            val owner = javaName(field.owner)
             if (isStatic)
               jcode.emitPUTSTATIC(owner,
                                   javaName(field),
@@ -1386,7 +1427,7 @@ abstract class GenJVM extends SubComponent {
           case RETURN(kind) =>
             jcode emitRETURN javaType(kind)
 
-          case THROW() =>
+          case THROW(_) =>
             jcode.emitATHROW()
 
           case DROP(kind) =>
@@ -1422,7 +1463,7 @@ abstract class GenJVM extends SubComponent {
             } else
               assert(false, "Illegal local var nesting: " + method)
 
-          case LOAD_EXCEPTION() =>
+          case LOAD_EXCEPTION(_) =>
             ()
         }
 
@@ -1645,8 +1686,7 @@ abstract class GenJVM extends SubComponent {
      *  Synthetic locals are skipped. All variables are method-scoped.
      */
     private def genLocalVariableTable(m: IMethod, jcode: JCode) {
-      var vars = m.locals.filter(l => !l.sym.hasFlag(Flags.SYNTHETIC))
-
+      var vars = m.locals filterNot (_.sym.isSynthetic)
       if (vars.length == 0) return
 
       val pool = jclass.getConstantPool()
@@ -1836,7 +1876,7 @@ abstract class GenJVM extends SubComponent {
 
       mkFlags(
         if (isConsideredPrivate) ACC_PRIVATE else ACC_PUBLIC,
-        if (sym.isDeferred || sym.hasFlag(Flags.ABSTRACT)) ACC_ABSTRACT else 0,
+        if (sym.isDeferred || sym.hasAbstractFlag) ACC_ABSTRACT else 0,
         if (sym.isInterface) ACC_INTERFACE else 0,
         if (sym.isFinal && !sym.enclClass.isInterface && !sym.isClassConstructor) ACC_FINAL else 0,
         if (sym.isStaticMember) ACC_STATIC else 0,
@@ -1855,9 +1895,8 @@ abstract class GenJVM extends SubComponent {
       if (sym.isTrait) sym.info // needed so that the type is up to date
                                 // (erasure may add lateINTERFACE to traits)
 
-      sym.hasFlag(Flags.INTERFACE) ||
-      (sym.hasFlag(Flags.JAVA) &&
-       sym.isNonBottomSubClass(ClassfileAnnotationClass))
+      sym.isInterface ||
+      (sym.isJavaDefined && sym.isNonBottomSubClass(ClassfileAnnotationClass))
     }
 
 
