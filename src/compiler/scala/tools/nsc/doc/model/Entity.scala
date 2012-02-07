@@ -31,6 +31,7 @@ trait TemplateEntity extends Entity {
   def isClass: Boolean
   def isObject: Boolean
   def isDocTemplate: Boolean
+  def selfType : Option[TypeEntity]
 }
 trait NoDocTemplate extends TemplateEntity
 
@@ -51,6 +52,7 @@ trait MemberEntity extends Entity {
   def isLazyVal: Boolean
   def isVar: Boolean
   def isImplicit: Boolean
+  def isAbstract: Boolean
   def isConstructor: Boolean
   def isAliasType: Boolean
   def isAbstractType: Boolean
@@ -67,6 +69,7 @@ trait DocTemplateEntity extends TemplateEntity with MemberEntity {
   def parentType: Option[TypeEntity]
   def parentTemplates: List[TemplateEntity]
   def linearization: List[TemplateEntity]
+  def linearizationTypes: List[TypeEntity]
   def subClasses: List[DocTemplateEntity]
   def members: List[MemberEntity]
   def templates: List[DocTemplateEntity]

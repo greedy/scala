@@ -9,6 +9,20 @@ $(document).ready(function(){
     prefilters.removeClass("in");
     prefilters.addClass("out");
     filter();
+
+    var input = $("#textfilter > input");
+    input.bind("keyup", function(event) {
+        if (event.keyCode == 27) { // escape
+            input.attr("value", "");
+        }
+        filter();
+    });
+    input.focus(function(event) { input.select(); });
+    $("#textfilter > .post").click(function(){
+        $("#textfilter > input").attr("value", "");
+        filter();
+    });
+
     $("#ancestors > ol > li").click(function(){
         if ($(this).hasClass("in")) {
             $(this).removeClass("in");
@@ -47,6 +61,24 @@ $(document).ready(function(){
             filter();
         };
     });
+    $("#impl > ol > li.concrete").click(function() {
+        if ($(this).hasClass("out")) {
+            $(this).removeClass("out").addClass("in");            
+            $("li[data-isabs='false']").show();
+        } else {
+            $(this).removeClass("in").addClass("out");
+            $("li[data-isabs='false']").hide();
+        }
+    });
+    $("#impl > ol > li.abstract").click(function() {
+        if ($(this).hasClass("out")) {
+            $(this).removeClass("out").addClass("in");                        
+            $("li[data-isabs='true']").show();
+        } else {
+            $(this).removeClass("in").addClass("out");
+            $("li[data-isabs='true']").hide();
+        }
+    });
     $("#order > ol > li.alpha").click(function() {
         if ($(this).hasClass("out")) {
             $(this).removeClass("out").addClass("in");
@@ -83,7 +115,7 @@ $(document).ready(function(){
     var docShowSigs = docAllSigs.filter(function(){
         return $("+ div.fullcomment", $(this)).length > 0;
     });
-    docShowSigs.css("cursor", "help");
+   docShowSigs.css("cursor", "pointer");
     docShowSigs.click(function(){
         commentShowFct($("+ div.fullcomment", $(this)));
     });
@@ -102,7 +134,7 @@ $(document).ready(function(){
     var docToggleSigs = docAllSigs.filter(function(){
         return $("+ p.shortcomment", $(this)).length > 0;
     });
-    docToggleSigs.css("cursor", "help");
+    docToggleSigs.css("cursor", "pointer");
     docToggleSigs.click(function(){
         commentToggleFct($("+ p.shortcomment", $(this)));
     });
@@ -174,6 +206,8 @@ function initInherit() {
 };
 
 function filter() {
+    var query = $("#textfilter > input").attr("value").toLowerCase();
+    var queryRegExp = new RegExp(query, "i");
     var inheritHides = null
     if ($("#order > ol > li.inherit").hasClass("in")) {
         inheritHides = $("#linearization > li:gt(0)");
@@ -201,11 +235,16 @@ function filter() {
                 };
             };
         };
-        var showByVis = true
+        var showByVis = true;
         if (vis1 == "prt") {
             showByVis = prtVisbl;
         };
-        if (showByOwned && showByVis) {
+        var showByName = true;
+        if (query != "") {
+            var content = $(this).attr("name") + $("> .fullcomment .cmt", this).text();
+            showByName = queryRegExp.test(content);
+        };
+        if (showByOwned && showByVis && showByName) {
           $(this).show();
         }
         else {
