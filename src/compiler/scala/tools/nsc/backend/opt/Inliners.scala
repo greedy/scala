@@ -118,6 +118,8 @@ abstract class Inliners extends SubComponent {
     }
 
     def analyzeMethod(m: IMethod): Unit = {
+      var sizeBeforeInlining = if (m.code ne null) m.code.blocks.length else 0
+      var instrBeforeInlining = if (m.code ne null) m.code.blocks.foldLeft(0)(_ + _.length)  else 0
       var retry = false
       var count = 0
       fresh.clear
@@ -125,7 +127,8 @@ abstract class Inliners extends SubComponent {
       val caller = new IMethodInfo(m)
       var info: tfa.lattice.Elem = null
 
-      def analyzeInc(msym: Symbol, i: Instruction, bb: BasicBlock) = {
+      def analyzeInc(msym: Symbol, i: Instruction, bb: BasicBlock): Boolean = {
+        var inlined = false
         def paramTypes  = msym.info.paramTypes
         val receiver    = (info.stack.types drop paramTypes.length).head match {
           case REFERENCE(s) => s
@@ -139,12 +142,16 @@ abstract class Inliners extends SubComponent {
         }
 
         if (shouldLoadImplFor(concreteMethod, receiver))
-          icodes.icode(receiver, true)
+          icodes.load(concreteMethod.enclClass)
 
-        def isAvailable = icodes available receiver
+        def isAvailable = icodes available concreteMethod.enclClass
         def isCandidate = isClosureClass(receiver) || concreteMethod.isEffectivelyFinal || receiver.isFinal
         def isApply     = concreteMethod.name == nme.apply
-        def isCountable = !(isClosureClass(receiver) && isApply)   // only count non-closures
+        def isCountable = !(isClosureClass(receiver)
+                || isApply
+                || isMonadicMethod(concreteMethod)
+                || receiver.enclosingPackage == definitions.RuntimePackage
+                )   // only count non-closures
 
         if (settings.debug.value)
           log("Treating " + i
@@ -160,10 +167,13 @@ abstract class Inliners extends SubComponent {
 
               if (pair isStampedForInlining info.stack) {
                 retry = true
+                inlined = true
                 if (isCountable)
                   count += 1
 
                 pair.doInline(bb, i)
+                if (!inc.inline || inc.isMonadic)
+                  caller.inlinedCalls += 1
                 inlinedMethodCount(inc.sym) += 1
 
                 /* Remove this method from the cache, as the calls-private relation
@@ -187,8 +197,10 @@ abstract class Inliners extends SubComponent {
           if (!isAvailable) "bytecode was not available"
           else "it is not final"
         )
+        inlined
       }
 
+      import scala.util.control.Breaks._
       do {
         retry = false
         if (caller.inline) {
@@ -201,11 +213,13 @@ abstract class Inliners extends SubComponent {
           caller.linearized foreach { bb =>
             info = tfa in bb
 
-            for (i <- bb) {
-              if (!retry) {
+            breakable {
+              for (i <- bb) {
                 i match {
-                  case CALL_METHOD(msym, Dynamic) => analyzeInc(msym, i, bb)
-                  case _                          => ()
+                  case CALL_METHOD(msym, Dynamic) =>
+                    if (analyzeInc(msym, i, bb)) break
+
+                  case _ => ()
                 }
                 info = tfa.interpret(info, i)
               }
@@ -219,9 +233,15 @@ abstract class Inliners extends SubComponent {
       while (retry && count < MAX_INLINE_RETRY)
 
       m.normalize
-		}
+      if (sizeBeforeInlining > 0) {
+        val instrAfterInlining = m.code.blocks.foldLeft(0)(_ + _.length)
+        val prefix = if ((instrAfterInlining > 2 * instrBeforeInlining) && (instrAfterInlining > 200)) " !! " else ""
+        log(prefix + " %s blocks before inlining: %d (%d) after: %d (%d)".format(
+          m.symbol.fullName, sizeBeforeInlining, instrBeforeInlining, m.code.blocks.length, instrAfterInlining))
+      }
+    }
 
-		private def isMonadicMethod(sym: Symbol) = sym.name match {
+    private def isMonadicMethod(sym: Symbol) = sym.name match {
       case nme.foreach | nme.filter | nme.map | nme.flatMap => true
       case _                                                => false
     }
@@ -230,17 +250,17 @@ abstract class Inliners extends SubComponent {
 
     /** Should method 'sym' being called in 'receiver' be loaded from disk? */
     def shouldLoadImplFor(sym: Symbol, receiver: Symbol): Boolean = {
-      if (settings.debug.value)
-        log("shouldLoadImplFor: " + receiver + "." + sym)
-
       def alwaysLoad    = (receiver.enclosingPackage == RuntimePackage) || (receiver == PredefModule.moduleClass)
       def loadCondition = sym.isEffectivelyFinal && isMonadicMethod(sym) && isHigherOrderMethod(sym)
 
-      hasInline(sym) || alwaysLoad || loadCondition
+      val res = hasInline(sym) || alwaysLoad || loadCondition
+      if (settings.debug.value)
+        log("shouldLoadImplFor: " + receiver + "." + sym + ": " + res)
+      res
     }
 
-		/** Look up implementation of method 'sym in 'clazz'.
-		 */
+    /** Look up implementation of method 'sym in 'clazz'.
+     */
     def lookupImplFor(sym: Symbol, clazz: Symbol): Symbol = {
       // TODO: verify that clazz.superClass is equivalent here to clazz.tpe.parents(0).typeSymbol (.tpe vs .info)
       def needsLookup = (clazz != NoSymbol) && (clazz != sym.owner) && !sym.isEffectivelyFinal && clazz.isFinal
@@ -280,19 +300,22 @@ abstract class Inliners extends SubComponent {
       def isMonadic     = isMonadicMethod(sym)
 
       def handlers      = m.exh
-      def blocks        = m.code.blocks
+      def blocks        = if (m.code eq null) Predef.error("blocks = null + " + m) else m.code.blocks
       def locals        = m.locals
       def length        = blocks.length
       def openBlocks    = blocks filterNot (_.closed)
       def instructions  = blocks.flatten
       def linearized    = linearizer linearize m
 
-      def isSmall       = length <= SMALL_METHOD_SIZE
+      def isSmall       = (length <= SMALL_METHOD_SIZE) && blocks(0).length < 10
       def isLarge       = length > MAX_INLINE_SIZE
       def isRecursive   = m.recursive
       def hasCode       = m.code != null
       def hasSourceFile = m.sourceFile != null
       def hasHandlers   = handlers.nonEmpty
+
+      // the number of inlined calls in 'm', used by 'shouldInline'
+      var inlinedCalls = 0
 
       def addLocals(ls: List[Local])  = m.locals ++= ls
       def addLocal(l: Local)          = addLocals(List(l))
@@ -493,6 +516,7 @@ abstract class Inliners extends SubComponent {
         // add exception handlers of the callee
         caller addHandlers (inc.handlers map translateExh)
         assert(pending.isEmpty, "Pending NEW elements: " + pending)
+        if (settings.debug.value) icodes.checkValid(caller.m)
       }
 
       def isStampedForInlining(stack: TypeStack) =
@@ -591,7 +615,8 @@ abstract class Inliners extends SubComponent {
 
           false
         }
-
+//        if (!canAccess(accessNeeded))
+//          println("access needed and failed: " + accessNeeded)
         canAccess(accessNeeded) && !isIllegalStack
       }
 
@@ -610,6 +635,12 @@ abstract class Inliners extends SubComponent {
           log("shouldInline: " + caller.m + " with " + inc.m)
 
         var score = 0
+
+        // better not inline inside closures, but hope that the closure itself
+        // is repeatedly inlined
+        if (caller.isInClosure) score -= 2
+        else if (caller.inlinedCalls < 1) score -= 1 // only monadic methods can trigger the first inline
+
         if (inc.isSmall)
           score += 1
         if (caller.isSmall && isLargeSum) {
@@ -621,7 +652,7 @@ abstract class Inliners extends SubComponent {
           score -= 1
 
         if (inc.isMonadic)
-          score += 2
+          score += 3
         else if (inc.isHigherOrder)
           score += 1
         if (inc.isInClosure)
@@ -629,8 +660,7 @@ abstract class Inliners extends SubComponent {
         if (inc.numInlined > 2)
           score -= 2
 
-        if (settings.debug.value)
-          log("shouldInline(" + inc.m + ") score: " + score)
+        log("shouldInline(" + inc.m + ") score: " + score)
 
         score > 0
       })

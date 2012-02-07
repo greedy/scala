@@ -80,6 +80,7 @@ abstract class RefChecks extends InfoTransform {
     var localTyper: analyzer.Typer = typer;
     var currentApplication: Tree = EmptyTree
     var inPattern: Boolean = false
+    var checkedCombinations = Set[List[Type]]()
 
     // only one overloaded alternative is allowed to define default arguments
     private def checkDefaultsInOverloaded(clazz: Symbol) {
@@ -186,7 +187,7 @@ abstract class RefChecks extends InfoTransform {
      *  4. Check that every member with an `override' modifier
      *     overrides some other member.
      */
-    private def checkAllOverrides(clazz: Symbol) {
+    private def checkAllOverrides(clazz: Symbol, typesOnly: Boolean = false) {
 
       case class MixinOverrideError(member: Symbol, msg: String)
 
@@ -265,12 +266,12 @@ abstract class RefChecks extends InfoTransform {
           }
         }
 
+        def accessFlagsToString(sym: Symbol)
+          = flagsToString(sym getFlag (PRIVATE | PROTECTED), if (sym.privateWithin eq NoSymbol) "" else sym.privateWithin.name.toString)
+
         def overrideAccessError() {
-          val pwString = if (other.privateWithin == NoSymbol) ""
-                         else other.privateWithin.name.toString
-          val otherAccess = flagsToString(other getFlag (PRIVATE | PROTECTED), pwString)
-          overrideError("has weaker access privileges; it should be "+
-                        (if (otherAccess == "") "public" else "at least "+otherAccess))
+          val otherAccess = accessFlagsToString(other)
+          overrideError("has weaker access privileges; it should be "+ (if (otherAccess == "") "public" else "at least "+otherAccess))
         }
 
         //Console.println(infoString(member) + " overrides " + infoString(other) + " in " + clazz);//DEBUG
@@ -299,56 +300,75 @@ abstract class RefChecks extends InfoTransform {
         def intersectionIsEmpty(syms1: List[Symbol], syms2: List[Symbol]) =
           !(syms1 exists (syms2 contains))
 
-        if (member hasFlag PRIVATE) { // (1.1)
-          overrideError("has weaker access privileges; it should not be private")
+        if (typesOnly) checkOverrideTypes()
+        else {
+          // o: public | protected        | package-protected  (aka java's default access)
+          // ^-may be overridden by member with access privileges-v
+          // m: public | public/protected | public/protected/package-protected-in-same-package-as-o
+
+          if (member hasFlag PRIVATE) // (1.1)
+            overrideError("has weaker access privileges; it should not be private")
+
+          @inline def definedIn(sym: Symbol, in: Symbol) = sym != RootClass && sym != NoSymbol && sym.hasTransOwner(in)
+
+          val ob = other.accessBoundary(member.owner)
+          val mb = member.accessBoundary(member.owner)
+          // println("checking override in "+ clazz +"\n  other: "+ infoString(other) +" ab: "+ ob.ownerChain +" flags: "+ accessFlagsToString(other))
+          // println("  overriding member: "+ infoString(member) +" ab: "+ mb.ownerChain +" flags: "+ accessFlagsToString(member))
+          // todo: align accessibility implication checking with isAccessible in Contexts
+          if (!(  mb == RootClass // m is public, definitely relaxes o's access restrictions (unless o.isJavaDefined, see below)
+               || mb == NoSymbol  // AM: what does this check?? accessBoundary does not ever seem to return NoSymbol (unless member.owner were NoSymbol)
+               || ((!(other hasFlag PROTECTED) || (member hasFlag PROTECTED)) && definedIn(ob, mb)) // (if o isProtected, so is m) and m relaxes o's access boundary
+               )) {
+            overrideAccessError()
+          }
+          else if (other.isClass || other.isModule) {
+            overrideError("cannot be used here - classes and objects cannot be overridden");
+          } else if (!other.isDeferred && (member.isClass || member.isModule)) {
+            overrideError("cannot be used here - classes and objects can only override abstract types");
+          } else if (other hasFlag FINAL) { // (1.2)
+            overrideError("cannot override final member");
+          } else if (!other.isDeferred && !(member hasFlag (OVERRIDE | ABSOVERRIDE | SYNTHETIC))) { // (1.3), SYNTHETIC because of DEVIRTUALIZE
+            overrideError("needs `override' modifier");
+          } else if ((other hasFlag ABSOVERRIDE) && other.isIncompleteIn(clazz) && !(member hasFlag ABSOVERRIDE)) {
+            overrideError("needs `abstract override' modifiers")
+          } else if ((member hasFlag (OVERRIDE | ABSOVERRIDE)) &&
+                     (other hasFlag ACCESSOR) && other.accessed.isVariable && !other.accessed.hasFlag(LAZY)) {
+            overrideError("cannot override a mutable variable")
+          } else if ((member hasFlag (OVERRIDE | ABSOVERRIDE)) &&
+                     !(member.owner.thisType.baseClasses exists (_ isSubClass other.owner)) &&
+                     !member.isDeferred && !other.isDeferred &&
+                     intersectionIsEmpty(member.allOverriddenSymbols, other.allOverriddenSymbols)) {
+            overrideError("cannot override a concrete member without a third member that's overridden by both "+
+                          "(this rule is designed to prevent ``accidental overrides'')")
+          } else if (other.isStable && !member.isStable) { // (1.4)
+            overrideError("needs to be a stable, immutable value")
+          } else if (member.isValue && (member hasFlag LAZY) &&
+                     other.isValue && !other.isSourceMethod && !other.isDeferred && !(other hasFlag LAZY)) {
+            overrideError("cannot override a concrete non-lazy value")
+          } else if (other.isValue && (other hasFlag LAZY) && !other.isSourceMethod && !other.isDeferred &&
+                     member.isValue && !(member hasFlag LAZY)) {
+            overrideError("must be declared lazy to override a concrete lazy value")
+          } else {
+            checkOverrideTypes()
+          }
         }
-        val mb = member.accessBoundary(member.owner)
-        val ob = other.accessBoundary(member.owner)
-        if (mb != RootClass && mb != NoSymbol && // todo: change
-            (ob == RootClass || ob == NoSymbol || !ob.hasTransOwner(mb) ||
-             (other hasFlag PROTECTED) && !(member hasFlag PROTECTED))) {
-          overrideAccessError()
-        }
-        else if (other.isClass || other.isModule) {
-          overrideError("cannot be used here - classes and objects cannot be overridden");
-        } else if (!other.isDeferred && (member.isClass || member.isModule)) {
-          overrideError("cannot be used here - classes and objects can only override abstract types");
-        } else if (other hasFlag FINAL) { // (1.2)
-          overrideError("cannot override final member");
-        } else if (!other.isDeferred && !(member hasFlag (OVERRIDE | ABSOVERRIDE | SYNTHETIC))) { // (1.3), SYNTHETIC because of DEVIRTUALIZE
-          overrideError("needs `override' modifier");
-        } else if ((other hasFlag ABSOVERRIDE) && other.isIncompleteIn(clazz) && !(member hasFlag ABSOVERRIDE)) {
-          overrideError("needs `abstract override' modifiers")
-        } else if ((member hasFlag (OVERRIDE | ABSOVERRIDE)) &&
-                   (other hasFlag ACCESSOR) && other.accessed.isVariable && !other.accessed.hasFlag(LAZY)) {
-          overrideError("cannot override a mutable variable")
-        } else if ((member hasFlag (OVERRIDE | ABSOVERRIDE)) &&
-                   !(member.owner.thisType.baseClasses exists (_ isSubClass other.owner)) &&
-                   !member.isDeferred && !other.isDeferred &&
-                   intersectionIsEmpty(member.allOverriddenSymbols, other.allOverriddenSymbols)) {
-          overrideError("cannot override a concrete member without a third member that's overridden by both "+
-                        "(this rule is designed to prevent ``accidental overrides'')")
-        } else if (other.isStable && !member.isStable) { // (1.4)
-          overrideError("needs to be a stable, immutable value")
-        } else if (member.isValue && (member hasFlag LAZY) &&
-                   other.isValue && !other.isSourceMethod && !other.isDeferred && !(other hasFlag LAZY)) {
-          overrideError("cannot override a concrete non-lazy value")
-        } else if (other.isValue && (other hasFlag LAZY) && !other.isSourceMethod && !other.isDeferred &&
-                   member.isValue && !(member hasFlag LAZY)) {
-          overrideError("must be declared lazy to override a concrete lazy value")
-        } else {
+
+        def checkOverrideTypes() {
           if (other.isAliasType) {
-            //if (!member.typeParams.isEmpty) // (1.5)  @MAT
+            //if (!member.typeParams.isEmpty) (1.5)  @MAT
             //  overrideError("may not be parameterized");
-            //if (!other.typeParams.isEmpty) // (1.5)   @MAT
+            //if (!other.typeParams.isEmpty)  (1.5)   @MAT
             //  overrideError("may not override parameterized type");
             // @M: substSym
+
             if (!(self.memberType(member).substSym(member.typeParams, other.typeParams) =:= self.memberType(other))) // (1.6)
               overrideTypeError();
           } else if (other.isAbstractType) {
             //if (!member.typeParams.isEmpty) // (1.7)  @MAT
             //  overrideError("may not be parameterized");
-            var memberTp = self.memberType(member)
+
+            val memberTp = self.memberType(member)
             val otherTp = self.memberInfo(other)
             if (!(otherTp.bounds containsType memberTp)) { // (1.7.1)
               overrideTypeError(); // todo: do an explaintypes with bounds here
@@ -381,10 +401,25 @@ abstract class RefChecks extends InfoTransform {
             }
           } else if (other.isTerm) {
             other.cookJavaRawInfo() // #2454
-
-            if (!overridesType(self.memberInfo(member), self.memberInfo(other))) { // 8
+            val memberTp = self.memberType(member)
+            val otherTp = self.memberType(other)
+            if (!overridesType(memberTp, otherTp)) { // 8
               overrideTypeError()
-              explainTypes(self.memberInfo(member), self.memberInfo(other))
+              explainTypes(memberTp, otherTp)
+            }
+
+            if (member.isStable && !otherTp.isVolatile) {
+	          if (memberTp.isVolatile)
+                overrideError("has a volatile type; cannot override a member with non-volatile type")
+              else memberTp.normalize.resultType match {
+                case rt: RefinedType if !(rt =:= otherTp) && !(checkedCombinations contains rt.parents) =>
+                  // might mask some inconsistencies -- check overrides
+                  checkedCombinations += rt.parents
+                  val tsym = rt.typeSymbol;
+                  if (tsym.pos == NoPosition) tsym setPos member.pos
+                  checkAllOverrides(tsym, typesOnly = true)
+                case _ =>
+              }
             }
           }
         }
@@ -400,7 +435,7 @@ abstract class RefChecks extends InfoTransform {
       printMixinOverrideErrors()
 
       // Verifying a concrete class has nothing unimplemented.
-      if (clazz.isClass && !clazz.isTrait && !(clazz hasFlag ABSTRACT)) {
+      if (clazz.isClass && !clazz.isTrait && !(clazz hasFlag ABSTRACT) && !typesOnly) {
         val abstractErrors = new ListBuffer[String]
         def abstractErrorMessage =
           // a little formatting polish
@@ -428,8 +463,10 @@ abstract class RefChecks extends InfoTransform {
             })
 
         def ignoreDeferred(member: Symbol) =
-          isAbstractTypeWithoutFBound(member) ||
-          (member.isJavaDefined && javaErasedOverridingSym(member) != NoSymbol)
+          (currentRun.erasurePhase != NoPhase) && ( // the test requires atPhase(erasurePhase.next) so shouldn't be done if the compiler has no erasure phase available
+            isAbstractTypeWithoutFBound(member) ||
+            (member.isJavaDefined && javaErasedOverridingSym(member) != NoSymbol)
+          )
 
         // 2. Check that only abstract classes have deferred members
         def checkNoAbstractMembers() = {
@@ -507,11 +544,19 @@ abstract class RefChecks extends InfoTransform {
        */
       def hasMatchingSym(inclazz: Symbol, member: Symbol): Boolean =
         inclazz != clazz && {
+          lazy val memberEnclPackageCls = member.enclosingPackageClass
+
           val isVarargs = hasRepeatedParam(member.tpe)
           inclazz.info.nonPrivateDecl(member.name).filter { sym =>
-            !sym.isTerm || {
+            (!sym.isTerm || {
               val symtpe = clazz.thisType.memberType(sym)
               (member.tpe matches symtpe) || isVarargs && (toJavaRepeatedParam(member.tpe) matches symtpe)
+            }) && {
+              // http://java.sun.com/docs/books/jls/third_edition/html/names.html#6.6.5:
+              // If a public class has a [member] with default access, then this [member] is not accessible to,
+              // or inherited by a subclass declared outside this package.
+              // (sym is a java member with default access in pkg P) implies (member's enclosing package == P)
+              !(inclazz.isJavaDefined && sym.privateWithin == sym.enclosingPackageClass) || memberEnclPackageCls == sym.privateWithin
             }
           } != NoSymbol
         }
@@ -775,51 +820,59 @@ abstract class RefChecks extends InfoTransform {
     }
 
     def checkSensible(pos: Position, fn: Tree, args: List[Tree]) = fn match {
-      case Select(qual, name) if (args.length == 1) =>
+      case Select(qual, name @ (nme.EQ | nme.NE | nme.eq | nme.ne)) if args.length == 1 =>
+        def isReferenceOp = name == nme.eq || name == nme.ne
         def isNew(tree: Tree) = tree match {
           case Function(_, _)
              | Apply(Select(New(_), nme.CONSTRUCTOR), _) => true
           case _ => false
         }
-        name match {
-          case nme.EQ | nme.NE | nme.LT | nme.GT | nme.LE | nme.GE =>
-            def underlyingClass(tp: Type): Symbol = {
-              var sym = tp.widen.typeSymbol
-              while (sym.isAbstractType)
-                sym = sym.info.bounds.hi.widen.typeSymbol
-              sym
-            }
-            val formal = underlyingClass(fn.tpe.params.head.tpe)
-            val actual = underlyingClass(args.head.tpe)
-            val receiver = underlyingClass(qual.tpe)
-            def nonSensibleWarning(what: String, alwaysEqual: Boolean) =
-              unit.warning(pos, "comparing "+what+" using `"+name.decode+"' will always yield "+
-                           (alwaysEqual == (name == nme.EQ || name == nme.LE || name == nme.GE)))
-            def nonSensible(pre: String, alwaysEqual: Boolean) =
-              nonSensibleWarning(pre+"values of types "+normalizeAll(qual.tpe.widen)+" and "+normalizeAll(args.head.tpe.widen),
-                                 alwaysEqual) // @MAT normalize for consistency in error message, otherwise part is normalized due to use of `typeSymbol', but the rest isn't
-            def hasObjectEquals = receiver.info.member(nme.equals_) == Object_equals
-            // see if it has any == methods beyond Any's and AnyRef's: ticket #2240
-            def hasOverloadedEqEq = receiver.info.member(nme.EQ).alternatives.length > 2
+        def underlyingClass(tp: Type): Symbol = {
+          var sym = tp.widen.typeSymbol
+          while (sym.isAbstractType)
+            sym = sym.info.bounds.hi.widen.typeSymbol
+          sym
+        }
+        val actual = underlyingClass(args.head.tpe)
+        val receiver = underlyingClass(qual.tpe)
 
-            if (formal == UnitClass && actual == UnitClass)
-              nonSensible("", true)
-            else if ((receiver == BooleanClass || receiver == UnitClass) &&
-                     !(receiver isSubClass actual))
-              nonSensible("", false)
-            else if (isNumericValueClass(receiver) &&
-                     !isNumericValueClass(actual) &&
-                     !(forMSIL || (actual isSubClass BoxedNumberClass)) &&
-                     !(receiver isSubClass actual))
-              nonSensible("", false)
-            else if ((receiver hasFlag FINAL) && hasObjectEquals && !isValueClass(receiver) &&
-                     !(receiver isSubClass actual) && receiver != NullClass && actual != NullClass &&
-                     (name == nme.EQ || name == nme.LE))
-              nonSensible("non-null ", false)
-            else if ((isNew(qual) || isNew(args.head)) && hasObjectEquals &&
-                     (name == nme.EQ || name == nme.NE) && !hasOverloadedEqEq)
-              nonSensibleWarning("a fresh object", false)
-          case _ =>
+        // Whether def equals(other: Any) is overridden
+        def isUsingDefaultEquals      = {
+          val m = receiver.info.member(nme.equals_)
+          (m == Object_equals) || (m == Any_equals)
+        }
+        // Whether this == or != is actually an overloaded version
+        def isUsingDefaultScalaOp = {
+          val s = fn.symbol
+          (s == Object_==) || (s == Object_!=) || (s == Any_==) || (s == Any_!=) || (s == Object_eq) || (s == Object_ne)
+        }
+        // Whether the operands+operator represent a warnable combo (assuming anyrefs)
+        def isWarnable                = isReferenceOp || (isUsingDefaultEquals && isUsingDefaultScalaOp)
+        def isValueOrBoxed(s: Symbol) = isNumericValueClass(s) || (s isSubClass BoxedNumberClass)
+        def isEitherNull              = (receiver == NullClass) || (actual == NullClass)
+        def isEitherNullable          = (NullClass.tpe <:< receiver.info) || (NullClass.tpe <:< actual.info)
+
+        def nonSensibleWarning(what: String, alwaysEqual: Boolean) = {
+          val msg = alwaysEqual == (name == nme.EQ || name == nme.eq)
+          unit.warning(pos, "comparing "+what+" using `"+name.decode+"' will always yield " + msg)
+        }
+
+        // @MAT normalize for consistency in error message, otherwise only part is normalized due to use of `typeSymbol'
+        def nonSensible(pre: String, alwaysEqual: Boolean) =
+          nonSensibleWarning(pre+"values of types "+normalizeAll(qual.tpe.widen)+" and "+normalizeAll(args.head.tpe.widen),
+                             alwaysEqual)
+
+        if (receiver == BooleanClass && !(receiver isSubClass actual))  // true == 5
+          nonSensible("", false)
+        else if (receiver == UnitClass && actual == UnitClass)  // () == ()
+          nonSensible("", true)
+        else if (isNumericValueClass(receiver) && !isValueOrBoxed(actual) && !forMSIL) // 5 == "abc"
+          nonSensible("", false)
+        else if (isWarnable) {
+          if (receiver.isFinal && !isEitherNull && !(receiver isSubClass actual)) // object X, Y; X == Y
+            nonSensible((if (isEitherNullable) "non-null " else ""), false)
+          else if (isNew(qual) || (isNew(args.head) && (receiver.isFinal || isReferenceOp))) // new X == y or object X ; X == new Y
+            nonSensibleWarning("a fresh object", false)
         }
       case _ =>
     }
@@ -1028,7 +1081,13 @@ abstract class RefChecks extends InfoTransform {
       }
 
       tree match {
-        case m: MemberDef => applyChecks(m.symbol.annotations)
+        case m: MemberDef =>
+          val sym = m.symbol
+          applyChecks(sym.annotations)
+          // validate implicitNotFoundMessage
+          analyzer.ImplicitNotFoundMsg.check(sym) foreach { warn =>
+            unit.warning(tree.pos, "Invalid implicitNotFound message for %s%s:\n%s".format(sym, sym.locationString, warn))
+          }
         case tpt@TypeTree() =>
           if(tpt.original != null) {
             tpt.original foreach {
@@ -1065,7 +1124,7 @@ abstract class RefChecks extends InfoTransform {
         if ((pname startsWith nme.CHECK_IF_REFUTABLE_STRING) &&
             isIrrefutable(pat1, tpt.tpe) && (qual.tpe <:< tree.tpe)) =>
 
-          qual
+          transform(qual)
 
       case Apply(Select(New(tpt), name), args)
       if (tpt.tpe.typeSymbol == ArrayClass && args.length >= 2) =>

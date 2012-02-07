@@ -93,14 +93,22 @@ $(document).ready(function(){
             orderInherit();
         };
     });
+    initInherit();
     //http://flowplayer.org/tools/tooltip.html
     $(".extype").tooltip({
         tip: "#tooltip",
-        position:"top center",        
+        position:"top center",
         onBeforeShow: function(ev) {
             $(this.getTip()).text(this.getTrigger().attr("name"));
-        }        
+        }
     });
+    $(".defval").tooltip({
+        tip: "#tooltip",
+        position:"top center",        
+        onBeforeShow: function(ev) {
+            $(this.getTip()).html(this.getTrigger().attr("name"))
+        }        
+    });   
     var docAllSigs = $("#template .signature");
     function commentShowFct(fullComment){
         var vis = $(":visible", fullComment);
@@ -114,7 +122,7 @@ $(document).ready(function(){
     var docShowSigs = docAllSigs.filter(function(){
         return $("+ div.fullcomment", $(this)).length > 0;
     });
-   docShowSigs.css("cursor", "pointer");
+    docShowSigs.css("cursor", "pointer");
     docShowSigs.click(function(){
         commentShowFct($("+ div.fullcomment", $(this)));
     });
@@ -140,7 +148,6 @@ $(document).ready(function(){
     $("p.shortcomment").click(function(){
         commentToggleFct($(this));
     });
-    initInherit();
 });
 
 function orderAlpha() {
@@ -205,7 +212,7 @@ function initInherit() {
 };
 
 function filter() {
-    var query = $("#textfilter > input").attr("value").toLowerCase();
+    var query = $("#textfilter input").attr("value").toLowerCase();
     var queryRegExp = new RegExp(query, "i");
     var inheritHides = null
     if ($("#order > ol > li.inherit").hasClass("in")) {
@@ -255,4 +262,9 @@ function filter() {
         if ($(" > ol > li:visible", this).length == 0) { $(this).hide(); }
     });
     return false
+};
+
+function windowTitle()
+{
+    parent.document.title=document.title;
 };

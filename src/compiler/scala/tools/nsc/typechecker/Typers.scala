@@ -191,6 +191,15 @@ trait Typers { self: Analyzer =>
           argResultsBuff += inferImplicit(fun, paramTp, true, false, context)
         }
 
+        def errorMessage(paramName: Name, paramTp: Type) =
+          paramTp.typeSymbol match {
+            case ImplicitNotFoundMsg(msg) => msg.format(paramName, paramTp)
+            case _ =>
+              "could not find implicit value for "+
+                 (if (paramName startsWith nme.EVIDENCE_PARAM_PREFIX) "evidence parameter of type "
+                  else "parameter "+paramName+": ")+paramTp
+          }
+
         val argResults = argResultsBuff.toList
         val args = argResults.zip(params) flatMap {
           case (arg, param) =>
@@ -199,10 +208,7 @@ trait Typers { self: Analyzer =>
               else List(atPos(arg.tree.pos)(new AssignOrNamedArg(Ident(param.name), (arg.tree))))
             } else {
               if (!param.hasFlag(DEFAULTPARAM))
-                context.error(
-                  fun.pos, "could not find implicit value for "+
-                  (if (param.name startsWith nme.EVIDENCE_PARAM_PREFIX) "evidence parameter of type "
-                   else "parameter "+param.name+": ")+param.tpe)
+                context.error(fun.pos, errorMessage(param.name, param.tpe))
               positional = false
               Nil
             }
@@ -804,15 +810,10 @@ trait Typers { self: Analyzer =>
         context.undetparams = context.undetparams ::: tparams1
         adapt(tree1 setType restpe.substSym(tparams, tparams1), mode, pt, original)
       case mt: MethodType if mt.isImplicit && ((mode & (EXPRmode | FUNmode | LHSmode)) == EXPRmode) => // (4.1)
-        if (!context.undetparams.isEmpty/* && (mode & POLYmode) == 0 disabled to make implicits in new collection work; we should revisit this. */) { // (9)
-          // println("adapt IMT: "+(context.undetparams, pt)) //@MDEBUG
-          context.undetparams = inferExprInstance(
-            tree, context.extractUndetparams(), pt, mt.params exists (p => isManifest(p.tpe)))
-              // if we are looking for a manifest, instantiate type to Nothing anyway,
-              // as we would get amnbiguity errors otherwise. Example
-              // Looking for a manifest of Nil: This mas many potential types,
-              // so we need to instantiate to minimal type List[Nothing].
-        }
+        if (context.undetparams nonEmpty) // (9) -- should revisit dropped condition `(mode & POLYmode) == 0`
+                                          // dropped so that type args of implicit method are inferred even if polymorphic expressions are allowed
+                                          // needed for implicits in 2.8 collection library -- maybe once #3346 is fixed, we can reinstate the condition?
+          context.undetparams = inferExprInstance(tree, context.extractUndetparams(), pt, false) // false: retract Nothing's that indicate failure, ambiguities in manifests are dealt with in manifestOfType
         val typer1 = constrTyperIf(treeInfo.isSelfOrSuperConstrCall(tree))
         if (original != EmptyTree && pt != WildcardType)
           typer1.silent(tpr => tpr.typed(tpr.applyImplicitArgs(tree), mode, pt)) match {
@@ -1290,6 +1291,14 @@ trait Typers { self: Analyzer =>
           "implementation restriction: subclassing Classfile does not\n"+
           "make your annotation visible at runtime.  If that is what\n"+
           "you want, you must write the annotation class in Java.")
+      if (phase.id <= currentRun.typerPhase.id) {
+        for (ann <- clazz.getAnnotation(DeprecatedAttr)) {
+          val m = companionModuleOf(clazz, context)
+          if (m != NoSymbol) {
+            m.moduleClass.addAnnotation(AnnotationInfo(ann.atp, ann.args, List()))
+          }
+        }
+      }
       treeCopy.ClassDef(cdef, typedMods, cdef.name, tparams1, impl2)
         .setType(NoType)
     }
@@ -1398,10 +1407,16 @@ trait Typers { self: Analyzer =>
               (if (value.hasAnnotation(BooleanBeanPropertyAttr)) "is" else "get") +
               nameSuffix
             val beanGetter = value.owner.info.decl(beanGetterName)
+            if (beanGetter == NoSymbol) {
+              // the namer decides wether to generate these symbols or not. at that point, we don't
+              // have symbolic information yet, so we only look for annotations named "BeanProperty".
+              unit.error(stat.pos, "implementation limitation: the BeanProperty annotation cannot be used in a type alias or renamed import")
+            }
             beanGetter.setAnnotations(memberAnnots(allAnnots, BeanGetterTargetClass))
-            if (mods hasFlag MUTABLE) {
+            if (mods.hasFlag(MUTABLE) && beanGetter != NoSymbol) {
               val beanSetterName = "set" + nameSuffix
               val beanSetter = value.owner.info.decl(beanSetterName)
+              // unlike for the beanGetter, the beanSetter body is generated here. see comment in Namers.
               gs.append(setterDef(beanSetter, isBean = true))
             }
           }
@@ -1758,14 +1773,34 @@ trait Typers { self: Analyzer =>
           meth.paramss.exists(ps => ps.exists(_.hasFlag(DEFAULTPARAM)) && isRepeatedParamType(ps.last.tpe)))
         error(meth.pos, "a parameter section with a `*'-parameter is not allowed to have default arguments")
 
+      if (phase.id <= currentRun.typerPhase.id) {
+        val allParams = meth.paramss.flatten
+        for (p <- allParams) {
+          deprecatedName(p).foreach(n => {
+            if (allParams.exists(p1 => p1.name == n || (p != p1 && deprecatedName(p1) == Some(n))))
+              error(p.pos, "deprecated parameter name "+ n +" has to be distinct from any other parameter name (deprecated or not).")
+          })
+        }
+      }
+
       checkMethodStructuralCompatible(meth)
 
       treeCopy.DefDef(ddef, typedMods, ddef.name, tparams1, vparamss1, tpt1, rhs1) setType NoType
     }
 
     def typedTypeDef(tdef: TypeDef): TypeDef = {
-      reenterTypeParams(tdef.tparams) // @M!
-      val tparams1 = tdef.tparams mapConserve (typedTypeDef) // @M!
+      def typeDefTyper = {
+        if(tdef.tparams isEmpty) Typer.this
+        else newTyper(context.makeNewScope(tdef, tdef.symbol))
+      }
+      typeDefTyper.typedTypeDef0(tdef)
+    }
+
+    // call typedTypeDef instead
+    // a TypeDef with type parameters must always be type checked in a new scope
+    private def typedTypeDef0(tdef: TypeDef): TypeDef = {
+      reenterTypeParams(tdef.tparams)
+      val tparams1 = tdef.tparams mapConserve {typedTypeDef(_)}
       val typedMods = removeAnnotations(tdef.mods)
       // complete lazy annotations
       val annots = tdef.symbol.annotations
@@ -3779,7 +3814,7 @@ trait Typers { self: Analyzer =>
           newTyper(context.makeNewScope(tree, sym)).typedDefDef(ddef)
 
         case tdef @ TypeDef(_, _, _, _) =>
-          newTyper(context.makeNewScope(tree, sym)).typedTypeDef(tdef)
+          typedTypeDef(tdef)
 
         case ldef @ LabelDef(_, _, _) =>
           labelTyper(ldef).typedLabelDef(ldef)

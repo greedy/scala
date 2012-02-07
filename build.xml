@@ -231,11 +231,7 @@ INITIALISATION
       <equals arg1="${svn.number.svn}" arg2="0" />
       <then>
         <!-- Finding SVN revision, git style -->
-        <exec osfamily="unix" executable="tools/git-get-rev" outputproperty="svn.number.git" failifexecutionfails="false" />
-        <propertyregex
-          property="svn.number" input="${svn.number.git}" select="\1"
-          regexp="\D*?(\d+)"
-          defaultValue="0"/>
+        <exec osfamily="unix" executable="tools/get-git-svn-rev" outputproperty="svn.number" failifexecutionfails="false" />
       </then>
       <else>
         <property name="svn.number" value="${svn.number.svn}" />
@@ -369,6 +365,7 @@ LOCAL REFERENCE BUILD (LOCKER)
         <include name="**/*.tmpl"/>
         <include name="**/*.xml"/>
         <include name="**/*.js"/>
+        <include name="**/*.html"/>
         <include name="**/*.css"/>
         <include name="**/*.properties"/>
         <include name="**/*.swf"/>
@@ -607,6 +604,7 @@ QUICK BUILD (QUICK)
         <include name="**/*.xml"/>
         <include name="**/*.js"/>
         <include name="**/*.css"/>
+        <include name="**/*.html"/>
         <include name="**/*.properties"/>
         <include name="**/*.swf"/>
         <include name="**/*.png"/>
@@ -1113,6 +1111,7 @@ BOOTSTRAPPING BUILD (STRAP)
         <include name="**/*.xml"/>
         <include name="**/*.js"/>
         <include name="**/*.css"/>
+        <include name="**/*.html"/>
         <include name="**/*.properties"/>
         <include name="**/*.swf"/>
         <include name="**/*.png"/>
@@ -1443,7 +1442,7 @@ DOCUMENTATION
       destdir="${build-docs.dir}/library"
       doctitle="Scala Standard Library"
       docversion="${version.number}"
-      docsourceurl="https://lampsvn.epfl.ch/trac/scala/browser/scala/trunk/src/"
+      docsourceurl="https://lampsvn.epfl.ch/trac/scala/browser/scala/trunk/src/€{FILE_PATH}.scala#L1"
       sourcepath="${src.dir}"
       classpathref="pack.classpath">
       <src>
@@ -1531,7 +1530,7 @@ DOCUMENTATION
       destdir="${build-docs.dir}/compiler"
       doctitle="Scala Compiler"
       docversion="${version.number}"
-      docsourceurl="https://lampsvn.epfl.ch/trac/scala/browser/scala/trunk/src/"
+      docsourceurl="https://lampsvn.epfl.ch/trac/scala/browser/scala/trunk/src/€{FILE_PATH}.scala#L1"
       sourcepath="${src.dir}"
       classpathref="pack.classpath"
       srcdir="${src.dir}/compiler">

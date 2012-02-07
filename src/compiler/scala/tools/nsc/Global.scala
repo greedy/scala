@@ -150,7 +150,7 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
   def informTime(msg: String, start: Long) =
     informProgress(msg + " in " + (currentTime - start) + "ms")
 
-  def log(msg: AnyRef) {
+  /*@inline final*/ def log(msg: => AnyRef) {
     if (settings.log contains phase.name) inform("[log " + phase + "] " + msg)
   }
 
@@ -266,9 +266,11 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     override def specialized: Boolean = isSpecialized
 
     /** Is current phase cancelled on this unit? */
-    def cancelled(unit: CompilationUnit) =
-      reporter.cancelled ||
-      unit.isJava && this.id > currentRun.namerPhase.id
+    def cancelled(unit: CompilationUnit) = {
+      // run the typer only if in `createJavadoc` mode
+      val maxJavaPhase = if (createJavadoc) currentRun.typerPhase.id else currentRun.namerPhase.id
+      reporter.cancelled || unit.isJava && this.id > maxJavaPhase
+    }
 
     final def applyPhase(unit: CompilationUnit) {
       if (settings.debug.value) inform("[running phase " + name + " on " + unit + "]")
@@ -809,11 +811,13 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
 
     /** Compile list of files given by their names */
     def compile(filenames: List[String]) {
-      val sources: List[SourceFile] =
-        if (isScriptRun && filenames.size > 1) returning(Nil)(_ => error("can only compile one script at a time"))
-        else filenames map getSourceFile
+      try {
+        val sources: List[SourceFile] =
+          if (isScriptRun && filenames.size > 1) returning(Nil)(_ => error("can only compile one script at a time"))
+          else filenames map getSourceFile
 
-      try compileSources(sources)
+        compileSources(sources)
+      }
       catch { case ex: IOException => error(ex.getMessage()) }
     }
 
@@ -977,4 +981,5 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
   def forMSIL: Boolean = settings.target.value == "msil"
   def forLLVM: Boolean = settings.target.value == "llvm"
   def onlyPresentation = false
+  def createJavadoc = false
 }

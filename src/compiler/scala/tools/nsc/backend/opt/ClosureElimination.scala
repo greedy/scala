@@ -24,7 +24,53 @@ abstract class ClosureElimination extends SubComponent {
   /** Create a new phase */
   override def newPhase(p: Phase) = new ClosureEliminationPhase(p)
 
-  /** The Inlining phase.
+  /** A simple peephole optimizer. */
+  val peephole = new PeepholeOpt {
+
+    def peep(bb: BasicBlock, i1: Instruction, i2: Instruction) = (i1, i2) match {
+      case (CONSTANT(c), DROP(_)) =>
+        if (c.tag == UnitTag)
+          Some(List(i2))
+        else
+          Some(Nil);
+
+      case (LOAD_LOCAL(x), STORE_LOCAL(y)) =>
+        if (x eq y) Some(Nil) else None
+
+      case (STORE_LOCAL(x), LOAD_LOCAL(y)) if (x == y) =>
+        var liveOut = liveness.out(bb)
+        if (!liveOut(x)) {
+          log("store/load to a dead local? " + x)
+          val instrs = bb.getArray
+          var idx = instrs.length - 1
+          while (idx > 0 && (instrs(idx) ne i2)) {
+            liveOut = liveness.interpret(liveOut, instrs(idx))
+            idx -= 1
+          }
+          if (!liveOut(x)) {
+            log("removing dead store/load " + x)
+            Some(Nil)
+          } else None
+        } else
+          Some(List(DUP(x.kind), STORE_LOCAL(x)))
+
+      case (LOAD_LOCAL(_), DROP(_)) | (DUP(_), DROP(_)) =>
+        Some(Nil)
+
+      case (BOX(t1), UNBOX(t2)) if (t1 == t2) =>
+        Some(Nil)
+
+      case (LOAD_FIELD(sym, isStatic), DROP(_)) if !sym.hasAnnotation(definitions.VolatileAttr) =>
+        if (isStatic)
+          Some(Nil)
+        else
+          Some(DROP(REFERENCE(definitions.ObjectClass)) :: Nil);
+
+      case _ => None
+    }
+  }
+
+  /** The closure elimination phase.
    */
   class ClosureEliminationPhase(prev: Phase) extends ICodePhase(prev) {
 
@@ -52,40 +98,10 @@ abstract class ClosureElimination extends SubComponent {
       ret
     }
 
-    /** A simple peephole optimizer. */
-    val peephole = new PeepholeOpt( (i1, i2) =>
-    	(i1, i2) match {
-        case (CONSTANT(c), DROP(_)) =>
-          if (c.tag == UnitTag)
-            Some(List(i2))
-          else
-            Some(Nil);
-
-        case (LOAD_LOCAL(x), STORE_LOCAL(y)) =>
-        	if (x eq y) Some(Nil) else None
-
-//        case (STORE_LOCAL(x), LOAD_LOCAL(y)) if (x == y) =>
-//          Some(List(DUP(x.kind), STORE_LOCAL(x)))
-
-        case (LOAD_LOCAL(_), DROP(_)) | (DUP(_), DROP(_)) =>
-          Some(Nil)
-
-        case (BOX(t1), UNBOX(t2)) if (t1 == t2) =>
-          Some(Nil)
-
-        case (LOAD_FIELD(sym, isStatic), DROP(_)) =>
-        	if (isStatic)
-            Some(Nil)
-          else
-            Some(DROP(REFERENCE(definitions.ObjectClass)) :: Nil);
-
-        case _ => None
-      });
-
     def analyzeClass(cls: IClass): Unit = if (settings.Xcloselim.value) {
       cls.methods.foreach { m =>
         analyzeMethod(m)
-        peephole.transformMethod(m);
+        peephole(m);
      }}
 
 
@@ -102,7 +118,7 @@ abstract class ClosureElimination extends SubComponent {
 
       for (bb <- linearizer.linearize(m)) {
         var info = cpp.in(bb)
-        log("Cpp info at entry to block " + bb + ": " + info)
+        if (settings.debug.value) log("Cpp info at entry to block " + bb + ": " + info)
 
         for (i <- bb) {
           i match {
@@ -163,9 +179,9 @@ abstract class ClosureElimination extends SubComponent {
                       ()
                   }
                 case Boxed(LocalVar(loc1)) :: _ =>
-                  val value = info.getBinding(loc1)
-                  bb.replaceInstruction(i, DROP(icodes.AnyRefReference) :: valueToInstruction(value) :: Nil)
-                  log("replaced " + i + " with " + value)
+                  val loc2 = info.getAlias(loc1)
+                  bb.replaceInstruction(i, DROP(icodes.AnyRefReference) :: valueToInstruction(Deref(LocalVar(loc2))) :: Nil)
+                  log("replaced " + i + " with " + LocalVar(loc2))
                 case _ =>
                   ()
               }
@@ -196,21 +212,26 @@ abstract class ClosureElimination extends SubComponent {
 
     /** is field 'f' accessible from method 'm'? */
     def accessible(f: Symbol, m: Symbol): Boolean =
-      f.isPublic || (f.hasFlag(Flags.PROTECTED) && (enclPackage(f) == enclPackage(m)))
-
-    private def enclPackage(sym: Symbol): Symbol =
-      if ((sym == NoSymbol) || sym.isPackageClass) sym else enclPackage(sym.owner)
+      f.isPublic || (f.hasFlag(Flags.PROTECTED) && (f.enclosingPackageClass == m.enclosingPackageClass))
 
   } /* class ClosureElim */
 
 
   /** Peephole optimization. */
-  class PeepholeOpt(peep: (Instruction, Instruction) => Option[List[Instruction]]) {
+  abstract class PeepholeOpt {
 
     private var method: IMethod = null
 
-    def transformMethod(m: IMethod): Unit = if (m.code ne null) {
+    /** Concrete implementations will perform their optimizations here */
+    def peep(bb: BasicBlock, i1: Instruction, i2: Instruction): Option[List[Instruction]]
+
+    var liveness: global.icodes.liveness.LivenessAnalysis = null
+
+    def apply(m: IMethod): Unit = if (m.code ne null) {
       method = m
+      liveness = new global.icodes.liveness.LivenessAnalysis
+      liveness.init(m)
+      liveness.run
       for (b <- m.code.blocks)
         transformBlock(b)
     }
@@ -228,7 +249,7 @@ abstract class ClosureElimination extends SubComponent {
         redo = false;
 
         while (t != Nil) {
-          peep(h, t.head) match {
+          peep(b, h, t.head) match {
             case Some(newInstrs) =>
               newInstructions = seen.reverse ::: newInstrs ::: t.tail;
               redo = true;

@@ -108,8 +108,9 @@ trait Definitions extends reflect.generic.StandardDefinitions {
     lazy val IndexOutOfBoundsExceptionClass = getClass(sn.IOOBException)
     lazy val UninitializedErrorClass        = getClass("scala.UninitializedFieldError")
     lazy val MatchErrorClass                = getClass("scala.MatchError")
+    lazy val InvocationTargetExceptionClass = getClass(if   (forMSIL) "System.Reflection.TargetInvocationException"
+                                                       else           "java.lang.reflect.InvocationTargetException")
     // java is hard coded because only used by structural values
-    lazy val InvocationTargetExceptionClass = getClass("java.lang.reflect.InvocationTargetException")
     lazy val NoSuchMethodExceptionClass     = getClass("java.lang.NoSuchMethodException")
 
     // annotations
@@ -123,6 +124,7 @@ trait Definitions extends reflect.generic.StandardDefinitions {
     lazy val TailrecClass               = getClass("scala.annotation.tailrec")
     lazy val SwitchClass                = getClass("scala.annotation.switch")
     lazy val ElidableMethodClass        = getClass("scala.annotation.elidable")
+    lazy val ImplicitNotFoundClass      = getClass("scala.annotation.implicitNotFound")
     lazy val FieldTargetClass           = getClass("scala.annotation.target.field")
     lazy val GetterTargetClass          = getClass("scala.annotation.target.getter")
     lazy val SetterTargetClass          = getClass("scala.annotation.target.setter")
@@ -136,6 +138,7 @@ trait Definitions extends reflect.generic.StandardDefinitions {
     lazy val ScalaObjectClass     = getClass("scala.ScalaObject")
     lazy val PartialFunctionClass = getClass("scala.PartialFunction")
     lazy val SymbolClass          = getClass("scala.Symbol")
+      lazy val Symbol_apply = getMember(SymbolClass.companionModule, nme.apply)
     lazy val StringClass          = getClass(sn.String)
     lazy val ClassClass           = getClass(sn.Class)
       def Class_getMethod = getMember(ClassClass, nme.getMethod_)
@@ -445,7 +448,9 @@ trait Definitions extends reflect.generic.StandardDefinitions {
     // special attributes
     lazy val SerializableAttr: Symbol = getClass("scala.serializable")
     lazy val DeprecatedAttr: Symbol = getClass("scala.deprecated")
+    lazy val DeprecatedNameAttr: Symbol = getClass("scala.deprecatedName")
     lazy val MigrationAnnotationClass: Symbol = getClass("scala.annotation.migration")
+    lazy val TraitSetterAnnotationClass: Symbol = getClass("scala.runtime.TraitSetter")
     lazy val BeanPropertyAttr: Symbol = getClass(sn.BeanProperty)
     lazy val BooleanBeanPropertyAttr: Symbol = getClass(sn.BooleanBeanProperty)
 

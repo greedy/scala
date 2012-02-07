@@ -17,6 +17,7 @@ trait Entity {
   def toRoot: List[Entity]
   def qualifiedName: String
   override def toString = qualifiedName
+  def universe: Universe
 }
 
 /** A class, trait, object or package. A package is represented as an instance
@@ -32,6 +33,7 @@ trait TemplateEntity extends Entity {
   def isClass: Boolean
   def isObject: Boolean
   def isDocTemplate: Boolean
+  def isCaseClass: Boolean
   def selfType : Option[TypeEntity]
 }
 trait NoDocTemplate extends TemplateEntity
@@ -71,8 +73,8 @@ trait DocTemplateEntity extends TemplateEntity with MemberEntity {
   def inSource: Option[(io.AbstractFile, Int)]
   def sourceUrl: Option[java.net.URL]
   def parentType: Option[TypeEntity]
-  def parentTemplates: List[TemplateEntity]
-  def linearization: List[TemplateEntity]
+  def linearization: List[(TemplateEntity, TypeEntity)]
+  def linearizationTemplates: List[TemplateEntity]
   def linearizationTypes: List[TypeEntity]
   def subClasses: List[DocTemplateEntity]
   def members: List[MemberEntity]
@@ -82,33 +84,16 @@ trait DocTemplateEntity extends TemplateEntity with MemberEntity {
   def abstractTypes: List[AbstractType]
   def aliasTypes: List[AliasType]
   def companion: Option[DocTemplateEntity]
-  // temporary implementation: to be removed
-  def findMember(str: String): Option[DocTemplateEntity] = {
-    val root = toRoot.last
-    val path = if (str.length > 0) str.split("\\.") else Array[String]()
-    var i = 0;
-    var found: DocTemplateEntity = root
-    while(i < path.length && found != null) {
-      found = found.members.find(_.name == path(i)) match {
-        case Some(doc:DocTemplateEntity) => doc
-        case _ => null
-      }
-      i += 1
-    }
-    Option(found)
-  }
 }
 
 /** A ''documentable'' trait. */
-trait Trait extends DocTemplateEntity with HigherKinded {
-  def valueParams : List[List[ValueParam]]
-}
+trait Trait extends DocTemplateEntity with HigherKinded
 
 /** A ''documentable'' class. */
 trait Class extends Trait with HigherKinded {
   def primaryConstructor: Option[Constructor]
   def constructors: List[Constructor]
-  def isCaseClass: Boolean
+  def valueParams: List[List[ValueParam]]
 }
 
 /** A ''documentable'' object. */
@@ -169,7 +154,7 @@ trait TypeParam extends ParameterEntity with HigherKinded {
 /** A value parameter to a constructor or to a method. */
 trait ValueParam extends ParameterEntity {
   def resultType: TypeEntity
-  def defaultValue: Option[String]
+  def defaultValue: Option[TreeEntity]
   def isImplicit: Boolean
 }
 

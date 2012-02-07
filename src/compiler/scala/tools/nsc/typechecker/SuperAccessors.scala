@@ -25,7 +25,10 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
   // inherits abstract value `global' and class `Phase' from Transform
 
   import global._
-  import definitions.{ IntClass, UnitClass, ByNameParamClass, Any_asInstanceOf, Object_## }
+  import definitions.{
+    IntClass, UnitClass, ByNameParamClass, Any_asInstanceOf,
+    Any_isInstanceOf, Object_isInstanceOf, Object_##, Object_==, Object_!=
+  }
 
   /** the following two members override abstract members in Transform */
   val phaseName: String = "superaccessors"
@@ -80,11 +83,6 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
       }
 
     private def transformSuperSelect(tree: Tree): Tree = tree match {
-      // Intercept super.## and translate it to this.##
-      // which is fine since it's final.
-      case Select(sup @ Super(_, _), nme.HASHHASH)  =>
-        Select(gen.mkAttributedThis(sup.symbol), Object_##) setType IntClass.tpe
-
       case Select(sup @ Super(_, mix), name)  =>
         val sym = tree.symbol
         val clazz = sup.symbol
@@ -126,6 +124,16 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
         assert(tree.tpe.isError, tree)
         tree
     }
+
+    // Disallow some super.XX calls targeting Any methods which would
+    // otherwise lead to either a compiler crash or runtime failure.
+    private def isDisallowed(sym: Symbol) = (
+      (sym == Any_isInstanceOf) ||
+      (sym == Object_isInstanceOf) ||
+      (sym == Object_==) ||
+      (sym == Object_!=) ||
+      (sym == Object_##)
+    )
 
     override def transform(tree: Tree): Tree = {
       val sym = tree.symbol
@@ -202,6 +210,9 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
           if (sym.isValue && !sym.isMethod || sym.hasFlag(ACCESSOR)) {
             unit.error(tree.pos, "super may be not be used on "+
                        (if (sym.hasFlag(ACCESSOR)) sym.accessed else sym))
+          }
+          else if (isDisallowed(sym)) {
+            unit.error(tree.pos, "super not allowed here: use this." + name.decode + " instead")
           }
           transformSuperSelect(tree)
 
@@ -422,8 +433,8 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
        && sym.hasFlag(JAVA)
        && !sym.owner.isPackageClass
        && !accessibleThroughSubclassing
-       && (enclPackage(sym.owner) != enclPackage(currentOwner))
-       && (enclPackage(sym.owner) == enclPackage(sym.accessBoundary(sym.owner))))
+       && (sym.owner.enclosingPackageClass != currentOwner.enclosingPackageClass)
+       && (sym.owner.enclosingPackageClass == sym.accessBoundary(sym.owner).enclosingPackageClass))
 
       if (res) {
         val host = hostForAccessorOf(sym, currentOwner.enclClass)
@@ -441,10 +452,6 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
       } else res
     }
 
-    /** Return the enclosing package of the given symbol. */
-    private def enclPackage(sym: Symbol): Symbol =
-      if ((sym == NoSymbol) || sym.isPackageClass) sym else enclPackage(sym.owner)
-
     /** Return the innermost enclosing class C of referencingClass for which either
      *  of the following holds:
      *     - C is a subclass of sym.owner or
@@ -453,7 +460,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
     private def hostForAccessorOf(sym: Symbol, referencingClass: Symbol): Symbol = {
       if (referencingClass.isSubClass(sym.owner.enclClass)
           || referencingClass.thisSym.isSubClass(sym.owner.enclClass)
-          || enclPackage(referencingClass) == enclPackage(sym.owner)) {
+          || referencingClass.enclosingPackageClass == sym.owner.enclosingPackageClass) {
         assert(referencingClass.isClass)
         referencingClass
       } else if(referencingClass.owner.enclClass != NoSymbol)
