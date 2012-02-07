@@ -48,6 +48,7 @@ trait Analyzer extends AnyRef
     val runsRightAfter= Some("namer")
 
     def newPhase(_prev: Phase): StdPhase = new StdPhase(_prev) {
+      override val checkable = false
       import global._
 
       val openPackageObjectsTraverser = new Traverser {
@@ -74,9 +75,10 @@ trait Analyzer extends AnyRef
     val runsRightAfter = Some("packageobjects")
     def newPhase(_prev: Phase): StdPhase = new StdPhase(_prev) {
       override def keepsTypeParams = false
-      resetTyper() // this does not in fact to the reset for each compilation run!
+      resetTyper()
       override def run {
         val start = startTimer(typerNanos)
+        global.echoPhaseSummary(this)
         currentRun.units foreach applyPhase
         stopTimer(typerNanos, start)
       }

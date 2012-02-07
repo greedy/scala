@@ -7,9 +7,7 @@ package scala.tools.nsc
 package transform
 
 import scala.tools.nsc.symtab.classfile.ClassfileConstants._
-import scala.collection.mutable.{HashMap,ListBuffer}
-import scala.collection.immutable.Set
-import scala.util.control.ControlThrowable
+import scala.collection.{ mutable, immutable }
 import symtab._
 import Flags._
 
@@ -165,8 +163,9 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
             cloneSymbols(params) map (p => p.setInfo(apply(p.tpe))),
             if (restpe.typeSymbol == UnitClass)
               erasedTypeRef(UnitClass)
-            else if (settings.Xexperimental.value)
-              apply(mt.resultType(params map (_.tpe))) // this gets rid of DeBruijnTypes
+            else if (settings.YdepMethTpes.value)
+              // this replaces each typeref that refers to an argument by the type `p.tpe` of the actual argument p (p in params)
+              apply(mt.resultType(params map (_.tpe)))
             else
               apply(restpe))
         case RefinedType(parents, decls) =>
@@ -212,18 +211,6 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
   }
 
   private def needsJavaSig(tp: Type) = !settings.Ynogenericsig.value && NeedsSigCollector.collect(tp)
-
-  private lazy val tagOfClass = Map[Symbol,Char](
-    ByteClass -> BYTE_TAG,
-    CharClass -> CHAR_TAG,
-    DoubleClass -> DOUBLE_TAG,
-    FloatClass -> FLOAT_TAG,
-    IntClass -> INT_TAG,
-    LongClass -> LONG_TAG,
-    ShortClass -> SHORT_TAG,
-    BooleanClass -> BOOL_TAG,
-    UnitClass -> VOID_TAG
-  )
 
   /** The Java signature of type 'info', for symbol sym. The symbol is used to give the right return
    *  type for constructors.
@@ -276,7 +263,7 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
           else if (sym == NullClass)
             jsig(RuntimeNullClass.tpe)
           else if (isValueClass(sym))
-            tagOfClass(sym).toString
+            abbrvTag(sym).toString
           else if (sym.isClass)
             {
               val preRebound = pre.baseType(sym.owner) // #2585
@@ -364,7 +351,7 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
    *      <code>C</code> is the erased classinfo of the <code>Array</code> class
    *    </li>
    *    <li>
-   *      For <code>Array[T].&lt;init&gt;</code> : <code>{scala#Int)Array[T]</code>
+   *      For <code>Array[T].<init></code> : <code>{scala#Int)Array[T]</code>
    *    </li>
    *    <li>
    *      For a type parameter : A type bounds type consisting of the erasures
@@ -426,10 +413,9 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
    *  @pre phase > erasure
    */
   def bridgedSym(bridge: Symbol) =
-    bridge.owner.info.nonPrivateDecl(bridge.name) suchThat {
-      sym => !(sym hasFlag BRIDGE) &&
-             matchesType(sym.tpe, bridge.tpe, true) &&
-             sym.tpe.resultType <:< bridge.tpe.resultType
+    bridge.owner.info.nonPrivateDecl(bridge.name) suchThat { sym =>
+      !sym.isBridge && matchesType(sym.tpe, bridge.tpe, true) &&
+      (sym.tpe.resultType <:< bridge.tpe.resultType)
     }
 
 // -------- erasure on trees ------------------------------------------
@@ -554,8 +540,8 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
      *      class <code>Object</code>.
      *    </li>
      *    <li>
-     *      <code>new BoxedArray.&lt;init&gt;(len)</code> becomes
-     *      <code>new BoxedAnyArray.&lt;init&gt;(len): BoxedArray</code>
+     *      <code>new BoxedArray.<init>(len)</code> becomes
+     *      <code>new BoxedAnyArray.<init>(len): BoxedArray</code>
      *      (the widening typing is necessary so that subsequent member
      *      symbols stay the same)
      *    </li>
@@ -816,13 +802,13 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
      *    with the erased type of <code>m1</code> in the template.
      *  </p>
      */
-    private def bridgeDefs(owner: Symbol): (List[Tree], Set[Symbol]) = {
-      var toBeRemoved: Set[Symbol] = Set()
+    private def bridgeDefs(owner: Symbol): (List[Tree], immutable.Set[Symbol]) = {
+      var toBeRemoved: immutable.Set[Symbol] = immutable.Set()
       //println("computing bridges for " + owner)//DEBUG
       assert(phase == currentRun.erasurePhase)
       val site = owner.thisType
       val bridgesScope = new Scope
-      val bridgeTarget = new HashMap[Symbol, Symbol]
+      val bridgeTarget = new mutable.HashMap[Symbol, Symbol]
       var bridges: List[Tree] = List()
       val opc = atPhase(currentRun.explicitOuterPhase) {
         new overridingPairs.Cursor(owner) {

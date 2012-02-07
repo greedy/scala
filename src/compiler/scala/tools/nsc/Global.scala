@@ -24,7 +24,7 @@ import ast.parser._
 import typechecker._
 import transform._
 
-import backend.icode.{ ICodes, GenICode, Checkers }
+import backend.icode.{ ICodes, GenICode, ICodeCheckers }
 import backend.{ ScalaPrimitives, Platform, MSILPlatform, JavaPlatform, LLVMPlatform }
 import backend.jvm.GenJVM
 import backend.opt.{ Inliners, ClosureElimination, DeadCodeElimination }
@@ -79,11 +79,6 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     val global: Global.this.type = Global.this
   } with ConstantFolder
 
-  /** Tree checker (used for testing and debugging) */
-  object checker extends {
-    val global: Global.this.type = Global.this
-  } with TreeCheckers
-
   /** ICode generator */
   object icodes extends {
     val global: Global.this.type = Global.this
@@ -99,17 +94,10 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     val global: Global.this.type = Global.this
   } with CopyPropagation
 
-  /** Icode verification */
-  object checkers extends {
-    val global: Global.this.type = Global.this
-  } with Checkers
-
-  /** Some statistics (normally disabled) */
+  /** Some statistics (normally disabled) set with -Ystatistics */
   object statistics extends {
     val global: Global.this.type = Global.this
   } with Statistics
-
-  util.Statistics.enabled = settings.Ystatistics.value
 
   /** Computing pairs of overriding/overridden symbols */
   object overridingPairs extends {
@@ -132,6 +120,10 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
   /** Register new context; called for every created context
    */
   def registerContext(c: analyzer.Context) {}
+
+  /** Register top level class (called on entering the class)
+   */
+  def registerTopLevelSym(sym: Symbol) {}
 
 // ------------------ Reporting -------------------------------------
 
@@ -252,7 +244,11 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
 
   abstract class GlobalPhase(prev: Phase) extends Phase(prev) {
     phaseWithId(id) = this
-    def run { currentRun.units foreach applyPhase }
+
+    def run {
+      echoPhaseSummary(this)
+      currentRun.units foreach applyPhase
+    }
 
     def apply(unit: CompilationUnit): Unit
 
@@ -264,6 +260,8 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     override def devirtualized: Boolean = isDevirtualized  // (part of DEVIRTUALIZE)
     private val isSpecialized = prev.name == "specialize" || prev.specialized
     override def specialized: Boolean = isSpecialized
+    private val isRefChecked = prev.name == "refchecks" || prev.refChecked
+    override def refChecked: Boolean = isRefChecked
 
     /** Is current phase cancelled on this unit? */
     def cancelled(unit: CompilationUnit) = {
@@ -273,7 +271,9 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     }
 
     final def applyPhase(unit: CompilationUnit) {
-      if (settings.debug.value) inform("[running phase " + name + " on " + unit + "]")
+      if (doEchoFilenames)
+        inform("[running phase " + name + " on " + unit + "]")
+
       val unit0 = currentRun.currentUnit
       try {
         currentRun.currentUnit = unit
@@ -324,10 +324,6 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     val runsAfter = List[String]("pickler")
     val runsRightAfter = None
   } with RefChecks
-
-//  object devirtualize extends {
-//    val global: Global.this.type = Global.this
-//  } with DeVirtualize
 
   // phaseName = "liftcode"
   object liftcode extends {
@@ -386,13 +382,6 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     val runsRightAfter = None
   } with LambdaLift
 
-  // phaseName = "detach"
-//  object detach extends {
-//    val global: Global.this.type = Global.this
-//    val runsAfter = List("lambdalift")
-//    val runsRightAfter = Some("lambdalift")
-//  } with Detach
-
   // phaseName = "constructors"
   object constructors extends {
     val global: Global.this.type = Global.this
@@ -427,10 +416,6 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     val runsAfter = List[String]("cleanup")
     val runsRightAfter = None
   } with GenICode
-
-// object icodePrinter extends backend.icode.Printers {
-//   val global: Global.this.type = Global.this
-// }
 
   // phaseName = "???"
   object scalaPrimitives extends {
@@ -504,7 +489,21 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     val runsRightAfter = None
   } with SampleTransform
 
-  object icodeChecker extends checkers.ICodeChecker()
+  /** The checkers are for validating the compiler data structures
+   *  at phase boundaries.
+   */
+
+  /** Tree checker */
+  object treeChecker extends {
+    val global: Global.this.type = Global.this
+  } with TreeCheckers
+
+  /** Icode verification */
+  object icodeCheckers extends {
+    val global: Global.this.type = Global.this
+  } with ICodeCheckers
+
+  object icodeChecker extends icodeCheckers.ICodeChecker()
 
   object typer extends analyzer.Typer(
     analyzer.NoContext.make(EmptyTree, Global.this.definitions.RootClass, new Scope))
@@ -516,22 +515,16 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     phasesSet += analyzer.namerFactory      //   note: types are there because otherwise
     phasesSet += analyzer.packageObjects    //   consistency check after refchecks would fail.
     phasesSet += analyzer.typerFactory
-    phasesSet += superAccessors             // add super accessors
-    phasesSet += pickler                    // serialize symbol tables
-    phasesSet += refchecks                  // perform reference and override checking, translate nested objects
-    // phasesSet += devirtualize               // Desugar virtual classes
-
+    phasesSet += superAccessors			        // add super accessors
+    phasesSet += pickler			              // serialize symbol tables
+    phasesSet += refchecks			            // perform reference and override checking, translate nested objects
     phasesSet += uncurry                    // uncurry, translate function values to anonymous classes
     phasesSet += tailCalls                  // replace tail calls by jumps
-    if (!settings.nospecialization.value)
-      phasesSet += specializeTypes
+    phasesSet += specializeTypes
     phasesSet += explicitOuter              // replace C.this by explicit outer pointers, eliminate pattern matching
     phasesSet += erasure                    // erase types, add interfaces for traits
     phasesSet += lazyVals
     phasesSet += lambdaLift                 // move nested functions to top level
-    // if (forJVM && settings.Xdetach.value)
-    //   phasesSet += detach                // convert detached closures
-
     phasesSet += constructors               // move field definitions into constructors
     phasesSet += mixer                      // do mixin composition
     phasesSet += cleanup                    // some platform-specific cleanups
@@ -581,6 +574,14 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
   /** The id of the currently active run
    */
   override def currentRunId = curRunId
+
+  def currentRunSize  = currentRun.unitbufSize
+  def doEchoFilenames = settings.debug.value && (settings.verbose.value || currentRunSize < 5)
+  def echoPhaseSummary(ph: Phase) = {
+    /** Only output a summary message under debug if we aren't echoing each file. */
+    if (settings.debug.value && !doEchoFilenames)
+      inform("[running phase " + ph.name + " on " + currentRunSize +  " compilation units]")
+  }
 
   /** A Run is a single execution of the compiler on a sets of units
    */
@@ -689,9 +690,14 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     private var unitbuf = new ListBuffer[CompilationUnit]
     var compiledFiles = new HashSet[String]
 
+    private var _unitbufSize = 0
+    def unitbufSize = _unitbufSize
+
     /** add unit to be compiled in this run */
     private def addUnit(unit: CompilationUnit) {
+//      unit.parseSettings()
       unitbuf += unit
+      _unitbufSize += 1 // counting as they're added so size is cheap
       compiledFiles += unit.source.file.path
     }
 
@@ -724,9 +730,8 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     def compileSources(_sources: List[SourceFile]) {
       val depSources = dependencyAnalysis.filter(_sources.distinct) // bug #1268, scalac confused by duplicated filenames
       val sources = coreClassesFirst(depSources)
-      if (reporter.hasErrors)
-        return  // there is a problem already, e.g. a
-                // plugin was passed a bad option
+      if (reporter.hasErrors) // there is a problem already, e.g. a plugin was passed a bad option
+        return
       val startTime = currentTime
       reporter.reset
       for (source <- sources) addUnit(new CompilationUnit(source))
@@ -750,12 +755,11 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
         if (settings.check contains globalPhase.prev.name) {
           if (globalPhase.prev.checkable) {
             phase = globalPhase
+            inform("[Now checking: " + phase.prev.name + "]")
             if (globalPhase.id >= icodePhase.id) icodeChecker.checkICodes
-            else checker.checkTrees
+            else treeChecker.checkTrees
           }
-          else if (!settings.check.doAllPhases) {
-            warning("It is not possible to check the result of the "+globalPhase.name+" phase")
-          }
+          else inform("[Not checkable: " + globalPhase.prev.name + "]")
         }
         if (settings.Ystatistics.value) statistics.print(phase)
         advancePhase
@@ -773,8 +777,8 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
           sym.reset(new loaders.SourcefileLoader(file))
           if (sym.isTerm) sym.moduleClass.reset(loaders.moduleClassLoader)
         }
-      } else {
-        //assert(symData.isEmpty || !settings.stop.value.isEmpty || !settings.skip.value.isEmpty, symData)
+      }
+      else {
         if (deprecationWarnings) {
           warning("there were deprecation warnings; re-run with " + settings.deprecation.name + " for details")
         }
@@ -782,7 +786,7 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
           warning("there were unchecked warnings; re-run with " + settings.unchecked.name + " for details")
         }
       }
-      for ((sym, file) <- symSource.iterator) resetPackageClass(sym.owner)
+      symSource.keys foreach (x => resetPackageClass(x.owner))
       informTime("total", startTime)
 
       if (!dependencyAnalysis.off) {
@@ -826,11 +830,11 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
      */
     def compileLate(file: AbstractFile) {
       if (compiledFiles eq null) {
-        val msg = "No class file for " + file +
-                  " was found\n(This file cannot be loaded as a source file)"
+        val msg = "No class file for " + file + " was found\n(This file cannot be loaded as a source file)"
         inform(msg)
         throw new FatalError(msg)
-      } else if (!(compiledFiles contains file.path)) {
+      }
+      else if (!(compiledFiles contains file.path)) {
         compileLate(new CompilationUnit(getSourceFile(file)))
       }
     }
@@ -884,7 +888,7 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
      *
      * 1 is to avoid cyclic reference errors.
      * 2 is due to the following. When completing "Predef" (*), typedIdent is called
-     * for its parents (e.g. "LowPriorityImplicits"). typedIdent checks wethter
+     * for its parents (e.g. "LowPriorityImplicits"). typedIdent checks whether
      * the symbol reallyExists, which tests if the type of the symbol after running
      * its completer is != NoType.
      * If the "namer" phase has not yet run for "LowPriorityImplicits", the symbol
@@ -902,26 +906,22 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
      *
      */
     private def coreClassesFirst(files: List[SourceFile]) = {
-      def inScalaFolder(f: SourceFile) =
-        f.file.container.name == "scala"
-      var scalaObject: Option[SourceFile] = None
-      val res = new ListBuffer[SourceFile]
-      for (file <- files) file.file.name match {
-        case "ScalaObject.scala" if inScalaFolder(file) => scalaObject = Some(file)
-        case "LowPriorityImplicits.scala" if inScalaFolder(file) => file +=: res
-        case "StandardEmbeddings.scala" if inScalaFolder(file) => file +=: res
-        case _ => res += file
+      def rank(f: SourceFile) = {
+        if (f.file.container.name != "scala") 3
+        else f.file.name match {
+          case "ScalaObject.scala"            => 1
+          case "LowPriorityImplicits.scala"   => 2
+          case "StandardEmbeddings.scala"     => 2
+          case _                              => 3
+        }
       }
-      for (so <- scalaObject) so +=: res
-      res.toList
+      files sortBy rank
     }
   } // class Run
 
   def printAllUnits() {
     print("[[syntax trees at end of " + phase + "]]")
-    atPhase(phase.next) {
-      for (unit <- currentRun.units) treePrinter.print(unit)
-    }
+    atPhase(phase.next) { currentRun.units foreach (treePrinter print _) }
   }
 
   def showDef(name: Name, module: Boolean) {

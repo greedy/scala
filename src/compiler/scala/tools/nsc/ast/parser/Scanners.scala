@@ -173,6 +173,9 @@ trait Scanners {
       // Read a token or copy it from `next` tokenData
       if (next.token == EMPTY) {
         lastOffset = charOffset - 1
+        if(lastOffset > 0 && buf(lastOffset) == '\n' && buf(lastOffset - 1) == '\r') {
+          lastOffset -= 1
+        }
         fetchToken()
       } else {
         this copyFrom next
@@ -239,7 +242,8 @@ trait Scanners {
 //              println("blank line found at "+lastOffset+":"+(lastOffset to idx).map(buf(_)).toList)
               return true
             }
-          } while (idx < end && ch <= ' ')
+	    if (idx == end) return false
+          } while (ch <= ' ')
         }
         idx += 1; ch = buf(idx)
       }
@@ -1012,7 +1016,7 @@ trait Scanners {
    */
   class UnitScanner(unit: CompilationUnit, patches: List[BracePatch]) extends Scanner {
     def this(unit: CompilationUnit) = this(unit, List())
-    val buf = unit.source.asInstanceOf[BatchSourceFile].content
+    val buf = unit.source.content
     override val decodeUni: Boolean = !settings.nouescape.value
 
     def warning(off: Offset, msg: String) = unit.warning(unit.position(off), msg)

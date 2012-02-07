@@ -88,16 +88,6 @@ abstract class ClosureElimination extends SubComponent {
    *
    */
   class ClosureElim {
-
-    /* fresh name counter */
-    var count = 0
-
-    def freshName(s: String) = {
-      val ret = s + this.count
-      this.count += 1
-      ret
-    }
-
     def analyzeClass(cls: IClass): Unit = if (settings.Xcloselim.value) {
       cls.methods.foreach { m =>
         analyzeMethod(m)
@@ -106,7 +96,6 @@ abstract class ClosureElimination extends SubComponent {
 
 
     val cpp = new copyPropagation.CopyAnalysis
-
 
     import copyPropagation._
 
@@ -173,14 +162,14 @@ abstract class ClosureElimination extends SubComponent {
                   val value = info.getBinding(loc1)
                   value match {
                     case Boxed(LocalVar(loc2)) =>
-                      bb.replaceInstruction(i, DROP(icodes.AnyRefReference) :: valueToInstruction(info.getBinding(loc2)) :: Nil)
+                      bb.replaceInstruction(i, DROP(icodes.ObjectReference) :: valueToInstruction(info.getBinding(loc2)) :: Nil)
                       log("replaced " + i + " with " + info.getBinding(loc2))
                     case _ =>
                       ()
                   }
                 case Boxed(LocalVar(loc1)) :: _ =>
                   val loc2 = info.getAlias(loc1)
-                  bb.replaceInstruction(i, DROP(icodes.AnyRefReference) :: valueToInstruction(Deref(LocalVar(loc2))) :: Nil)
+                  bb.replaceInstruction(i, DROP(icodes.ObjectReference) :: valueToInstruction(Deref(LocalVar(loc2))) :: Nil)
                   log("replaced " + i + " with " + LocalVar(loc2))
                 case _ =>
                   ()
@@ -212,8 +201,7 @@ abstract class ClosureElimination extends SubComponent {
 
     /** is field 'f' accessible from method 'm'? */
     def accessible(f: Symbol, m: Symbol): Boolean =
-      f.isPublic || (f.hasFlag(Flags.PROTECTED) && (f.enclosingPackageClass == m.enclosingPackageClass))
-
+      f.isPublic || (f.isProtected && (f.enclosingPackageClass == m.enclosingPackageClass))
   } /* class ClosureElim */
 
 

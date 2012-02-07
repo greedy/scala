@@ -289,6 +289,7 @@ trait SeqLike[+A, +Repr] extends IterableLike[A, Repr] { self =>
 
   /** Returns index of the first element satisfying a predicate, or `-1`.
    */
+  @deprecated("Use indexWhere(p) instead.")
   def findIndexOf(p: A => Boolean): Int = indexWhere(p)
 
   /** Finds index of first occurrence of some value in this $coll.
@@ -630,11 +631,11 @@ trait SeqLike[+A, +Repr] extends IterableLike[A, Repr] { self =>
    */
   def distinct: Repr = {
     val b = newBuilder
-    var seen = Set[A]() //TR: should use mutable.HashSet?
+    val seen = mutable.HashSet[A]()
     for (x <- this) {
-      if (!(seen contains x)) {
+      if (!seen(x)) {
         b += x
-        seen = (seen + x)
+        seen += x
       }
     }
     b.result

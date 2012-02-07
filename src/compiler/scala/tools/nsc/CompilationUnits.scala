@@ -16,7 +16,7 @@ trait CompilationUnits { self: Global =>
   class CompilationUnit(val source: SourceFile) extends CompilationUnitTrait {
 
     /** the fresh name creator */
-    var fresh : FreshNameCreator = new FreshNameCreator.Default
+    var fresh: FreshNameCreator = new FreshNameCreator.Default
 
     /** the content of the compilation unit in tree form */
     var body: Tree = EmptyTree
@@ -29,6 +29,16 @@ trait CompilationUnits { self: Global =>
     /** all comments found in this compilation unit */
     val comments = new ListBuffer[Comment]
 
+//    def parseSettings() = {
+//      val argsmarker = "SCALAC_ARGS"
+//      if(comments nonEmpty) {
+//        val pragmas = comments find (_.text.startsWith("//#")) // only parse first one
+//        pragmas foreach { p =>
+//          val i = p.text.indexOf(argsmarker)
+//          if(i > 0)
+//        }
+//      }
+//    }
     /** Note: depends now contains toplevel classes.
      *  To get their sourcefiles, you need to dereference with .sourcefile
      */

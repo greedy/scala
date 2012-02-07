@@ -146,8 +146,8 @@ object ScalaRunTime {
   def _toString(x: Product): String =
     x.productIterator.mkString(x.productPrefix + "(", ",", ")")
 
-  // def _hashCodeJenkins(x: Product): Int =
-  //   scala.util.JenkinsHash.hashSeq(x.productPrefix.toSeq ++ x.productIterator.toSeq)
+  def _hashCodeMurmur(x: Product): Int =
+    scala.util.MurmurHash.product(x)
 
   def _hashCode(x: Product): Int = {
     val arr =  x.productArity
@@ -208,8 +208,14 @@ object ScalaRunTime {
   @inline def hash(x: Short): Int = x.toInt
   @inline def hash(x: Byte): Int = x.toInt
   @inline def hash(x: Char): Int = x.toInt
+  @inline def hash(x: Boolean): Int = x.hashCode
+  @inline def hash(x: Unit): Int = 0
 
   @inline def hash(x: Number): Int  = runtime.BoxesRunTime.hashFromNumber(x)
+
+  /** XXX Why is there one boxed implementation in here? It would seem
+   *  we should have all the numbers or none of them.
+   */
   @inline def hash(x: java.lang.Long): Int = {
     val iv = x.intValue
     if (iv == x.longValue) iv else x.hashCode
@@ -235,11 +241,8 @@ object ScalaRunTime {
    * @return a string representation of <code>arg</code>
    *
    */
-  def stringOf(arg: Any): String = {
-    // Purely a sanity check to prevent accidental infinity: the (default) repl
-    // maxPrintString limit will kick in way before this
-    val maxElements = 10000
-
+  def stringOf(arg: Any): String = stringOf(arg, scala.Int.MaxValue)
+  def stringOf(arg: Any, maxElements: Int): String = {
     def isScalaClass(x: AnyRef) =
       Option(x.getClass.getPackage) exists (_.getName startsWith "scala.")
 
@@ -267,7 +270,7 @@ object ScalaRunTime {
     def inner(arg: Any): String = arg match {
       case null                         => "null"
       case x if useOwnToString(x)       => x.toString
-      case x: AnyRef if isArray(x)      => WrappedArray make x map inner mkString ("Array(", ", ", ")")
+      case x: AnyRef if isArray(x)      => WrappedArray make x take maxElements map inner mkString ("Array(", ", ", ")")
       case x: Traversable[_]            => x take maxElements map inner mkString (x.stringPrefix + "(", ", ", ")")
       case x: Product1[_] if isTuple(x) => "(" + inner(x._1) + ",)" // that special trailing comma
       case x: Product if isTuple(x)     => x.productIterator map inner mkString ("(", ",", ")")

@@ -29,7 +29,7 @@ extends LazyCombiner[T, ParArray[T], ExposedArrayBuffer[T]]
     val arrayseq = new ArraySeq[T](size)
     val array = arrayseq.array.asInstanceOf[Array[Any]]
 
-    executeAndWait(new CopyChainToArray(array, 0, size))
+    executeAndWaitResult(new CopyChainToArray(array, 0, size))
 
     new ParArray(arrayseq)
   } else { // optimisation if there is only 1 array
@@ -89,7 +89,7 @@ object ParArrayCombiner {
   def apply[T](c: ArrayBuffer[ExposedArrayBuffer[T]]): ParArrayCombiner[T] = {
     new { val chain = c } with ParArrayCombiner[T] with EnvironmentPassingCombiner[T, ParArray[T]]
   }
-  def apply[T]: ParArrayCombiner[T] = apply(new ArrayBuffer[ExposedArrayBuffer[T]] += new ExposedArrayBuffer[T])
+  def apply[T](): ParArrayCombiner[T] = apply(new ArrayBuffer[ExposedArrayBuffer[T]] += new ExposedArrayBuffer[T])
 }
 
 

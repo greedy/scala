@@ -6,17 +6,14 @@
 package scala.tools.nsc
 package symtab
 
-import java.io.{File, IOException}
+import java.io.IOException
+import ch.epfl.lamp.compiler.msil.{ Type => MSILType, Attribute => MSILAttribute }
 
-import ch.epfl.lamp.compiler.msil.{Type => MSILType, Attribute => MSILAttribute}
-
-import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 import scala.compat.Platform.currentTime
 import scala.tools.nsc.io.AbstractFile
-import scala.tools.nsc.util.{ ClassPath, JavaClassPath }
+import scala.tools.nsc.util.{ ClassPath }
 import classfile.ClassfileParser
 import Flags._
-
 import util.Statistics._
 
 /** This class ...
@@ -79,13 +76,17 @@ abstract class SymbolLoaders {
 
     override def load(root: Symbol) { complete(root) }
 
+    private def markAbsent(sym: Symbol): Unit = {
+      val tpe: Type = if (ok) NoType else ErrorType
+
+      if (sym != NoSymbol)
+        sym setInfo tpe
+    }
     private def initRoot(root: Symbol) {
-      if (root.rawInfo == this) {
-        def markAbsent(sym: Symbol) =
-          if (sym != NoSymbol) sym.setInfo(if (ok) NoType else ErrorType);
-        markAbsent(root)
-        markAbsent(root.moduleClass)
-      } else if (root.isClass && !root.isModuleClass) root.rawInfo.load(root)
+      if (root.rawInfo == this)
+        List(root, root.moduleClass) foreach markAbsent
+      else if (root.isClass && !root.isModuleClass)
+        root.rawInfo.load(root)
     }
   }
 

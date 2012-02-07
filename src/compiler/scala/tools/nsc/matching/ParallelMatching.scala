@@ -544,10 +544,10 @@ trait ParallelMatching extends ast.TreeDSL
         }
 
       lazy val label =
-        owner.newLabel(scrut.pos, newName(scrut.pos, "failCont%")) setInfo MethodType(Nil, labelBody.tpe)
+        owner.newLabel(scrut.pos, newName("failCont%")) setInfo MethodType(Nil, labelBody.tpe)
 
       lazy val cond =
-        handleOuter(scrut.id MEMBER_== rhs)
+        handleOuter(rhs MEMBER_== scrut.id )
 
       lazy val success = remake(List(
         rest.rows.head.insert2(List(NoPattern), head.boundVariables, scrut.sym),
@@ -613,22 +613,12 @@ trait ParallelMatching extends ast.TreeDSL
       val subsumed = yeses map (x => (x.bx, x.subsumed))
       val remaining = noes map (x => (x.bx, x.remaining))
 
-      // temporary checks so we're less crashy while we determine what to implement.
-      def checkErroneous(scrut: Scrutinee): Type = {
-        scrut.tpe match {
-          case tpe @ ThisType(_) if tpe.termSymbol == NoSymbol        =>
-            cunit.error(scrut.pos, "self type test in anonymous class forbidden by implementation.")
-            ErrorType
-          case x => x
-        }
-      }
-
       private def mkZipped =
         for (Yes(j, moreSpecific, subsumed) <- yeses) yield
           j -> (moreSpecific :: subsumed)
 
       lazy val casted = scrut castedTo pmatch.headType
-      lazy val cond   = condition(checkErroneous(casted), scrut, head.boundVariables.nonEmpty)
+      lazy val cond   = condition(casted.tpe, scrut, head.boundVariables.nonEmpty)
 
       private def isAnyMoreSpecific = yeses exists (x => !x.moreSpecific.isEmpty)
       lazy val (subtests, subtestVars) =
@@ -737,20 +727,13 @@ trait ParallelMatching extends ast.TreeDSL
       def duplicate = body.duplicate setType bodyTpe
 
       def isFinal = true
-      def isLabellable = !cond(body)  { case _: Throw | _: Literal => true }
+      def isLabellable = !cond(body)  { case _: Literal => true }
       def isNotReached = referenceCount == 0
       def isReachedOnce = referenceCount == 1
       def isReachedTwice = referenceCount > 1
 
       // arguments to pass to this body%xx
       def labelParamTypes = label.tpe.paramTypes
-
-      private def consistencyFailure(idents: List[Tree], vdefs: List[Tree]) = {
-        val LabelDef(name, params, rhs) = label
-
-        val msg = "Consistency failure in generated block %s(%s):\n  idents = %s\n  vdefs = %s\n"
-        abort(msg.format(name, pp(labelParamTypes), pp(idents), pp(vdefs)))
-      }
 
       def createLabelBody(index: Int, pvgroup: PatternVarGroup) = {
         val args = pvgroup.syms
@@ -776,8 +759,6 @@ trait ParallelMatching extends ast.TreeDSL
         val idents = pvgroup map (_.rhs)
         val vdefs = pvgroup.valDefs
         referenceCount += 1
-        // if (idents.size != labelParamTypes.size)
-        //   consistencyFailure(idents, vdefs)
 
         ifLabellable(vdefs, ID(labelSym) APPLY (idents))
       }
@@ -873,36 +854,42 @@ trait ParallelMatching extends ast.TreeDSL
 
     final def condition(tpe: Type, scrutTree: Tree, isBound: Boolean): Tree = {
       assert((tpe ne NoType) && (scrutTree.tpe ne NoType))
-      def useEqTest     = tpe.termSymbol.isModule || (tpe.prefix eq NoPrefix)
+      def isMatchUnlessNull = scrutTree.tpe <:< tpe && tpe.isAnyRef
+      def isRef             = scrutTree.tpe.isAnyRef
 
-      //         case SingleType(_, _) | ThisType(_) | SuperType(_, _) =>
-      //           val cmpOp = if (targ.tpe <:< AnyValClass.tpe) Any_equals else Object_eq
-      // Apply(Select(qual, cmpOp), List(gen.mkAttributedQualifier(targ.tpe)))
+      // See ticket #1503 for the motivation behind checking for a binding.
+      // The upshot is that it is unsound to assume equality means the right
+      // type, but if the value doesn't appear on the right hand side of the
+      // match that's unimportant; so we add an instance check only if there
+      // is a binding.
+      def bindingWarning() = {
+        if (isBound && settings.Xmigration28.value) {
+          cunit.warning(scrutTree.pos,
+            "A bound pattern such as 'x @ Pattern' now matches fewer cases than the same pattern with no binding.")
+        }
+      }
 
-      typer typed (tpe match {
-        case ct: ConstantType => ct.value match {
-            case v @ Constant(null) if scrutTree.tpe.isAnyRef   => scrutTree ANY_EQ NULL
-            case v                                              => scrutTree MEMBER_== Literal(v)
-          }
-        case _: SingletonType if useEqTest                      =>
-          val eqTest = REF(tpe.termSymbol) MEMBER_== scrutTree
+      def genEquals(sym: Symbol): Tree = {
+        val t1: Tree = REF(sym) MEMBER_== scrutTree
 
-          // See ticket #1503 for the motivation behind checking for a binding.
-          // The upshot is that it is unsound to assume equality means the right
-          // type, but if the value doesn't appear on the right hand side of the
-          // match that's unimportant; so we add an instance check only if there
-          // is a binding.
-          if (isBound) {
-            if (settings.Xmigration28.value) {
-              cunit.warning(scrutTree.pos, "A bound pattern such as 'x @ Pattern' now matches fewer cases than the same pattern with no binding.")
-            }
-            eqTest AND (scrutTree IS tpe.widen)
-          }
-          else eqTest
+        if (isBound) {
+          bindingWarning()
+          t1 AND (scrutTree IS tpe.widen)
+        }
+        else t1
+      }
 
-        case _ if scrutTree.tpe <:< tpe && tpe.isAnyRef         => scrutTree OBJ_!= NULL
-        case _                                                  => scrutTree IS tpe
-      })
+      typer typed {
+        tpe match {
+          case ConstantType(Constant(null)) if isRef  => scrutTree OBJ_EQ NULL
+          case ConstantType(Constant(value))          => scrutTree MEMBER_== Literal(value)
+          case SingleType(NoPrefix, sym)              => genEquals(sym)
+          case SingleType(pre, sym) if sym.isModule   => genEquals(sym)
+          case ThisType(sym) if sym.isModule          => genEquals(sym)
+          case _ if isMatchUnlessNull                 => scrutTree OBJ_NE NULL
+          case _                                      => scrutTree IS tpe
+        }
+      }
     }
 
     /** adds a test comparing the dynamic outer to the static outer */
@@ -916,7 +903,7 @@ trait ParallelMatching extends ast.TreeDSL
 
       outerAccessor(tpe2test.typeSymbol) match {
         case NoSymbol => ifDebug(cunit.warning(scrut.pos, "no outer acc for " + tpe2test.typeSymbol)) ; cond
-        case outerAcc => cond AND (((scrut AS_ANY tpe2test) DOT outerAcc)() ANY_EQ theRef)
+        case outerAcc => cond AND (((scrut AS_ANY tpe2test) DOT outerAcc)() OBJ_EQ theRef)
       }
     }
   }

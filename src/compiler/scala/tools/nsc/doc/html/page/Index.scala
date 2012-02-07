@@ -12,8 +12,9 @@ import model._
 
 import scala.collection._
 import scala.xml._
+import scala.util.parsing.json.{JSONObject, JSONArray}
 
-class Index(universe: Universe) extends HtmlPage {
+class Index(universe: Universe, indexModel: IndexModelFactory#IndexModel) extends HtmlPage {
 
   def path = List("index.html")
 
@@ -47,23 +48,35 @@ class Index(universe: Universe) extends HtmlPage {
       </div>
     </body>
 
+
+  def isExcluded(dtpl: DocTemplateEntity) = {
+    val qname = dtpl.qualifiedName
+    ( ( qname.startsWith("scala.Tuple") || qname.startsWith("scala.Product") ||
+       qname.startsWith("scala.Function") || qname.startsWith("scala.runtime.AbstractFunction")
+     ) && !(
+      qname == "scala.Tuple1" || qname == "scala.Tuple2" ||
+      qname == "scala.Product" || qname == "scala.Product1" || qname == "scala.Product2" ||
+      qname == "scala.Function" || qname == "scala.Function1" || qname == "scala.Function2" ||
+      qname == "scala.runtime.AbstractFunction0" || qname == "scala.runtime.AbstractFunction1" ||
+      qname == "scala.runtime.AbstractFunction2"
+    )
+   )
+  }
+
   def browser =
+	<xml:group>
     <div id="browser" class="ui-layout-west">
+      <div class="ui-west-north">{
+        <div class="letters">
+	      { for(l <- indexModel.keySet.toList.sortBy( _.toString )) yield { // TODO there should be a better way to do that
+	          val ch = if(l=='#') "%23" else l // url encoding if needed
+              <a target="template" href={"index/index-"+ch+".html"}>{l.toUpper}</a> ++ xml.Text(" ")
+          } }
+	    </div>
+      }</div>
+      <div class="ui-west-center">
       <div id="filter"></div>
       <div class="pack" id="tpl">{
-        def isExcluded(dtpl: DocTemplateEntity) = {
-          val qname = dtpl.qualifiedName
-          ( ( qname.startsWith("scala.Tuple") || qname.startsWith("scala.Product") ||
-              qname.startsWith("scala.Function") || qname.startsWith("scala.runtime.AbstractFunction")
-            ) && !(
-              qname == "scala.Tuple1" || qname == "scala.Tuple2" ||
-              qname == "scala.Product" || qname == "scala.Product1" || qname == "scala.Product2" ||
-              qname == "scala.Function" || qname == "scala.Function1" || qname == "scala.Function2" ||
-              qname == "scala.runtime.AbstractFunction0" || qname == "scala.runtime.AbstractFunction1" ||
-              qname == "scala.runtime.AbstractFunction2"
-            )
-          )
-        }
         def packageElem(pack: model.Package): NodeSeq = {
           <xml:group>
             { if (!pack.isRootPackage)
@@ -106,20 +119,79 @@ class Index(universe: Universe) extends HtmlPage {
                     placeholderSeq ++ createLink(entry, includePlaceholder = false, includeText = true)
                 }
 
-                <li title={ entities.head.qualifiedName }>{
-                  itemContents
-                }</li>
+                <li title={ entities.head.qualifiedName }>{ itemContents }</li>
               }
             }</ol>
             <ol class="packages"> {
               for (sp <- pack.packages sortBy (_.name.toLowerCase)) yield
-                <li class="pack" title={ sp.qualifiedName }>{ packageElem(sp) }</li>
+                <li id={
+                  "package-" + toId(sp.qualifiedName)
+                } class="pack" title={ sp.qualifiedName }>{ packageElem(sp) }</li>
             }</ol>
           </xml:group>
         }
         packageElem(universe.rootPackage)
-      }</div>
+      }</div></div>{ scriptElement }
     </div>
+    </xml:group>
+
+  def toId(str: String) = {
+    val pattern = "[^A-Za-z0-9-]".r
+    pattern.replaceSomeIn(str, (m: scala.util.matching.Regex.Match) => {
+      Some("-" + m.group(0).charAt(0).toInt)
+    })
+  }
+
+  def mergeByQualifiedName(source: List[DocTemplateEntity]): Map[String, List[DocTemplateEntity]]= {
+    var result = Map[String, List[DocTemplateEntity]]()
+
+    for (t <- source) {
+      val k = t.qualifiedName
+      result += k -> (result.getOrElse(k, List()) :+ t)
+    }
+
+    result
+  }
+
+  def scriptElement = {
+    val packages = allPackagesWithTemplates.toIterable.map(_ match {
+      case (pack, templates) => {
+        val merged = mergeByQualifiedName(templates)
+
+        val ary = merged.keys.toList.sortBy(_.toLowerCase).map(key => {
+          val pairs = merged(key).map(
+            t => docEntityKindToString(t) -> relativeLinkTo(t)
+          ) :+ ("name" -> key)
+
+          JSONObject(scala.collection.immutable.Map(pairs : _*))
+        })
+
+        pack.qualifiedName -> JSONArray(ary)
+      }
+    }).toSeq
+
+    val obj =
+      JSONObject(scala.collection.immutable.Map(packages : _*)).toString()
+
+    <script type="text/javascript">
+      Index.PACKAGES = {scala.xml.Unparsed(obj)};
+    </script>
+  }
+
+  def allPackagesWithTemplates: Map[Package, List[DocTemplateEntity]] = {
+    Map(allPackages.map((key) => {
+      key -> key.templates.filter(t => !t.isPackage && !isExcluded(t))
+    }) : _*)
+  }
+
+  def allPackages: List[Package] = {
+    def f(parent: Package): List[Package] = {
+      parent.packages.flatMap(
+        p => f(p) :+ p
+      )
+    }
+    f(universe.rootPackage).sortBy(_.toString)
+  }
 
   def packageQualifiedName(ety: DocTemplateEntity): String =
     if (ety.inTemplate.isPackage) ety.name else (packageQualifiedName(ety.inTemplate) + "." + ety.name)

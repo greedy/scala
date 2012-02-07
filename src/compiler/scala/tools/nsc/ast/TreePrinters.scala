@@ -95,15 +95,19 @@ trait TreePrinters { trees: SymbolTable =>
       }
     }
 
+    private def symFn[T](tree: Tree, f: Symbol => T, orElse: => T): T = tree.symbol match {
+      case null | NoSymbol  => orElse
+      case sym              => f(sym)
+    }
+    private def ifSym(tree: Tree, p: Symbol => Boolean) = symFn(tree, p, false)
+
     private def symNameInternal(tree: Tree, name: Name, decoded: Boolean): String = {
       val nameToString: Name => String = if (decoded) _.decode else _.toString
-
-      tree.symbol match {
-        case null | NoSymbol  => nameToString(name)
-        case sym =>
-          val prefix = if (sym.isMixinConstructor) "/*%s*/".format(nameToString(sym.owner.name)) else ""
-          prefix + tree.symbol.nameString
+      def nameFn(sym: Symbol) = {
+        val prefix = if (sym.isMixinConstructor) "/*%s*/".format(nameToString(sym.owner.name)) else ""
+        prefix + tree.symbol.nameString
       }
+      symFn(tree, nameFn, nameToString(name))
     }
 
     def decodedSymName(tree: Tree, name: Name) = symNameInternal(tree, name, true)
@@ -113,15 +117,13 @@ trait TreePrinters { trees: SymbolTable =>
       if (!tree.isEmpty) { print(prefix); print(tree) }
     }
 
-    def printModifiers(tree: Tree, mods: Modifiers) {
-      def pw = tree.symbol.privateWithin
-      val args =
-        if (tree.symbol == NoSymbol) (mods.flags, mods.privateWithin)
-        else if (pw == NoSymbol) (tree.symbol.flags, "")
-        else (tree.symbol.flags, pw.name)
-
-      printFlags(args._1, args._2.toString)
-    }
+    def printModifiers(tree: Tree, mods: Modifiers): Unit = printFlags(
+       if (tree.symbol == NoSymbol) mods.flags else tree.symbol.flags, "" + (
+         if (tree.symbol == NoSymbol) mods.privateWithin
+         else if (tree.symbol.hasAccessBoundary) tree.symbol.privateWithin.name
+         else ""
+      )
+    )
 
     def printFlags(flags: Long, privateWithin: String) {
       var mask: Long = if (settings.debug.value) -1L else PrintableFlags
@@ -151,9 +153,14 @@ trait TreePrinters { trees: SymbolTable =>
         case ClassDef(mods, name, tparams, impl) =>
           printAnnotations(tree)
           printModifiers(tree, mods)
-          print((if (mods.isTrait) "trait " else "class ") + symName(tree, name))
+          val word =
+            if (mods.isTrait) "trait"
+            else if (ifSym(tree, _.isModuleClass)) "object"
+            else "class"
+
+          print(word + " " + symName(tree, name))
           printTypeParams(tparams)
-          print(if (mods hasFlag DEFERRED) " <: " else " extends "); print(impl) // (part of DEVIRTUALIZE)
+          print(if (mods.isDeferred) " <: " else " extends "); print(impl) // (part of DEVIRTUALIZE)
 
         case PackageDef(packaged, stats) =>
           printAnnotations(tree)
@@ -167,10 +174,10 @@ trait TreePrinters { trees: SymbolTable =>
         case ValDef(mods, name, tp, rhs) =>
           printAnnotations(tree)
           printModifiers(tree, mods)
-          print(if (mods.isVariable) "var " else "val ")
+          print(if (mods.isMutable) "var " else "val ")
           print(symName(tree, name))
           printOpt(": ", tp)
-          if (!mods.hasFlag(DEFERRED)) {
+          if (!mods.isDeferred) {
             print(" = ")
             if (rhs.isEmpty) print("_") else print(rhs)
           }
@@ -339,7 +346,7 @@ trait TreePrinters { trees: SymbolTable =>
           print(x.escapedStringValue)
 
         case tt: TypeTree =>
-          if (tree.tpe eq null) {
+          if ((tree.tpe eq null) || (settings.Xprintpos.value && tt.original != null)) {
             if (tt.original != null) { print("<type: "); print(tt.original); print(">") }
             else print("<type ?>")
           } else if ((tree.tpe.typeSymbol ne null) && tree.tpe.typeSymbol.isAnonymousClass) {

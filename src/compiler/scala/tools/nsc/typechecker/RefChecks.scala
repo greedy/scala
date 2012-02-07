@@ -51,11 +51,24 @@ abstract class RefChecks extends InfoTransform {
     new RefCheckTransformer(unit)
   override def changesBaseClasses = false
 
-  def transformInfo(sym: Symbol, tp: Type): Type =
+  def transformInfo(sym: Symbol, tp: Type): Type = {
+    def isNestedModule = sym.isModule && !sym.isRootPackage && !sym.owner.isPackageClass
+
     if (sym.isModule && !sym.isStatic) {
+
       sym setFlag (lateMETHOD | STABLE)
+      if (isNestedModule) {
+        val moduleVar = sym.owner.info.decl(nme.moduleVarName(sym.name))
+        if (moduleVar == NoSymbol) {
+          val tree = gen.mkModuleVarDef(sym)
+          tree.symbol.setInfo(tp)
+          sym.resetFlag(MODULE)
+          sym.setFlag(LAZY | ACCESSOR)
+        }
+      }
       PolyType(List(), tp)
     } else tp
+  }
 
   val toJavaRepeatedParam = new TypeMap {
     def apply(tp: Type) = tp match {
@@ -241,13 +254,15 @@ abstract class RefChecks extends InfoTransform {
           tp1 <:< tp2
       }
 
-      /** Check that all conditions for overriding <code>other</code> by
-       *  <code>member</code> of class <code>clazz</code> are met.
+      /** Check that all conditions for overriding `other` by `member`
+       *  of class `clazz` are met.
        */
       def checkOverride(clazz: Symbol, member: Symbol, other: Symbol) {
+        def noErrorType = other.tpe != ErrorType && member.tpe != ErrorType
+        def isRootOrNone(sym: Symbol) = sym == RootClass || sym == NoSymbol
 
         def overrideError(msg: String) {
-          if (other.tpe != ErrorType && member.tpe != ErrorType) {
+          if (noErrorType) {
             val fullmsg =
               "overriding "+infoStringWithLocation(other)+";\n "+
               infoString(member)+" "+msg+
@@ -261,13 +276,13 @@ abstract class RefChecks extends InfoTransform {
         }
 
         def overrideTypeError() {
-          if (other.tpe != ErrorType && member.tpe != ErrorType) {
+          if (noErrorType) {
             overrideError("has incompatible type")
           }
         }
 
         def accessFlagsToString(sym: Symbol)
-          = flagsToString(sym getFlag (PRIVATE | PROTECTED), if (sym.privateWithin eq NoSymbol) "" else sym.privateWithin.name.toString)
+          = flagsToString(sym getFlag (PRIVATE | PROTECTED), if (!sym.hasAccessBoundary) "" else sym.privateWithin.name.toString)
 
         def overrideAccessError() {
           val otherAccess = accessFlagsToString(other)
@@ -306,23 +321,19 @@ abstract class RefChecks extends InfoTransform {
           // ^-may be overridden by member with access privileges-v
           // m: public | public/protected | public/protected/package-protected-in-same-package-as-o
 
-          if (member hasFlag PRIVATE) // (1.1)
+          if (member.isPrivate) // (1.1)
             overrideError("has weaker access privileges; it should not be private")
 
-          @inline def definedIn(sym: Symbol, in: Symbol) = sym != RootClass && sym != NoSymbol && sym.hasTransOwner(in)
-
+          // todo: align accessibility implication checking with isAccessible in Contexts
           val ob = other.accessBoundary(member.owner)
           val mb = member.accessBoundary(member.owner)
-          // println("checking override in "+ clazz +"\n  other: "+ infoString(other) +" ab: "+ ob.ownerChain +" flags: "+ accessFlagsToString(other))
-          // println("  overriding member: "+ infoString(member) +" ab: "+ mb.ownerChain +" flags: "+ accessFlagsToString(member))
-          // todo: align accessibility implication checking with isAccessible in Contexts
-          if (!(  mb == RootClass // m is public, definitely relaxes o's access restrictions (unless o.isJavaDefined, see below)
-               || mb == NoSymbol  // AM: what does this check?? accessBoundary does not ever seem to return NoSymbol (unless member.owner were NoSymbol)
-               || ((!(other hasFlag PROTECTED) || (member hasFlag PROTECTED)) && definedIn(ob, mb)) // (if o isProtected, so is m) and m relaxes o's access boundary
-               )) {
-            overrideAccessError()
+          def isOverrideAccessOK = member.isPublic || {     // member is public, definitely same or relaxed access
+            (!other.isProtected || member.isProtected) &&   // if o is protected, so is m
+            (!isRootOrNone(ob) && ob.hasTransOwner(mb))     // m relaxes o's access boundary
           }
-          else if (other.isClass || other.isModule) {
+          if (!isOverrideAccessOK) {
+            overrideAccessError()
+          } else if (other.isClass || other.isModule) {
             overrideError("cannot be used here - classes and objects cannot be overridden");
           } else if (!other.isDeferred && (member.isClass || member.isModule)) {
             overrideError("cannot be used here - classes and objects can only override abstract types");
@@ -463,10 +474,10 @@ abstract class RefChecks extends InfoTransform {
             })
 
         def ignoreDeferred(member: Symbol) =
-          (currentRun.erasurePhase != NoPhase) && ( // the test requires atPhase(erasurePhase.next) so shouldn't be done if the compiler has no erasure phase available
-            isAbstractTypeWithoutFBound(member) ||
-            (member.isJavaDefined && javaErasedOverridingSym(member) != NoSymbol)
-          )
+          isAbstractTypeWithoutFBound(member) ||
+          (member.isJavaDefined &&
+           (currentRun.erasurePhase == NoPhase || // the test requires atPhase(erasurePhase.next) so shouldn't be done if the compiler has no erasure phase available
+            javaErasedOverridingSym(member) != NoSymbol))
 
         // 2. Check that only abstract classes have deferred members
         def checkNoAbstractMembers() = {
@@ -542,24 +553,44 @@ abstract class RefChecks extends InfoTransform {
        *  (which must be different from `clazz`) whose name and type
        *  seen as a member of `class.thisType` matches `member`'s.
        */
-      def hasMatchingSym(inclazz: Symbol, member: Symbol): Boolean =
-        inclazz != clazz && {
-          lazy val memberEnclPackageCls = member.enclosingPackageClass
+      def hasMatchingSym(inclazz: Symbol, member: Symbol): Boolean = {
+        val isVarargs = hasRepeatedParam(member.tpe)
+        lazy val varargsType = toJavaRepeatedParam(member.tpe)
 
-          val isVarargs = hasRepeatedParam(member.tpe)
-          inclazz.info.nonPrivateDecl(member.name).filter { sym =>
-            (!sym.isTerm || {
-              val symtpe = clazz.thisType.memberType(sym)
-              (member.tpe matches symtpe) || isVarargs && (toJavaRepeatedParam(member.tpe) matches symtpe)
-            }) && {
-              // http://java.sun.com/docs/books/jls/third_edition/html/names.html#6.6.5:
-              // If a public class has a [member] with default access, then this [member] is not accessible to,
-              // or inherited by a subclass declared outside this package.
-              // (sym is a java member with default access in pkg P) implies (member's enclosing package == P)
-              !(inclazz.isJavaDefined && sym.privateWithin == sym.enclosingPackageClass) || memberEnclPackageCls == sym.privateWithin
-            }
-          } != NoSymbol
+        def isSignatureMatch(sym: Symbol) = !sym.isTerm || {
+          val symtpe            = clazz.thisType memberType sym
+          def matches(tp: Type) = tp matches symtpe
+
+          matches(member.tpe) || (isVarargs && matches(varargsType))
         }
+        /** The rules for accessing members which have an access boundary are more
+         *  restrictive in java than scala.  Since java has no concept of package nesting,
+         *  a member with "default" (package-level) access can only be accessed by members
+         *  in the exact same package.  Example:
+         *
+         *    package a.b;
+         *    public class JavaClass { void foo() { } }
+         *
+         *  The member foo() can be accessed only from members of package a.b, and not
+         *  nested packages like a.b.c.  In the analogous scala class:
+         *
+         *    package a.b
+         *    class ScalaClass { private[b] def foo() = () }
+         *
+         *  The member IS accessible to classes in package a.b.c.  The javaAccessCheck logic
+         *  is restricting the set of matching signatures according to the above semantics.
+         */
+        def javaAccessCheck(sym: Symbol) = (
+             !inclazz.isJavaDefined                             // not a java defined member
+          || !sym.hasAccessBoundary                             // no access boundary
+          || sym.isProtected                                    // marked protected in java, thus accessible to subclasses
+          || sym.privateWithin == member.enclosingPackageClass  // exact package match
+        )
+        def classDecls   = inclazz.info.nonPrivateDecl(member.name)
+        def matchingSyms = classDecls filter (sym => isSignatureMatch(sym) && javaAccessCheck(sym))
+
+        (inclazz != clazz) && (matchingSyms != NoSymbol)
+      }
 
       // 4. Check that every defined member with an `override' modifier overrides some other member.
       for (member <- clazz.info.decls.toList)
@@ -683,7 +714,7 @@ abstract class RefChecks extends InfoTransform {
           case NoPrefix => ;
           case ThisType(_) => ;
           case ConstantType(_) => ;
-          case DeBruijnIndex(_, _) => ;
+          // case DeBruijnIndex(_, _) => ;
           case SingleType(pre, sym) =>
             validateVariance(pre, variance)
           case TypeRef(pre, sym, args) =>
@@ -782,16 +813,20 @@ abstract class RefChecks extends InfoTransform {
       currentLevel = currentLevel.outer
     }
 
+    private def normalizeSymToRef(sym: Symbol): Symbol =
+      if(sym isLazy) sym.lazyAccessor else sym
+
     private def enterSyms(stats: List[Tree]) {
       var index = -1
       for (stat <- stats) {
         index = index + 1;
         stat match {
           case ClassDef(_, _, _, _) | DefDef(_, _, _, _, _, _) | ModuleDef(_, _, _) | ValDef(_, _, _, _) =>
-            assert(stat.symbol != NoSymbol, stat);//debug
-            if (stat.symbol.isLocal) {
-              currentLevel.scope.enter(stat.symbol)
-              symIndex(stat.symbol) = index;
+            //assert(stat.symbol != NoSymbol, stat);//debug
+            val sym = normalizeSymToRef(stat.symbol)
+            if (sym.isLocal) {
+              currentLevel.scope.enter(sym)
+              symIndex(sym) = index;
             }
           case _ =>
         }
@@ -905,78 +940,115 @@ abstract class RefChecks extends InfoTransform {
      *    - for all other lazy values z the accessor is a block of this form:
      *      { z = <rhs>; z } where z can be an identifier or a field.
      */
-    def transformStat(tree: Tree, index: Int): List[Tree] = tree match {
-      case ModuleDef(mods, name, impl) =>
-        val sym = tree.symbol
-        val cdef = ClassDef(mods | MODULE, name, List(), impl)
-          .setPos(tree.pos)
-          .setSymbol(sym.moduleClass)
-          .setType(NoType)
-        if (sym.isStatic) {
-          if (!sym.allOverriddenSymbols.isEmpty) {
-            val factory = sym.owner.newMethod(sym.pos, sym.name)
-              .setFlag(sym.flags | STABLE).resetFlag(MODULE)
-              .setInfo(PolyType(List(), sym.moduleClass.tpe))
-            sym.owner.info.decls.enter(factory)
-            val ddef =
-              atPhase(phase.next) {
-                localTyper.typed {
-                  gen.mkModuleAccessDef(factory, sym.tpe)
+    def transformStat(tree: Tree, index: Int): List[Tree] = {
+      def checkForwardReference(sym: Symbol) =
+        if (sym.isLocal && index <= currentLevel.maxindex) {
+          if (settings.debug.value) Console.println(currentLevel.refsym)
+          unit.error(currentLevel.refpos, "forward reference extends over definition of " + sym)
+        }
+      tree match {
+        case ModuleDef(mods, name, impl) =>
+          val sym = tree.symbol
+          if (sym.isStatic) {
+            val cdef = ClassDef(mods | MODULE, name, List(), impl)
+              .setPos(tree.pos)
+              .setSymbol(sym.moduleClass)
+              .setType(NoType)
+
+            if (!sym.allOverriddenSymbols.isEmpty) {
+              val factory = sym.owner.newMethod(sym.pos, sym.name)
+                .setFlag(sym.flags | STABLE).resetFlag(MODULE)
+                .setInfo(PolyType(List(), sym.moduleClass.tpe))
+              sym.owner.info.decls.enter(factory)
+              val ddef =
+                atPhase(phase.next) {
+                  localTyper.typed {
+                    gen.mkModuleAccessDef(factory, sym.tpe)
+                  }
+                }
+              transformTrees(List(cdef, ddef))
+            } else {
+              List(transform(cdef))
+            }
+          } else {
+            def lazyNestedObjectTrees(transformedInfo: Boolean) = {
+              val cdef = ClassDef(mods | MODULE, name, List(), impl)
+                .setPos(tree.pos)
+                .setSymbol(if (!transformedInfo) sym.moduleClass else sym.lazyAccessor)
+                .setType(NoType)
+
+              val vdef = localTyper.typedPos(tree.pos){
+                if (!transformedInfo)
+                  gen.mkModuleVarDef(sym)
+                else {
+                  val vsym0 = sym.owner.info.decl(nme.moduleVarName(sym.name))
+                  // In case we are dealing with local symbol then we already have correct error with forward reference
+                  ValDef(if (vsym0 == NoSymbol) gen.mkModuleVarDef(sym).symbol else vsym0, EmptyTree)
                 }
               }
-            transformTrees(List(cdef, ddef))
-          } else {
-            List(transform(cdef))
-          }
-        } else {
-          val vdef = localTyper.typedPos(tree.pos) { gen.mkModuleVarDef(sym) }
-          val ddef =
-            atPhase(phase.next) {
-              localTyper.typed {
-                if (sym.owner.isTrait) gen.mkModuleAccessDcl(sym)
-                else gen.mkCachedModuleAccessDef(sym, vdef.symbol)
+              val vsym = vdef.symbol
+
+              val ddef = atPhase(phase.next) {
+                localTyper.typed {
+                  val rhs = gen.newModule(sym, vsym.tpe)
+                  if (!transformedInfo) {
+                    sym.resetFlag(MODULE | FINAL | CASE)
+                    sym.setFlag(LAZY | ACCESSOR | SYNTHETIC)
+
+                    sym.setInfo(PolyType(List(), sym.tpe))
+                    sym setFlag (lateMETHOD | STABLE)
+                  }
+
+                  val ownerTransformer = new ChangeOwnerTraverser(vsym, sym)
+                  val lazyDef = atPos(tree.pos)(
+                    DefDef(sym, ownerTransformer(
+                      if (sym.owner.isTrait) rhs
+                      else Block(List(
+                              Assign(gen.mkAttributedRef(vsym), rhs)),
+                              gen.mkAttributedRef(vsym)))
+                         ))
+                  lazyDef
+                }
               }
+              transformTrees(List(cdef, vdef, ddef))
             }
-
-          if (sym.owner.isTrait) transformTrees(List(cdef, ddef))
-          else transformTrees(List(cdef, vdef, ddef))
-        }
-
-      case ValDef(_, _, _, _) =>
-        val tree1 = transform(tree); // important to do before forward reference check
-        val ValDef(_, _, _, rhs) = tree1
-        if (tree.symbol.hasFlag(LAZY)) {
-          assert(tree.symbol.isTerm, tree.symbol)
-          val vsym = tree.symbol
-          val hasUnitType = (tree.symbol.tpe.typeSymbol == UnitClass)
-          val lazyDefSym = vsym.lazyAccessor
-          assert(lazyDefSym != NoSymbol, vsym)
-          val ownerTransformer = new ChangeOwnerTraverser(vsym, lazyDefSym)
-          val lazyDef = atPos(tree.pos)(
-              DefDef(lazyDefSym, ownerTransformer(
-                if (tree.symbol.owner.isTrait // for traits, this is further transformed in mixins
-                    || hasUnitType) rhs
-                else Block(List(
-                       Assign(gen.mkAttributedRef(vsym), rhs)),
-                       gen.mkAttributedRef(vsym)))))
-          log("Made lazy def: " + lazyDef)
-          if (hasUnitType)
-            typed(lazyDef) :: Nil
-          else
-            typed(ValDef(vsym, EmptyTree)) :: typed(lazyDef) :: Nil
-        } else {
-          if (tree.symbol.isLocal && index <= currentLevel.maxindex && !tree.symbol.hasFlag(LAZY)) {
-            if (settings.debug.value) Console.println(currentLevel.refsym);
-            unit.error(currentLevel.refpos, "forward reference extends over definition of " + tree.symbol);
+            lazyNestedObjectTrees(sym.hasFlag(LAZY))
           }
-          List(tree1)
-        }
 
-      case Import(_, _) =>
-        List()
+        case ValDef(_, _, _, _) =>
+          val tree1 = transform(tree); // important to do before forward reference check
 
-      case _ =>
-        List(transform(tree))
+          if (tree.symbol.hasFlag(LAZY)) {
+            assert(tree.symbol.isTerm, tree.symbol)
+            val ValDef(_, _, _, rhs) = tree1
+            val vsym = tree.symbol
+            val hasUnitType = (tree.symbol.tpe.typeSymbol == UnitClass)
+            val lazyDefSym = vsym.lazyAccessor
+            assert(lazyDefSym != NoSymbol, vsym)
+            val ownerTransformer = new ChangeOwnerTraverser(vsym, lazyDefSym)
+            val lazyDef = atPos(tree.pos)(
+                DefDef(lazyDefSym, ownerTransformer(
+                  if (tree.symbol.owner.isTrait // for traits, this is further transformed in mixins
+                      || hasUnitType) rhs
+                  else Block(List(
+                         Assign(gen.mkAttributedRef(vsym), rhs)),
+                         gen.mkAttributedRef(vsym)))))
+            log("Made lazy def: " + lazyDef)
+            if (hasUnitType)
+              typed(lazyDef) :: Nil
+            else
+              typed(ValDef(vsym, EmptyTree)) :: atPhase(phase.next) { typed(lazyDef) } :: Nil
+          } else {
+            checkForwardReference(normalizeSymToRef(tree.symbol))
+            List(tree1)
+          }
+
+        case Import(_, _) =>
+          List()
+
+        case _ =>
+          List(transform(tree))
+      }
     }
 
     /******** Begin transform inner function section ********/
@@ -1282,6 +1354,13 @@ abstract class RefChecks extends InfoTransform {
 
           case x @ Select(_, _) =>
             transformSelect(x)
+
+          case UnApply(fun, args) =>
+            transform(fun) // just make sure we enterReference for unapply symbols, note that super.transform(tree) would not transform(fun)
+                           // transformTrees(args) // TODO: is this necessary? could there be forward references in the args??
+                           // probably not, until we allow parameterised extractors
+            tree
+
 
           case _ => tree
         }

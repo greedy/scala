@@ -16,7 +16,7 @@ import scala.util.Properties.{ isWin }
 import scala.tools.nsc.{ ObjectRunner, Settings, CompilerCommand, Global }
 import scala.tools.nsc.io.{ AbstractFile, PlainFile, Path, Directory, File => SFile }
 import scala.tools.nsc.reporters.ConsoleReporter
-import scala.tools.nsc.util.{ ClassPath, FakePos }
+import scala.tools.nsc.util.{ ClassPath, FakePos, ScalaClassLoader }
 import ClassPath.{ join, split }
 
 import scala.actors.{ Actor, Exit, TIMEOUT }
@@ -43,9 +43,69 @@ class LogFile(parent: File, child: String) extends File(parent, child) {
   var toDelete = false
 }
 
-class Worker(val fileManager: FileManager) extends Actor {
+class ScalaCheckFileManager(val origmanager: FileManager) extends FileManager {
+  def testRootDir: Directory = origmanager.testRootDir
+  def testRootPath: String = origmanager.testRootPath
+
+  var JAVACMD: String = origmanager.JAVACMD
+  var JAVAC_CMD: String = origmanager.JAVAC_CMD
+
+  var CLASSPATH: String = join(origmanager.CLASSPATH, PathSettings.scalaCheck.path)
+  var LATEST_LIB: String = origmanager.LATEST_LIB
+}
+
+object Output {
+  def init {
+    System.setOut(outRedirect)
+    System.setErr(errRedirect)
+  }
+
+  import scala.util.DynamicVariable
+  private def out = java.lang.System.out
+  private def err = java.lang.System.err
+  private val redirVar = new DynamicVariable[Option[PrintStream]](None)
+
+  class Redirecter(stream: PrintStream) extends PrintStream(new OutputStream {
+    private def withStream(f: PrintStream => Unit) = {
+      if (redirVar.value != None) f(redirVar.value.get)
+      else f(stream)
+    }
+    def write(b: Int) = withStream(_.write(b))
+    override def write(b: Array[Byte]) = withStream(_.write(b))
+    override def write(b: Array[Byte], off: Int, len: Int) = withStream(_.write(b, off, len))
+    override def flush = withStream(_.flush)
+    override def close = withStream(_.close)
+  })
+
+  object outRedirect extends Redirecter(out)
+
+  object errRedirect extends Redirecter(err)
+
+  // this supports thread-safe nested output redirects
+  def withRedirected(newstream: PrintStream)(func: => Unit) {
+    // note down old redirect destination
+    // this may be None in which case outRedirect and errRedirect print to stdout and stderr
+    val oldred = redirVar.value
+
+    // set new redirecter
+    // this one will redirect both out and err to newstream
+    redirVar.value = Some(newstream)
+
+    try {
+      func
+    } finally {
+      // revert to old redirect
+      // this may be None, which makes outRedirect and errRedirect choose standard outputs again
+      redirVar.value = oldred
+    }
+  }
+}
+
+
+class Worker(val fileManager: FileManager, params: TestRunParams) extends Actor {
   import fileManager._
 
+  val scalaCheckFileManager = new ScalaCheckFileManager(fileManager)
   var reporter: ConsoleReporter = _
   val timer = new Timer
 
@@ -57,7 +117,7 @@ class Worker(val fileManager: FileManager) extends Actor {
   def act() {
     react {
       case RunTests(kind, files) =>
-        // NestUI.verbose("received "+files.length+" to test")
+        //NestUI.normal("received "+files.length+" to test")
         val master = sender
         runTests(kind, files) { results =>
           master ! Results(results, createdLogFiles, createdOutputDirs)
@@ -298,6 +358,13 @@ class Worker(val fileManager: FileManager) extends Actor {
   def isScala(f: File) = SFile(f) hasExtension "scala"
   def isJavaOrScala(f: File) = isJava(f) || isScala(f)
 
+  def outputLogFile(logFile: File) {
+    NestUI.normal("Log file '" + logFile + "': \n")
+    val lines = SFile(logFile).lines
+    for (lin <- lines) NestUI.normal(lin + "\n")
+  }
+
+
   /** Runs a list of tests.
    *
    * @param kind  The test kind (pos, neg, run, etc.)
@@ -305,6 +372,8 @@ class Worker(val fileManager: FileManager) extends Actor {
    */
   def runTests(kind: String, files: List[File])(topcont: ImmMap[String, Int] => Unit) {
     val compileMgr = new CompileManager(fileManager)
+    if (kind == "scalacheck") fileManager.CLASSPATH += File.pathSeparator + PathSettings.scalaCheck
+
     var errors = 0
     var succeeded = true
     var diff = ""
@@ -327,8 +396,7 @@ class Worker(val fileManager: FileManager) extends Actor {
      *     output directory as arguments.
      */
     def runInContext(file: File, kind: String, script: (File, File) => Unit): LogContext = {
-      // when option "--failed" is provided
-      // execute test only if log file is present
+      // When option "--failed" is provided, execute test only if log file is present
       // (which means it failed before)
       val logFile = createLogFile(file, kind)
       if (!fileManager.failed || logFile.canRead) {
@@ -361,6 +429,7 @@ class Worker(val fileManager: FileManager) extends Actor {
             val writer = new PrintWriter(new FileWriter(logFile), true)
             e.printStackTrace(writer)
             writer.close()
+            outputLogFile(logFile) // if running the test threw an exception, output log file
             succeeded = false
         }
 
@@ -407,7 +476,7 @@ class Worker(val fileManager: FileManager) extends Actor {
       }
     }
 
-    def runTestCommon(file: File, kind: String, expectFailure: Boolean)(onSuccess: (File, File) => Unit): LogContext =
+    def runTestCommon(file: File, kind: String, expectFailure: Boolean)(onSuccess: (File, File) => Unit, onFail: (File, File) => Unit = (logf, outd) => ()): LogContext =
       runInContext(file, kind, (logFile: File, outDir: File) => {
 
         if (file.isDirectory) {
@@ -425,6 +494,8 @@ class Worker(val fileManager: FileManager) extends Actor {
 
         if (succeeded)  // run test
           onSuccess(logFile, outDir)
+        else
+          onFail(logFile, outDir)
       })
 
     def runJvmTest(file: File, kind: String): LogContext =
@@ -448,29 +519,33 @@ class Worker(val fileManager: FileManager) extends Actor {
     def processSingleFile(file: File): LogContext = kind match {
       case "scalacheck" =>
         runTestCommon(file, kind, expectFailure = false)((logFile, outDir) => {
-          val consFM = new ConsoleFileManager
-          import consFM.{ latestCompFile, latestLibFile, latestPartestFile }
-
           NestUI.verbose("compilation of "+file+" succeeded\n")
 
-          val scalacheckURL = PathSettings.scalaCheck.toURL
           val outURL = outDir.getCanonicalFile.toURI.toURL
-          val classpath: List[URL] =
-            List(outURL, scalacheckURL, latestCompFile.toURI.toURL, latestLibFile.toURI.toURL, latestPartestFile.toURI.toURL).distinct
-
-          NestUI.debug("scalacheck urls")
-          classpath foreach (x => NestUI.debug(x.toString))
 
           val logWriter = new PrintStream(new FileOutputStream(logFile))
 
-          withOutputRedirected(logWriter) {
-            ObjectRunner.run(classpath, "Test", Nil)
+          Output.withRedirected(logWriter) {
+            // this classloader is test specific
+            // its parent contains library classes and others
+            val classloader = ScalaClassLoader.fromURLs(List(outURL), params.scalaCheckParentClassLoader)
+            classloader.run("Test", Nil)
           }
 
           NestUI.verbose(SFile(logFile).slurp())
           // obviously this must be improved upon
-          succeeded = SFile(logFile).lines() forall (_ contains " OK")
-      })
+          val lines = SFile(logFile).lines.filter(_.trim != "").toBuffer
+          succeeded = {
+            val failures = lines filter (_ startsWith "!")
+            //val passedok = lines filter (_ startsWith "+") forall (_ contains "OK") - OK may wrap!!
+            failures.isEmpty
+          }
+          if (!succeeded) {
+            NestUI.normal("ScalaCheck test failed. Output:\n")
+            for (lin <- lines) NestUI.normal(lin + "\n")
+          }
+          NestUI.verbose("test for '" + file + "' success: " + succeeded)
+        }, (logFile, outDir) => outputLogFile(logFile))
 
       case "pos" =>
         runTestCommon(file, kind, expectFailure = false)((_, _) => ())
@@ -610,7 +685,7 @@ class Worker(val fileManager: FileManager) extends Actor {
                 }
               }
 
-              withOutputRedirected(logWriter) {
+              Output.withRedirected(logWriter) {
                 loop()
                 testReader.close()
               }
@@ -723,7 +798,7 @@ class Worker(val fileManager: FileManager) extends Actor {
               }
             }
 
-            withOutputRedirected(logWriter) {
+            Output.withRedirected(logWriter) {
               loop(resCompile)
               resReader.close()
             }
@@ -1023,22 +1098,6 @@ class Worker(val fileManager: FileManager) extends Actor {
               fileCnt += 1
           }
       }
-    }
-  }
-
-  private def withOutputRedirected(out: PrintStream)(func: => Unit) {
-    val oldStdOut = System.out
-    val oldStdErr = System.err
-
-    try {
-      System.setOut(out)
-      System.setErr(out)
-      func
-      out.flush()
-      out.close()
-    } finally {
-      System.setOut(oldStdOut)
-      System.setErr(oldStdErr)
     }
   }
 

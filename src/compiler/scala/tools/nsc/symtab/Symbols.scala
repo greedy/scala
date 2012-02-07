@@ -7,14 +7,12 @@
 package scala.tools.nsc
 package symtab
 
+import scala.collection.{ mutable, immutable }
 import scala.collection.mutable.ListBuffer
-import scala.collection.immutable.Map
 import io.AbstractFile
-import util.{Position, NoPosition, BatchSourceFile}
+import util.{ Position, NoPosition, BatchSourceFile }
 import util.Statistics._
 import Flags._
-
-//todo: get rid of MONOMORPHIC flag
 
 trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
   import definitions._
@@ -27,8 +25,11 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
   /** Used for deciding in the IDE whether we can interrupt the compiler */
   protected var activeLocks = 0
 
+  /** Used for debugging only */
+  protected var lockedSyms = collection.immutable.Set[Symbol]()
+
   /** Used to keep track of the recursion depth on locked symbols */
-  private var recursionTable = Map.empty[Symbol, Int]
+  private var recursionTable = immutable.Map.empty[Symbol, Int]
 
   private var nextexid = 0
   private def freshExistentialName() = {
@@ -116,6 +117,9 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
       annots1
     }
 
+    def setSerializable(): Unit =
+      addAnnotation(AnnotationInfo(SerializableAttr.tpe, Nil, Nil))
+
     def setAnnotations(annots: List[AnnotationInfoBase]): this.type = {
       this.rawannots = annots
       this
@@ -136,24 +140,7 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
     def removeAnnotation(cls: Symbol): Unit =
       setAnnotations(annotations filterNot (_.atp.typeSymbol == cls))
 
-    /** set when symbol has a modifier of the form private[X], NoSymbol otherwise.
-     *  Here's some explanation how privateWithin gets combined with access flags:
-     *
-     * PRIVATE    means class private, as in Java.
-     * PROTECTED  means protected as in Java, except that access within
-     *            the same package is not automatically allowed.
-     * LOCAL      should only be set with PRIVATE or PROTECTED.
-     *            It means that access is restricted to be from the same object.
-     *
-     * Besides these, there's the privateWithin field in Symbols which gives a visibility barrier,
-     * where privateWithin == NoSymbol means no barrier. privateWithin is incompatible with
-     * PRIVATE and LOCAL. If it is combined with PROTECTED, the two are additive. I.e.
-     * the symbol is then accessible from within the privateWithin region as well
-     * as from all subclasses. Here's a tanslation of Java's accessibility modifiers:
-     * Java private:   PRIVATE flag set, privateWithin == NoSymbol
-     * Java package:   no flag set, privateWithin == enclosing package
-     * Java protected:  PROTECTED flag set, privateWithin == enclosing package
-     * Java public:   no flag set, privateWithin == NoSymbol
+    /** See comment in HasFlags for how privateWithin combines with flags.
      */
     private[this] var _privateWithin: Symbol = _
     def privateWithin = _privateWithin
@@ -405,14 +392,12 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
 
     final def isValueParameter = isTerm && hasFlag(PARAM)
     final def isLocalDummy = isTerm && nme.isLocalDummyName(name)
-    final def isLabel = isMethod && !hasFlag(ACCESSOR) && hasFlag(LABEL)
-    final def isInitializedToDefault = !isType && (getFlag(DEFAULTINIT | ACCESSOR) == (DEFAULTINIT | ACCESSOR))
+    final def isInitializedToDefault = !isType && hasAllFlags(DEFAULTINIT | ACCESSOR)
     final def isClassConstructor = isTerm && (name == nme.CONSTRUCTOR)
     final def isMixinConstructor = isTerm && (name == nme.MIXIN_CONSTRUCTOR)
-    final def isConstructor = isTerm && (name == nme.CONSTRUCTOR) || (name == nme.MIXIN_CONSTRUCTOR)
+    final def isConstructor = isTerm && nme.isConstructorName(name)
     final def isStaticModule = isModule && isStatic && !isMethod
     final def isThisSym = isTerm && owner.thisSym == this
-    //final def isMonomorphicType = isType && hasFlag(MONOMORPHIC)
     final def isError = hasFlag(IS_ERROR)
     final def isErroneous = isError || isInitialized && tpe.isErroneous
     override final def isTrait: Boolean = isClass && hasFlag(TRAIT | notDEFERRED)     // A virtual class becomes a trait (part of DEVIRTUALIZE)
@@ -434,6 +419,7 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
     final def isPackageObjectClass = isModuleClass && name.toTermName == nme.PACKAGEkw && owner.isPackageClass
     final def definedInPackage  = owner.isPackageClass || owner.isPackageObjectClass
     final def isPredefModule = isModule && name == nme.Predef && owner.isScalaPackageClass // not printed as a prefix
+    final def isJavaInterface = isJavaDefined && isTrait
     final def isScalaPackage = isPackage && name == nme.scala_ && owner.isRoot || // not printed as a prefix
                                isPackageObject && owner.isScalaPackageClass
     final def isScalaPackageClass: Boolean = isPackageClass && owner.isRoot && name == nme.scala_.toTypeName ||
@@ -452,6 +438,7 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
         }
       }
 
+    def isSerializable      = hasAnnotation(SerializableAttr)
     def isDeprecated        = hasAnnotation(DeprecatedAttr)
     def deprecationMessage  = getAnnotation(DeprecatedAttr) flatMap { _.stringArg(0) }
     // !!! when annotation arguments are not literal strings, but any sort of
@@ -498,7 +485,8 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
     def isVirtualTrait =
       hasFlag(DEFERRED) && isTrait
 
-    /** Is this symbol a public */
+    def isLiftedMethod = isMethod && hasFlag(LIFTED)
+    def isCaseClass    = isClass && isCase
 
     /** Does this symbol denote the primary constructor of its enclosing class? */
     final def isPrimaryConstructor =
@@ -510,8 +498,7 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
 
     /** Is this symbol a synthetic apply or unapply method in a companion object of a case class? */
     final def isCaseApplyOrUnapply =
-      isMethod && hasFlag(CASE) && hasFlag(SYNTHETIC)
-
+      isMethod && isCase && isSynthetic
 
     /** Is this symbol a trait which needs an implementation class? */
     final def needsImplClass: Boolean =
@@ -524,12 +511,18 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
       ((hasFlag(notPRIVATE | LIFTED) && !hasFlag(ACCESSOR | SUPERACCESSOR | MODULE) || isConstructor) ||
        (hasFlag(LIFTED) && isModule && isMethod))
 
-    /** Is this symbol a module variable ? */
-    final def isModuleVar: Boolean = isVariable && hasFlag(MODULEVAR)
+    /** Is this symbol a module variable ?
+     *  MUTABLE is needed to partition overloaded flags MODULEVAR and SYNTHETICMETH.
+     */
+    final def isModuleVar: Boolean = hasAllFlags(MODULEVAR | MUTABLE)
 
     /** Is this symbol static (i.e. with no outer instance)? */
     final def isStatic: Boolean =
       hasFlag(STATIC) || isRoot || owner.isStaticOwner
+
+    /** Is this symbol a static constructor? */
+    final def isStaticConstructor: Boolean =
+      isStaticMember && isClassConstructor
 
     /** Is this symbol a static member of its class? (i.e. needs to be implemented as a Java static?) */
     final def isStaticMember: Boolean =
@@ -636,11 +629,15 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
       def next = { val r = current; current = current.owner; r }
     }
 
-    // same as ownerChain contains sym, but more efficient
-    def hasTransOwner(sym: Symbol) = {
+    /** same as ownerChain contains sym, but more efficient, and
+     *  with a twist for refinement classes. A refinement class
+     *  has a transowner X if an of its parents has transowner X.
+     */
+    def hasTransOwner(sym: Symbol): Boolean = {
       var o = this
       while ((o ne sym) && (o ne NoSymbol)) o = o.owner
-      o eq sym
+      (o eq sym) ||
+      isRefinementClass && (info.parents exists (_.typeSymbol.hasTransOwner(sym)))
     }
 
     def name: Name = rawname
@@ -674,11 +671,11 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
     final def resetFlags { rawflags = rawflags & TopLevelCreationFlags }
 
     /** The class or term up to which this symbol is accessible,
-     *  or RootClass if it is public
+     *  or RootClass if it is public.
      */
     def accessBoundary(base: Symbol): Symbol = {
-      if (hasFlag(PRIVATE) || owner.isTerm) owner
-      else if (privateWithin != NoSymbol && !phase.erasedTypes) privateWithin
+      if (hasFlag(PRIVATE) || isLocal) owner
+      else if (hasAccessBoundary && !phase.erasedTypes) privateWithin
       else if (hasFlag(PROTECTED)) base
       else RootClass
     }
@@ -711,6 +708,7 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
      *  ensuring that symbol is initialized (i.e. type is completed).
      */
     override def info: Type = try {
+      // Eugene: insert same thread assertion here
       var cnt = 0
       while (validTo == NoPeriod) {
         //if (settings.debug.value) System.out.println("completing " + this);//DEBUG
@@ -718,6 +716,7 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
         assert(infos.prev eq null, this.name)
         val tp = infos.info
         //if (settings.debug.value) System.out.println("completing " + this.rawname + tp.getClass());//debug
+
         if ((rawflags & LOCKED) != 0L) { // rolled out once for performance
           lock {
             setInfo(ErrorType)
@@ -731,9 +730,8 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
         try {
           phase = phaseOf(infos.validFrom)
           tp.complete(this)
-          // if (settings.debug.value && runId(validTo) == currentRunId) System.out.println("completed " + this/* + ":" + info*/);//DEBUG
-          unlock()
         } finally {
+          unlock()
           phase = current
         }
         cnt += 1
@@ -936,6 +934,7 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
     /** The value parameter sections of this symbol.
      */
     def paramss: List[List[Symbol]] = info.paramss
+    def hasParamWhich(cond: Symbol => Boolean) = paramss exists (_ exists cond)
 
     /** The least proper supertype of a class; includes all parent types
      *  and refinement where needed. You need to compute that in a situation like this:
@@ -1109,7 +1108,7 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
      *  See ticket #1373.
      */
     final def caseFieldAccessors: List[Symbol] = {
-      val allWithFlag = info.decls.toList filter (_ hasFlag CASEACCESSOR)
+      val allWithFlag = info.decls.toList filter (_.isCaseAccessor)
       val (accessors, fields) = allWithFlag partition (_.isMethod)
 
       def findAccessor(field: Symbol): Symbol = {
@@ -1134,7 +1133,7 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
     }
 
     final def constrParamAccessors: List[Symbol] =
-      info.decls.toList filter (sym => !sym.isMethod && sym.hasFlag(PARAMACCESSOR))
+      info.decls.toList filter (sym => !sym.isMethod && sym.isParamAccessor)
 
     /** The symbol accessed by this accessor (getter or setter) function.
      */
@@ -1253,6 +1252,8 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
 
     /** The class with the same name in the same package as this module or
      *  case class factory.
+     *  Note: does not work for classes owned by methods, see
+     *  Namers.companionClassOf
      */
     final def companionClass: Symbol = {
       if (this != NoSymbol)
@@ -1262,13 +1263,18 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
 
     /** A helper method that factors the common code used the discover a companion module of a class. If a companion
       * module exists, its symbol is returned, otherwise, `NoSymbol` is returned. The method assumes that `this`
-      * symbol has already been checked to be a class (using `isClass`). */
-    private final def companionModule0: Symbol =
+      * symbol has already been checked to be a class (using `isClass`).
+      * After refchecks nested objects get transformed to lazy vals so we filter on LAZY flag*/
+    private final def companionModule0: Symbol = {
+      val f = if (phase.refChecked && isNestedClass && !forMSIL) LAZY else MODULE
       flatOwnerInfo.decl(name.toTermName).suchThat(
-          sym => (sym hasFlag MODULE) && (sym isCoDefinedWith this))
+        sym => (sym hasFlag f) && (sym isCoDefinedWith this))
+    }
 
     /** The module or case class factory with the same name in the same
      *  package as this class.
+     *  Note: does not work for modules owned by methods, see
+     *  Namers.companionModuleOf
      */
     final def companionModule: Symbol =
       if (this.isClass && !this.isAnonymousClass && !this.isRefinementClass)
@@ -1277,6 +1283,8 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
 
     /** For a module its linked class, for a class its linked module or case
      *  factory otherwise.
+     *  Note: does not work for modules owned by methods, see
+     *  Namers.companionModuleOf / Namers.companionClassOf
      */
     final def companionSymbol: Symbol =
       if (isTerm) companionClass
@@ -1471,10 +1479,13 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
     /** If this is a sealed class, its known direct subclasses. Otherwise Set.empty */
     def children: List[Symbol] = Nil
 
-    /** Recursively finds all sealed descendants and returns a sorted list. */
+    /** Recursively finds all sealed descendants and returns a sorted list.
+     *  Includes this symbol unless it is abstract, but as value classes are
+     *  marked abstract so they can't be instantiated, they are special cased.
+     */
     def sealedDescendants: List[Symbol] = {
       val kids = children flatMap (_.sealedDescendants)
-      val all = if (this hasFlag ABSTRACT) kids else this :: kids
+      val all = if (isAbstractClass && !isValueClass(this)) kids else this :: kids
 
       all.distinct sortBy (_.sealedSortName)
     }
@@ -1496,15 +1507,15 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
 
     /** String representation of symbol's definition key word */
     final def keyString: String =
-      if (isTrait && hasFlag(JAVA)) "interface"
+      if (isJavaInterface) "interface"
       else if (isTrait) "trait"
       else if (isClass) "class"
-      else if (isType && !hasFlag(PARAM)) "type"
+      else if (isType && !isParameter) "type"
       else if (isVariable) "var"
       else if (isPackage) "package"
       else if (isModule) "object"
       else if (isSourceMethod) "def"
-      else if (isTerm && (!hasFlag(PARAM) || hasFlag(PARAMACCESSOR))) "val"
+      else if (isTerm && (!isParameter || hasFlag(PARAMACCESSOR))) "val"
       else ""
 
     /** String representation of symbol's kind */
@@ -1518,7 +1529,7 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
       else if (isTrait) "trait"
       else if (isClass) "class"
       else if (isType) "type"
-      else if (isTerm && hasFlag(LAZY)) "lazy value"
+      else if (isTerm && isLazy) "lazy value"
       else if (isVariable) "variable"
       else if (isPackage) "package"
       else if (isModule) "object"
@@ -1609,6 +1620,11 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
 
     def infosString = infos.toString()
 
+    def hasFlagsToString(mask: Long): String = flagsToString(
+      flags & mask,
+      if (hasAccessBoundary) privateWithin.toString else ""
+    )
+
     /** String representation of symbol's variance */
     def varianceString: String =
       if (variance == 1) "+"
@@ -1617,10 +1633,12 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
 
     /** String representation of symbol's definition */
     def defString: String = {
-      val f = if (settings.debug.value) flags
-              else if (owner.isRefinementClass) flags & ExplicitFlags & ~OVERRIDE
-              else flags & ExplicitFlags
-      compose(List(flagsToString(f), keyString, varianceString + nameString +
+      val mask =
+        if (settings.debug.value) -1L
+        else if (owner.isRefinementClass) ExplicitFlags & ~OVERRIDE
+        else ExplicitFlags
+
+      compose(List(hasFlagsToString(mask), keyString, varianceString + nameString +
                    (if (hasRawInfo) infoString(rawInfo) else "<_>")))
     }
 
@@ -1646,7 +1664,7 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
 
     privateWithin = NoSymbol
 
-    protected var referenced: Symbol = NoSymbol
+    var referenced: Symbol = NoSymbol
 
     def cloneSymbolImpl(owner: Symbol): Symbol =
       new TermSymbol(owner, pos, name).copyAttrsFrom(this)
@@ -1840,12 +1858,6 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
     override def info_=(tp: Type) {
       tpePeriod = NoPeriod
       tyconCache = null
-      if (tp.isComplete)
-        tp match {
-          case PolyType(_, _) => resetFlag(MONOMORPHIC)
-          case NoType | AnnotatedType(_, _, _) => ;
-          case _ => setFlag(MONOMORPHIC)
-        }
       super.info_=(tp)
     }
 
@@ -2055,7 +2067,6 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
     override def accessBoundary(base: Symbol): Symbol = RootClass
     def cloneSymbolImpl(owner: Symbol): Symbol = abort()
   }
-
 
   def cloneSymbols(syms: List[Symbol]): List[Symbol] = {
     val syms1 = syms map (_.cloneSymbol)

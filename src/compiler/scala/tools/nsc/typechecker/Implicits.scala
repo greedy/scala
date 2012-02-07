@@ -234,11 +234,14 @@ self: Analyzer =>
     private def tparamsToWildcards(tp: Type, tparams: List[Symbol]) =
       tp.instantiateTypeParams(tparams, tparams map (t => WildcardType))
 
-    /* Map a polytype to one in which all type parameters are replaced by wildcards.
+    /* Map a polytype to one in which all type parameters and argument-dependent types are replaced by wildcards.
+     * Consider `implicit def b(implicit x: A): x.T = error("")`. We need to approximate DebruijnIndex types
+     * when checking whether `b` is a valid implicit, as we haven't even searched a value for the implicit arg `x`,
+     * so we have to approximate (otherwise it is excluded a priori).
      */
     private def depoly(tp: Type): Type = tp match {
-      case PolyType(tparams, restpe) => tparamsToWildcards(restpe, tparams)
-      case _ => tp
+      case PolyType(tparams, restpe) => tparamsToWildcards(ApproximateDependentMap(restpe), tparams)
+      case _ => ApproximateDependentMap(tp)
     }
 
     /** Does type `dtor` dominate type `dted`?
@@ -344,14 +347,14 @@ self: Analyzer =>
      *  @pre           <code>info.tpe</code> does not contain an error
      */
     private def typedImplicit(info: ImplicitInfo): SearchResult =
-       context.openImplicits find (dominates(pt, _)) match {
+      (context.openImplicits find { case (tp, sym) => sym == tree.symbol && dominates(pt, tp)}) match {
          case Some(pending) =>
            // println("Pending implicit "+pending+" dominates "+pt+"/"+undetParams) //@MDEBUG
            throw DivergentImplicit
            SearchFailure
          case None =>
            try {
-             context.openImplicits = pt :: context.openImplicits
+             context.openImplicits = (pt, tree.symbol) :: context.openImplicits
              // println("  "*context.openImplicits.length+"typed implicit "+info+" for "+pt) //@MDEBUG
              typedImplicit0(info)
            } catch {
@@ -786,7 +789,7 @@ self: Analyzer =>
       * reflect.Manifest for type 'tp'. An EmptyTree is returned if
       * no manifest is found. todo: make this instantiate take type params as well?
       */
-    private def manifestOfType(tp: Type, full: Boolean): Tree = {
+    private def manifestOfType(tp: Type, full: Boolean): SearchResult = {
 
       /** Creates a tree that calls the factory method called constructor in object reflect.Manifest */
       def manifestFactoryCall(constructor: String, tparg: Type, args: Tree*): Tree =
@@ -811,8 +814,10 @@ self: Analyzer =>
         inferImplicit(tree, appliedType(manifestClass.typeConstructor, List(tp)), true, false, context).tree
 
       def findSubManifest(tp: Type) = findManifest(tp, if (full) FullManifestClass else OptManifestClass)
+      def mot(tp0: Type)(implicit from: List[Symbol] = List(), to: List[Type] = List()): SearchResult = {
+        implicit def wrapResult(tree: Tree): SearchResult =
+          if (tree == EmptyTree) SearchFailure else new SearchResult(tree, new TreeTypeSubstituter(from, to))
 
-      def mot(tp0: Type): Tree = {
         val tp1 = tp0.normalize
         tp1 match {
           case ThisType(_) | SingleType(_, _) if !(tp1 exists {tp => tp.typeSymbol.isExistentiallyBound}) => // can't generate a reference to a value that's abstracted over by an existential
@@ -846,7 +851,7 @@ self: Analyzer =>
               manifestFactoryCall("wildcardType", tp,
                                   findManifest(tp.bounds.lo), findManifest(tp.bounds.hi))
             } else if(undetParams contains sym) { // looking for a manifest of a type parameter that hasn't been inferred by now, can't do much, but let's not fail
-              mot(NothingClass.tpe)               // TODO: should we include the mapping from sym -> NothingClass.tpe in the SearchResult? (it'll get instantiated to nothing anyway, I think)
+              mot(NothingClass.tpe)(sym :: from, NothingClass.tpe :: to) // #3859: need to include the mapping from sym -> NothingClass.tpe in the SearchResult
             } else {
               EmptyTree  // a manifest should have been found by normal searchImplicit
             }
@@ -872,17 +877,16 @@ self: Analyzer =>
      */
     private def implicitManifestOrOfExpectedType(pt: Type): SearchResult = pt.dealias match {
       case TypeRef(_, FullManifestClass, List(arg)) =>
-        wrapResult(manifestOfType(arg, true))
+        manifestOfType(arg, true)
       case TypeRef(_, PartialManifestClass, List(arg)) =>
-        wrapResult(manifestOfType(arg, false))
+        manifestOfType(arg, false)
       case TypeRef(_, OptManifestClass, List(arg)) =>
-        val itree = manifestOfType(arg, false)
-        wrapResult(if (itree == EmptyTree) gen.mkAttributedRef(NoManifest)
-                   else itree)
+        val res = manifestOfType(arg, false)
+        if (res == SearchFailure) wrapResult(gen.mkAttributedRef(NoManifest)) else res
       case TypeRef(_, tsym, _) if (tsym.isAbstractType) =>
         implicitManifestOrOfExpectedType(pt.bounds.lo)
       case _ =>
-        searchImplicit(implicitsOfExpectedType, false)
+        searchImplicit(implicitsOfExpectedType, false) // shouldn't we pass `pt` to `implicitsOfExpectedType`, or is the recursive case for an abstract type really only meant for manifests?
     }
 
     /** The result of the implicit search:
@@ -946,7 +950,7 @@ self: Analyzer =>
       // http://dcsobral.blogspot.com/2010/01/string-interpolation-in-scala-with.html
       private def interpolate(text: String, vars: Map[String, String]) = { import scala.util.matching.Regex
         """\$\{([^}]+)\}""".r.replaceAllIn(text, (_: Regex.Match) match {
-          case Regex.Groups(v) => vars.getOrElse(v, "")
+          case Regex.Groups(v) => java.util.regex.Matcher.quoteReplacement(vars.getOrElse(v, "")) // #3915: need to quote replacement string since it may include $'s (such as the interpreter's $iw)
         })}
 
       private lazy val typeParamNames: List[String] = sym.typeParams.map(_.decodedName)

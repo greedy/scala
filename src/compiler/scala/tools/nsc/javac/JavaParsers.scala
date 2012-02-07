@@ -22,7 +22,7 @@ trait JavaParsers extends JavaScanners {
 
   class JavaUnitParser(val unit: global.CompilationUnit) extends JavaParser {
     val in = new JavaUnitScanner(unit)
-    def freshName(pos : Position, prefix : String) = unit.fresh.newName(pos, prefix)
+    def freshName(prefix : String) = unit.fresh.newName(prefix)
     implicit def i2p(offset : Int) : Position = new OffsetPosition(unit.source, offset)
     def warning(pos : Int, msg : String) : Unit = unit.warning(pos, msg)
     def syntaxError(pos: Int, msg: String) : Unit = unit.error(pos, msg)
@@ -32,7 +32,7 @@ trait JavaParsers extends JavaScanners {
 
     val in: JavaScanner
     protected def posToReport: Int = in.currentPos
-    protected def freshName(pos : Position, prefix : String): Name
+    protected def freshName(prefix : String): Name
     protected implicit def i2p(offset : Int) : Position
     private implicit def p2i(pos : Position): Int = if (pos.isDefined) pos.point else -1
 
@@ -226,7 +226,7 @@ trait JavaParsers extends JavaScanners {
         Ident(name.toTypeName).setPos(tree.pos)
       case Select(qual, name) =>
         Select(qual, name.toTypeName).setPos(tree.pos)
-      case AppliedTypeTree(_, _) | ExistentialTypeTree(_, _) =>
+      case AppliedTypeTree(_, _) | ExistentialTypeTree(_, _) | SelectFromTypeTree(_, _) =>
         tree
       case _ =>
         syntaxError(tree.pos, "identifier expected", false)
@@ -272,9 +272,18 @@ trait JavaParsers extends JavaScanners {
         if (in.token == FINAL) in.nextToken
         if (in.token == IDENTIFIER) {
           var t = typeArgs(atPos(in.currentPos)(Ident(ident())))
+          // typeSelect generates Select nodes is the lhs is an Ident or Select,
+          // SelectFromTypeTree otherwise. See #3567.
+          // Select nodes can be later
+          // converted in the typechecker to SelectFromTypeTree if the class
+          // turns out to be an instance ionner class instead of a static inner class.
+          def typeSelect(t: Tree, name: Name) = t match {
+            case Ident(_) | Select(_, _) => Select(t, name)
+            case _ => SelectFromTypeTree(t, name)
+          }
           while (in.token == DOT) {
             in.nextToken
-            t = typeArgs(atPos(in.currentPos)(Select(t, ident())))
+            t = typeArgs(atPos(in.currentPos)(typeSelect(t, ident())))
           }
           convertToTypeId(t)
         } else {
@@ -378,8 +387,11 @@ trait JavaParsers extends JavaScanners {
     def modifiers(inInterface: Boolean): Modifiers = {
       var flags: Long = Flags.JAVA
       // assumed true unless we see public/private/protected - see bug #1240
-      var privateWithin: Name =
-        if (inInterface) nme.EMPTY.toTypeName else thisPackageName
+      // Todo: look at pos/t1176, #1240, #1840, #1842, see what current access issues are.
+      var isPackageAccess = true
+      var annots: List[Tree] = Nil
+      def addAnnot(sym: Symbol) =
+        annots :+= New(TypeTree(sym.tpe), List(Nil))
 
       while (true) {
         in.token match {
@@ -387,15 +399,14 @@ trait JavaParsers extends JavaScanners {
             in.nextToken
             annotation()
           case PUBLIC =>
-            privateWithin = nme.EMPTY.toTypeName
+            isPackageAccess = false
             in.nextToken
           case PROTECTED =>
             flags |= Flags.PROTECTED
-            //privateWithin = thisPackageName
             in.nextToken
           case PRIVATE =>
+            isPackageAccess = false
             flags |= Flags.PRIVATE
-            privateWithin = nme.EMPTY.toTypeName
             in.nextToken
           case STATIC =>
             flags |= Flags.STATIC
@@ -406,26 +417,23 @@ trait JavaParsers extends JavaScanners {
           case FINAL =>
             flags |= Flags.FINAL
             in.nextToken
-          case NATIVE | SYNCHRONIZED | TRANSIENT | VOLATILE | STRICTFP =>
+          case NATIVE =>
+            addAnnot(NativeAttr)
+            in.nextToken
+          case TRANSIENT =>
+            addAnnot(TransientAttr)
+            in.nextToken
+          case VOLATILE =>
+            addAnnot(VolatileAttr)
+            in.nextToken
+          case SYNCHRONIZED | STRICTFP =>
             in.nextToken
           case _ =>
-            // XXX both these checks are definitely necessary, which would
-            // seem to indicate the empty package situation needs review
-            // def isEmptyPkg() =
-            //   privateWithin == nme.EMPTY.toTypeName ||
-            //   privateWithin == nme.EMPTY_PACKAGE_NAME_tn
-            // XXX I think this test should just be "if (defaultAccess)"
-            // but then many cases like pos/t1176 fail because scala code
-            // with no package cannot access java code with no package.
-            // if (defaultAccess && !isEmptyPkg)
-            //   flags |= Flags.PROTECTED    // package private
+            val privateWithin: Name =
+              if (isPackageAccess && !inInterface) thisPackageName
+              else nme.EMPTY.toTypeName
 
-            // my every attempt so far has left some combination of
-            // #1240, #1840, #1842, or other java/scala mixes failing.
-            // Reverting to original code, which means #1240 won't
-            // work but other variations should.
-
-            return Modifiers(flags, privateWithin)
+            return Modifiers(flags, privateWithin) withAnnotations annots
         }
       }
       abort("should not be here")

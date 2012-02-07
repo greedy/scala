@@ -31,12 +31,8 @@ abstract class CleanUp extends Transform with ast.TreeDSL {
 
     private var localTyper: analyzer.Typer = null
 
-    private lazy val serializableAnnotation =
-      AnnotationInfo(SerializableAttr.tpe, Nil, Nil)
-    private lazy val serialVersionUIDAnnotation = {
-      val attr = definitions.getClass("scala.SerialVersionUID")
-      AnnotationInfo(attr.tpe, List(Literal(Constant(0))), List())
-    }
+    private lazy val serialVersionUIDAnnotation =
+      AnnotationInfo(SerialVersionUIDAttr.tpe, List(Literal(Constant(0))), List())
 
     private object MethodDispatchType extends scala.Enumeration {
       val NO_CACHE, MONO_CACHE, POLY_CACHE = Value
@@ -50,9 +46,6 @@ abstract class CleanUp extends Transform with ast.TreeDSL {
 
     private def typedWithPos(pos: Position)(tree: Tree) =
       localTyper typed { atPos(pos)(tree) }
-
-    override def transformUnit(unit: CompilationUnit) =
-      unit.body = transform(unit.body)
 
     /** A value class is defined to be only Java-compatible values: unit is
       * not part of it, as opposed to isValueClass in definitions. scala.Int is
@@ -111,7 +104,7 @@ abstract class CleanUp extends Transform with ast.TreeDSL {
 
         def addStaticVariableToClass(forName: String, forType: Type, forInit: Tree, isFinal: Boolean): Symbol = {
           val varSym = currentClass.newVariable(ad.pos, mkName(forName))
-            .setFlag(PRIVATE | STATIC | MUTABLE | SYNTHETIC)
+            .setFlag(PRIVATE | STATIC | SYNTHETIC)
             .setInfo(forType)
           if (isFinal) varSym setFlag FINAL else varSym addAnnotation AnnotationInfo(VolatileAttr.tpe, Nil, Nil)
           currentClass.info.decls enter varSym
@@ -199,7 +192,7 @@ abstract class CleanUp extends Transform with ast.TreeDSL {
               def getMethodSym = ClassClass.tpe member nme.getMethod_
 
               def isCacheEmpty(receiver: Symbol): Tree =
-                reflClassCacheSym.IS_NULL() OR (reflClassCacheSym.GET() ANY_NE REF(receiver))
+                reflClassCacheSym.IS_NULL() OR (reflClassCacheSym.GET() OBJ_NE REF(receiver))
 
               addStaticMethodToClass("reflMethod$Method", List(ClassClass.tpe), MethodClass.tpe) {
                 case Pair(reflMethodSym, List(forReceiverSym)) =>
@@ -249,7 +242,7 @@ abstract class CleanUp extends Transform with ast.TreeDSL {
                   val methodSym = reflMethodSym.newVariable(ad.pos, mkTerm("method")) setInfo MethodClass.tpe
 
                   BLOCK(
-                    IF (getPolyCache ANY_EQ NULL) THEN (REF(reflPolyCacheSym) === mkNewPolyCache) ENDIF,
+                    IF (getPolyCache OBJ_EQ NULL) THEN (REF(reflPolyCacheSym) === mkNewPolyCache) ENDIF,
                     VAL(methodSym) === ((getPolyCache DOT methodCache_find)(REF(forReceiverSym))) ,
                     IF (REF(methodSym) OBJ_!= NULL) .
                       THEN (Return(REF(methodSym)))
@@ -505,8 +498,10 @@ abstract class CleanUp extends Transform with ast.TreeDSL {
                   )
               case _ => ""
             }
-            Console.printf("""Dynamically application '%s.%s(%s)' %s - resulting code: '%s'""",
-                List(qual, ad.symbol.name, paramsToString(params), mstr, t) map (_.toString) : _*
+            log(
+              """Dynamically application '%s.%s(%s)' %s - resulting code: '%s'""".format(
+                qual, ad.symbol.name, paramsToString(params), mstr, t
+              )
             )
           }
 
@@ -558,8 +553,7 @@ abstract class CleanUp extends Transform with ast.TreeDSL {
       case theTry @ Try(block, catches, finalizer)
         if theTry.tpe.typeSymbol != definitions.UnitClass && theTry.tpe.typeSymbol != definitions.NothingClass =>
         val tpe = theTry.tpe.widen
-        val tempVar = currentOwner.newValue(theTry.pos, unit.fresh.newName(theTry.pos, "exceptionResult"))
-          .setInfo(tpe).setFlag(Flags.MUTABLE)
+        val tempVar = currentOwner.newVariable(theTry.pos, unit.fresh.newName(theTry.pos, nme.EXCEPTION_RESULT_PREFIX)).setInfo(tpe)
         def assignBlock(rhs: Tree) = super.transform(BLOCK(Ident(tempVar) === transform(rhs)))
 
         val newBlock    = assignBlock(block)
@@ -567,15 +561,16 @@ abstract class CleanUp extends Transform with ast.TreeDSL {
           (CASE(super.transform(pattern)) IF (super.transform(guard))) ==> assignBlock(body)
         val newTry      = Try(newBlock, newCatches, super.transform(finalizer))
 
-        localTyper typed { BLOCK(VAL(tempVar) === EmptyTree, newTry, Ident(tempVar)) }
+        typedWithPos(theTry.pos)(BLOCK(VAL(tempVar) === EmptyTree, newTry, Ident(tempVar)))
 
       /* Adds @serializable annotation to anonymous function classes */
       case cdef @ ClassDef(mods, name, tparams, impl) =>
+        /** XXX This check is overly specific and bound to break if it hasn't already. */
         if (settings.target.value == "jvm-1.5") {
           val sym = cdef.symbol
           // is this an anonymous function class?
-          if (sym.isAnonymousFunction && !sym.hasAnnotation(SerializableAttr)) {
-            sym addAnnotation serializableAnnotation
+          if (sym.isAnonymousFunction && !sym.isSerializable) {
+            sym.setSerializable()
             sym addAnnotation serialVersionUIDAnnotation
           }
         }

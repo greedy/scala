@@ -13,12 +13,11 @@ import java.net.{ MalformedURLException, URL }
 import java.lang.reflect
 import reflect.InvocationTargetException
 
+import scala.collection.{ mutable, immutable }
 import scala.PartialFunction.{ cond, condOpt }
 import scala.tools.util.PathResolver
 import scala.reflect.Manifest
-import scala.collection.mutable
 import scala.collection.mutable.{ ListBuffer, HashSet, HashMap, ArrayBuffer }
-import scala.collection.immutable.Set
 import scala.tools.nsc.util.ScalaClassLoader
 import ScalaClassLoader.URLClassLoader
 import scala.util.control.Exception.{ Catcher, catching, ultimately, unwrapping }
@@ -229,7 +228,9 @@ class Interpreter(val settings: Settings, out: PrintWriter) {
   private def methodByName(c: Class[_], name: String): reflect.Method =
     c.getMethod(name, classOf[Object])
 
-  protected def parentClassLoader: ClassLoader = this.getClass.getClassLoader()
+  protected def parentClassLoader: ClassLoader =
+    settings.explicitParentLoader.getOrElse( this.getClass.getClassLoader() )
+
   def getInterpreterClassLoader() = classLoader
 
   // Set the current Java "context" class loader to this interpreter's class loader
@@ -685,6 +686,7 @@ class Interpreter(val settings: Settings, out: PrintWriter) {
   private class GenericHandler(member: Tree) extends MemberHandler(member)
 
   private class ValHandler(member: ValDef) extends MemberHandler(member) {
+    val maxStringElements = 1000  // no need to mkString billions of elements
     lazy val ValDef(mods, vname, _, _) = member
     lazy val prettyName = NameTransformer.decode(vname)
     lazy val isLazy = mods hasFlag Flags.LAZY
@@ -696,7 +698,7 @@ class Interpreter(val settings: Settings, out: PrintWriter) {
       val isInternal = isGeneratedVarName(vname) && req.typeOfEnc(vname) == "Unit"
       if (!mods.isPublic || isInternal) return
 
-      lazy val extractor = "scala.runtime.ScalaRunTime.stringOf(%s)".format(req fullPath vname)
+      lazy val extractor = "scala.runtime.ScalaRunTime.stringOf(%s, %s)".format(req fullPath vname, maxStringElements)
 
       // if this is a lazy val we avoid evaluating it here
       val resultString = if (isLazy) codegenln(false, "<lazy>") else extractor
@@ -772,8 +774,6 @@ class Interpreter(val settings: Settings, out: PrintWriter) {
     }
 
     private def selectorWild    = selectors filter (_.name == USCOREkw)   // wildcard imports, e.g. import foo._
-    private def selectorMasked  = selectors filter (_.rename == USCOREkw) // masking imports, e.g. import foo.{ bar => _ }
-    private def selectorNames   = selectors map (_.name)
     private def selectorRenames = selectors map (_.rename) filterNot (_ == null)
 
     /** Whether this import includes a wildcard import */
@@ -1266,15 +1266,16 @@ object Interpreter {
       }
     }
   }
-  def breakIf(assertion: => Boolean, args: DebugParam[_]*): Unit =
-    if (assertion) break(args.toList)
+  // provide the enclosing type T
+  //  in order to set up the interpreter's classpath and parent class loader properly
+  def breakIf[T: Manifest](assertion: => Boolean, args: DebugParam[_]*): Unit =
+    if (assertion) break[T](args.toList)
 
   // start a repl, binding supplied args
-  def break(args: List[DebugParam[_]]): Unit = {
+  def break[T: Manifest](args: List[DebugParam[_]]): Unit = {
     val intLoop = new InterpreterLoop
     intLoop.settings = new Settings(Console.println)
-    // XXX come back to the dot handling
-    intLoop.settings.classpath.value = "."
+    intLoop.settings.embeddedDefaults[T]
     intLoop.createInterpreter
     intLoop.in = InteractiveReader.createDefault(intLoop.interpreter)
 

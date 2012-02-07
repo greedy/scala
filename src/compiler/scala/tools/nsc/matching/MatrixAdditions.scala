@@ -21,11 +21,14 @@ trait MatrixAdditions extends ast.TreeDSL
   import CODE._
   import Debug._
   import treeInfo.{ IsTrue, IsFalse }
+  import definitions.{ isValueClass }
 
   /** The Squeezer, responsible for all the squeezing.
    */
   private[matching] trait Squeezer {
     self: MatrixContext =>
+
+    private val settings_squeeze = settings.Xsqueeze.value == "on"
 
     def squeezedBlockPVs(pvs: List[PatternVar], exp: Tree): Tree =
       squeezedBlock(pvs map (_.valDef), exp)
@@ -124,18 +127,8 @@ trait MatrixAdditions extends ast.TreeDSL
           })
         }
       }
-      object resetTraverser extends Traverser {
-        import Flags._
-        def reset(vd: ValDef) =
-          if (vd.symbol hasFlag SYNTHETIC) vd.symbol resetFlag (TRANS_FLAG|MUTABLE)
 
-        override def traverse(x: Tree): Unit = x match {
-          case vd: ValDef => reset(vd)
-          case _          => super.traverse(x)
-        }
-      }
-
-      returning(lxtt transform tree)(resetTraverser traverse _)
+      returning(lxtt transform tree)(_ => clearSyntheticSyms())
     }
   }
 
@@ -155,32 +148,11 @@ trait MatrixAdditions extends ast.TreeDSL
       import Flags.{ MUTABLE, ABSTRACT, SEALED, TRANS_FLAG }
 
       private case class Combo(index: Int, sym: Symbol) {
+        val isBaseClass = sym.tpe.baseClasses.toSet
+
         // is this combination covered by the given pattern?
         def isCovered(p: Pattern) = {
-          def cmpSymbols(t1: Type, t2: Type)  = t1.typeSymbol eq t2.typeSymbol
-          def coversSym = {
-            val tpe = decodedEqualsType(p.tpe)
-            lazy val lmoc = sym.companionModule
-            val symtpe =
-              if ((sym hasFlag Flags.MODULE) && (lmoc ne NoSymbol))
-                singleType(sym.tpe.prefix, lmoc)   // e.g. None, Nil
-              else sym.tpe
-
-            /** Note to Martin should you come through this way: this
-             *  logic looks way overcomplicated for the intention, but a little
-             *  experimentation showed that at least most of it is serving
-             *  some necessary purpose.  It doesn't seem like much more than
-             *  "sym.tpe matchesPattern tpe" ought to be necessary though.
-             *
-             *  For the time being I tacked the matchesPattern test onto the
-             *  end to address #3097.
-             */
-            (tpe.typeSymbol == sym) ||
-            (symtpe <:< tpe) ||
-            (symtpe.parents exists (x => cmpSymbols(x, tpe))) || // e.g. Some[Int] <: Option[&b]
-            ((tpe.prefix memberType sym) <:< tpe) ||  // outer, see combinator.lexical.Scanner
-            (symtpe matchesPattern tpe)
-          }
+          def coversSym = isBaseClass(decodedEqualsType(p.tpe).typeSymbol)
 
           cond(p.tree) {
             case _: UnApply | _: ArrayValue => true
@@ -193,16 +165,24 @@ trait MatrixAdditions extends ast.TreeDSL
       private def rowCoversCombo(row: Row, combos: List[Combo]) =
         row.guard.isEmpty && (combos forall (c => c isCovered row.pats(c.index)))
 
-      private def requiresExhaustive(s: Symbol) =
-         (s hasFlag MUTABLE) &&                 // indicates that have not yet checked exhaustivity
-        !(s hasFlag TRANS_FLAG) &&              // indicates @unchecked
-         (s.tpe.typeSymbol.isSealed) &&
-         { s resetFlag MUTABLE ; true }         // side effects MUTABLE flag
+      private def requiresExhaustive(sym: Symbol) = {
+         (sym.isMutable) &&                 // indicates that have not yet checked exhaustivity
+        !(sym hasFlag TRANS_FLAG) &&        // indicates @unchecked
+         (sym.tpe.typeSymbol.isSealed) &&
+        !isValueClass(sym.tpe.typeSymbol)   // make sure it's not a primitive, else (5: Byte) match { case 5 => ... } sees no Byte
+      }
 
       private lazy val inexhaustives: List[List[Combo]] = {
-        val collected =
-          for ((pv, i) <- tvars.zipWithIndex ; val sym = pv.lhs ; if requiresExhaustive(sym)) yield
-            i -> sym.tpe.typeSymbol.sealedDescendants
+        // let's please not get too clever side-effecting the mutable flag.
+        val toCollect = tvars.zipWithIndex filter { case (pv, i) => requiresExhaustive(pv.sym) }
+        val collected = toCollect map { case (pv, i) =>
+          // okay, now reset the flag
+          pv.sym resetFlag MUTABLE
+          // have to filter out children which cannot match: see ticket #3683 for an example
+          val kids = pv.tpe.typeSymbol.sealedDescendants filter (_.tpe matchesPattern pv.tpe)
+
+          i -> kids
+        }
 
         val folded =
           collected.foldRight(List[List[Combo]]())((c, xs) => {

@@ -112,10 +112,37 @@ public class JExtendedCode extends JCode {
     public void emitPUSH(boolean value) { emitPUSH(value ? 1 : 0); }
     public void emitPUSH(Boolean value) { emitPUSH(value.booleanValue()); }
 
-    public void emitPUSH(byte value) { emitBIPUSH(value); }
+    public void emitPUSH(byte value) {
+      switch (value) {
+        case -1: emitICONST_M1(); break;
+        case 0: emitICONST_0(); break;
+        case 1: emitICONST_1(); break;
+        case 2: emitICONST_2(); break;
+        case 3: emitICONST_3(); break;
+        case 4: emitICONST_4(); break;
+        case 5: emitICONST_5(); break;
+        default:
+          emitBIPUSH(value);
+      }
+    }
     public void emitPUSH(Byte value) { emitPUSH(value.byteValue()); }
 
-    public void emitPUSH(short value) { emitSIPUSH(value); }
+    public void emitPUSH(short value) {
+      switch (value) {
+        case -1: emitICONST_M1(); break;
+        case 0: emitICONST_0(); break;
+        case 1: emitICONST_1(); break;
+        case 2: emitICONST_2(); break;
+        case 3: emitICONST_3(); break;
+        case 4: emitICONST_4(); break;
+        case 5: emitICONST_5(); break;
+        default:
+          if (value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE)
+            emitBIPUSH((byte)value);
+          else
+            emitSIPUSH(value);
+      }
+    }
     public void emitPUSH(Short value) { emitPUSH(value.shortValue()); }
 
     // TODO check that we do the right thing here
@@ -131,7 +158,14 @@ public class JExtendedCode extends JCode {
         case 3: emitICONST_3(); break;
         case 4: emitICONST_4(); break;
         case 5: emitICONST_5(); break;
-        default: emitPUSH_index(pool.addInteger(value)); break;
+        default:
+          if (value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE)
+            emitBIPUSH((byte)value);
+          else if (value >= Short.MIN_VALUE && value <= Short.MAX_VALUE)
+            emitSIPUSH((short)value);
+          else
+            emitPUSH_index(pool.addInteger(value));
+          break;
         }
     }
     public void emitPUSH(Integer value) { emitPUSH(value.intValue()); }
@@ -146,27 +180,32 @@ public class JExtendedCode extends JCode {
     }
     public void emitPUSH(Long value) { emitPUSH(value.longValue()); }
 
-    public void emitPUSH(float value) {
-        if (value == 0.0F)
+    private static final Float ZEROF = Float.valueOf(0f);
+    private static final Float ONEF = Float.valueOf(1f);
+    private static final Float TWOF = Float.valueOf(2f);
+    public void emitPUSH(Float value) {
+        if (ZEROF.equals(value))
             emitFCONST_0();
-        else if (value == 1.0F)
+        else if (ONEF.equals(value))
             emitFCONST_1();
-        else if (value == 2.0F)
+        else if (TWOF.equals(value))
             emitFCONST_2();
         else
-            emitPUSH_index(pool.addFloat(value));
+            emitPUSH_index(pool.addFloat(value.floatValue()));
     }
-    public void emitPUSH(Float value) { emitPUSH(value.floatValue()); }
+    public void emitPUSH(float value) { emitPUSH(Float.valueOf(value)); }
 
-    public void emitPUSH(double value) {
-        if (value == 0.0)
+    private static final Double ZEROD = Double.valueOf(0d);
+    private static final Double ONED = Double.valueOf(1d);
+    public void emitPUSH(Double value) {
+        if (ZEROD.equals(value))
             emitDCONST_0();
-        else if (value == 1.0)
+        else if (ONED.equals(value))
             emitDCONST_1();
         else
-            emitLDC2_W(value);
+            emitLDC2_W(value.doubleValue());
     }
-    public void emitPUSH(Double value) { emitPUSH(value.doubleValue()); }
+    public void emitPUSH(double value) { emitPUSH(Double.valueOf(value)); }
 
     public void emitPUSH(String s) {
         emitPUSH_index(pool.addString(s));
@@ -570,12 +609,13 @@ public class JExtendedCode extends JCode {
         }
 
         int keyMin = keys[0], keyMax = keys[keys.length - 1];
-        int keyRange = keyMax - keyMin + 1;
+        /** Calculate in long to guard against overflow. */
+        long keyRange = (long)keyMax - keyMin + 1;
         if ((double)keys.length / (double)keyRange >= minDensity) {
             // Keys are dense enough, use a table in which holes are
             // filled with defaultBranch.
-            int[] newKeys = new int[keyRange];
-            Label[] newBranches = new Label[keyRange];
+            int[] newKeys = new int[(int)keyRange];
+            Label[] newBranches = new Label[(int)keyRange];
             int oldPos = 0;
             for (int i = 0; i < keyRange; ++i) {
                 int key = keyMin + i;

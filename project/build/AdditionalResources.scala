@@ -10,19 +10,6 @@ import AdditionalResources._
 trait AdditionalResources {
   self : BasicLayer  =>
 
- /* lazy val copyAdditionalFiles = task {
-      def copy0(steps:List[Step]):Option[String]= steps match{
-        case x::xs => x match{
-          case c:ResourcesToCopy => {
-            c.copy orElse copy0(xs)
-          }
-          case _ => copy0(xs)
-        }
-        case Nil => None
-      }
-     copy0(allSteps.topologicalSort)
-  }.dependsOn(externalCompilation)*/
-
    def writeProperties: Option[String] = {
       def write0(steps:List[Step]):Option[String]= steps match{
         case x::xs => x match{
@@ -35,19 +22,14 @@ trait AdditionalResources {
       }
      write0(allSteps.topologicalSort)
   }
-
-
-
 }
 
-import sbt._
-import BasicLayer._
 object AdditionalResources {
   /**
    * A FileFilter that defines what are the files that will be copied
    */
   lazy val basicFilter =  "*.tmpl" | "*.xml"| "*.js"| "*.css" | "*.properties" | "*.swf" | "*.png"
-
+  implicit def stringToGlob(s:String):NameFilter=GlobFilter(s)
 }
 
 trait ResourcesToCopy {

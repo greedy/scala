@@ -7,13 +7,8 @@ package scala.tools.nsc
 package symtab
 package classfile
 
-import java.io.IOException
-import java.lang.{Float, Double}
-
 import Flags._
 import scala.reflect.generic.PickleFormat._
-import collection.mutable.{HashMap, ListBuffer}
-import annotation.switch
 
 /** @author Martin Odersky
  *  @version 1.0
@@ -30,14 +25,14 @@ abstract class UnPickler extends reflect.generic.UnPickler {
 
     protected override def debug = settings.debug.value
 
-    override def noSuchTypeTag(tag: Int, end: Int): Type = {
-      tag match {
-        case DEBRUIJNINDEXtpe =>
-          DeBruijnIndex(readNat(), readNat())
-        case _ =>
-          super.noSuchTypeTag(tag, end)
-      }
-    }
+    // override def noSuchTypeTag(tag: Int, end: Int): Type = {
+    //   tag match {
+    //     case DEBRUIJNINDEXtpe =>
+    //       DeBruijnIndex(readNat(), readNat())
+    //     case _ =>
+    //       super.noSuchTypeTag(tag, end)
+    //   }
+    // }
 
     override protected def errorMissingRequirement(name: Name, owner: Symbol) =
       errorMissingRequirement(

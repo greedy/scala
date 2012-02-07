@@ -31,9 +31,23 @@ object PathSettings {
   // Directory <root>/test/files/lib
   lazy val srcLibDir = Directory(srcDir / "lib")
 
-  lazy val scalaCheck = srcLibDir.files find (_.name startsWith "scalacheck") getOrElse {
-    error("No scalacheck jar found in '%s'" format srcLibDir)
+  // Directory <root>/build
+  lazy val buildDir: Directory = {
+    val bases      = testRoot :: testRoot.parents
+    // In the classic "ant" build, the relevant subdirectory is called build,
+    // but in the postmodern "sbt" build, it is called target.  Look for both.
+    val dirs = Path.onlyDirs(bases flatMap (x => List(x / "build", x / "target")))
+
+    dirs.headOption getOrElse error("Neither 'build' nor 'target' dir found under test root " + testRoot + ".")
   }
+
+  // Directory <root>/build/pack/lib
+  lazy val buildPackLibDir = Directory(buildDir / "pack" / "lib")
+
+  lazy val scalaCheck: File =
+    buildPackLibDir.files ++ srcLibDir.files find (_.name startsWith "scalacheck") getOrElse {
+      error("No scalacheck jar found in '%s' or '%s'".format(buildPackLibDir, srcLibDir))
+    }
 }
 
 class PathSettings() {

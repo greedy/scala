@@ -1,7 +1,6 @@
 package scala.tools.nsc
 package interactive
 
-import scala.concurrent.SyncVar
 import scala.util.control.ControlThrowable
 import scala.tools.nsc.io.AbstractFile
 import scala.tools.nsc.util.{SourceFile, Position, WorkScheduler}
@@ -12,15 +11,12 @@ import scala.tools.nsc.ast._
  */
 trait CompilerControl { self: Global =>
 
-  /** Response {
-    override def toString = "TypeMember("+sym+","+tpe+","+accessible+","+inherited+","+viaView+")"
-  }{
-    override def toString = "TypeMember("+sym+","+tpe+","+accessible+","+inherited+","+viaView+")"
-  }wrapper to client
-   */
-  type Response[T] = SyncVar[Either[T, Throwable]]
-
   abstract class WorkItem extends (() => Unit)
+
+  case class ReloadItem(sources: List[SourceFile], response: Response[Unit]) extends WorkItem {
+    def apply() = reload(sources, response)
+    override def toString = "reload "+sources
+  }
 
   /** Info given for every member found by completion
    */
@@ -30,8 +26,20 @@ trait CompilerControl { self: Global =>
     val accessible: Boolean
   }
 
-  case class TypeMember(sym: Symbol, tpe: Type, accessible: Boolean, inherited: Boolean, viaView: Symbol) extends Member
-  case class ScopeMember(sym: Symbol, tpe: Type, accessible: Boolean, viaImport: Tree) extends Member
+  case class TypeMember(
+    sym: Symbol,
+    tpe: Type,
+    accessible: Boolean,
+    inherited: Boolean,
+    viaView: Symbol) extends Member
+
+  case class ScopeMember(
+    sym: Symbol,
+    tpe: Type,
+    accessible: Boolean,
+    viaImport: Tree) extends Member
+
+  type Response[T] = scala.tools.nsc.interactive.Response[T]
 
   /** The scheduler by which client and compiler communicate
    *  Must be initialized before starting compilerRunner
@@ -39,14 +47,17 @@ trait CompilerControl { self: Global =>
   protected val scheduler = new WorkScheduler
 
   /** The compilation unit corresponding to a source file
+   *  if it does not yet exist creat a new one atomically
    */
-  def unitOf(s: SourceFile): RichCompilationUnit = unitOfFile get s.file match {
-    case Some(unit) =>
-      unit
-    case None =>
-      val unit = new RichCompilationUnit(s)
-      unitOfFile(s.file) = unit
-      unit
+  def unitOf(s: SourceFile): RichCompilationUnit = unitOfFile.synchronized {
+    unitOfFile get s.file match {
+      case Some(unit) =>
+        unit
+      case None =>
+        val unit = new RichCompilationUnit(s)
+        unitOfFile(s.file) = unit
+        unit
+    }
   }
 
   /** The compilation unit corresponding to a position */
@@ -56,6 +67,15 @@ trait CompilerControl { self: Global =>
    *  from consideration for recompilation.
    */
   def removeUnitOf(s: SourceFile) = unitOfFile remove s.file
+
+  /* returns the top level classes and objects that were deleted
+   * in the editor since last time recentlyDeleted() was called.
+   */
+  def recentlyDeleted(): List[Symbol] = deletedTopLevelSyms.synchronized {
+    val result = deletedTopLevelSyms
+    deletedTopLevelSyms.clear()
+    result.toList
+  }
 
   /** Locate smallest tree that encloses position
    */
@@ -74,44 +94,57 @@ trait CompilerControl { self: Global =>
   }
 
   /** Make sure a set of compilation units is loaded and parsed.
-   *  Return () to syncvar `result` on completion.
+   *  Return () to syncvar `response` on completion.
    */
-  def askReload(sources: List[SourceFile], result: Response[Unit]) =
-    scheduler postWorkItem new WorkItem {
-      def apply() = reload(sources, result)
-      override def toString = "reload "+sources
+  def askReload(sources: List[SourceFile], response: Response[Unit]) = {
+    val superseeded = scheduler.dequeueAll {
+      case ri: ReloadItem if ri.sources == sources => Some(ri)
+      case _ => None
     }
+    superseeded foreach (_.response.set())
+    scheduler postWorkItem new ReloadItem(sources, response)
+  }
 
-  /** Set sync var `result` to a fully attributed tree located at position `pos`
+  /** Set sync var `response` to the smallest fully attributed tree that encloses position `pos`.
    */
-  def askTypeAt(pos: Position, result: Response[Tree]) =
+  def askTypeAt(pos: Position, response: Response[Tree]) =
     scheduler postWorkItem new WorkItem {
-      def apply() = self.getTypedTreeAt(pos, result)
+      def apply() = self.getTypedTreeAt(pos, response)
       override def toString = "typeat "+pos.source+" "+pos.show
     }
 
-  def askType(source: SourceFile, forceReload: Boolean, result: Response[Tree]) =
+  /** Set sync var `response` to the fully attributed & typechecked tree contained in `source`.
+   */
+  def askType(source: SourceFile, forceReload: Boolean, response: Response[Tree]) =
     scheduler postWorkItem new WorkItem {
-      def apply() = self.getTypedTree(source, forceReload, result)
+      def apply() = self.getTypedTree(source, forceReload, response)
       override def toString = "typecheck"
   }
 
-  /** Set sync var `result' to list of members that are visible
-   *  as members of the tree enclosing `pos`, possibly reachable by an implicit.
-   *   - if `selection` is false, as identifiers in the scope enclosing `pos`
+  /** Set sync var `response` to the last fully attributed & typechecked tree produced from `source`.
+   *  If no such tree exists yet, do a normal askType(source, false, response)
    */
-  def askTypeCompletion(pos: Position, result: Response[List[Member]]) =
+  def askLastType(source: SourceFile, response: Response[Tree]) =
     scheduler postWorkItem new WorkItem {
-      def apply() = self.getTypeCompletion(pos, result)
+      def apply() = self.getLastTypedTree(source, response)
+      override def toString = "reconcile"
+  }
+
+  /** Set sync var `response' to list of members that are visible
+   *  as members of the tree enclosing `pos`, possibly reachable by an implicit.
+   */
+  def askTypeCompletion(pos: Position, response: Response[List[Member]]) =
+    scheduler postWorkItem new WorkItem {
+      def apply() = self.getTypeCompletion(pos, response)
       override def toString = "type completion "+pos.source+" "+pos.show
     }
 
-  /** Set sync var `result' to list of members that are visible
+  /** Set sync var `response' to list of members that are visible
    *  as members of the scope enclosing `pos`.
    */
-  def askScopeCompletion(pos: Position, result: Response[List[Member]]) =
+  def askScopeCompletion(pos: Position, response: Response[List[Member]]) =
     scheduler postWorkItem new WorkItem {
-      def apply() = self.getScopeCompletion(pos, result)
+      def apply() = self.getScopeCompletion(pos, response)
       override def toString = "scope completion "+pos.source+" "+pos.show
     }
 
@@ -122,9 +155,6 @@ trait CompilerControl { self: Global =>
       override def toString = "dofirst "+f
     }
   }
-
-  /** Cancel currently pending high-priority jobs */
-  def askCancel() = scheduler raise CancelActionReq
 
   /** Cancel current compiler run and start a fresh one where everything will be re-typechecked
    *  (but not re-loaded).
@@ -139,7 +169,6 @@ trait CompilerControl { self: Global =>
 
   // ---------------- Interpreted exceptions -------------------
 
-  object CancelActionReq extends ControlThrowable
   object FreshRunReq extends ControlThrowable
   object ShutdownReq extends ControlThrowable
 }

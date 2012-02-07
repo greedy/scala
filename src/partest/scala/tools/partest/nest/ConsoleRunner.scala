@@ -34,7 +34,7 @@ class ConsoleRunner extends DirectRunner {
       TestSet("buildmanager", _.isDirectory, "Testing Build Manager"),
       TestSet("shootout", pathFilter, "Testing shootout tests"),
       TestSet("script", pathFilter, "Testing script tests"),
-      TestSet("scalacheck", pathFilter, "Testing ScalaCheck tests"),
+      TestSet("scalacheck", x => pathFilter(x) || x.isDirectory, "Testing ScalaCheck tests"),
       TestSet("scalap", _.isDirectory, "Run scalap decompiler tests")
     )
   }
@@ -95,6 +95,8 @@ class ConsoleRunner extends DirectRunner {
     if (parsed isSet "--timeout") fileManager.timeout = parsed("--timeout")
     if (parsed isSet "--debug") setProp("partest.debug", "true")
 
+    setProperties() // must be done after processing command line arguments such as --debug
+
     def addTestFile(file: File) = {
       if (!file.exists)
         NestUI.failure("Test file '%s' not found, skipping.\n" format file)
@@ -146,6 +148,8 @@ class ConsoleRunner extends DirectRunner {
       "Source directory is:       " + srcDir,
       ""
     ) foreach (x => NestUI outline (x + "\n"))
+
+    NestUI.verbose("available processors: " + Runtime.getRuntime().availableProcessors())
 
     val start = System.currentTimeMillis
     val (successes, failures) = testCheckAll(enabledTestSets)

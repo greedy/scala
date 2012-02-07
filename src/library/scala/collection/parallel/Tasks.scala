@@ -4,9 +4,7 @@ package scala.collection.parallel
 
 
 import scala.concurrent.forkjoin._
-
-
-
+import scala.util.control.Breaks._
 
 
 
@@ -59,6 +57,37 @@ trait Tasks {
     protected[this] def split: Seq[Task[R, Tp]]
     /** Read of results of `that` task and merge them into results of this one. */
     protected[this] def merge(that: Tp) {}
+
+    // exception handling mechanism
+    var throwable: Throwable = null
+    def forwardThrowable = if (throwable != null) throw throwable
+    // tries to do the leaf computation, storing the possible exception
+    protected def tryLeaf(result: Option[R]) {
+      try {
+        tryBreakable {
+          leaf(result)
+        } catchBreak {
+          signalAbort
+        }
+      } catch {
+        case thr: Throwable =>
+          throwable = thr
+          signalAbort
+      }
+    }
+    protected[this] def tryMerge(t: Tp) {
+      val that = t.asInstanceOf[Task[R, Tp]]
+      if (this.throwable == null && that.throwable == null) merge(t)
+      mergeThrowables(that)
+    }
+    private[parallel] def mergeThrowables(that: Task[_, _]) {
+      if (this.throwable != null && that.throwable != null) {
+        // merge exceptions, since there were multiple exceptions
+        this.throwable = this.throwable alongWith that.throwable
+      } else if (that.throwable != null) this.throwable = that.throwable
+    }
+    // override in concrete task implementations to signal abort to other tasks
+    private[parallel] def signalAbort {}
   }
 
   type TaskType[R, +Tp] <: Task[R, Tp]
@@ -66,10 +95,10 @@ trait Tasks {
 
   var environment: ExecutionEnvironment
 
-  /** Executes a task and waits for it to finish. */
-  def executeAndWait[R, Tp](task: TaskType[R, Tp])
+  /** Executes a task and returns a future. Forwards an exception if some task threw it. */
+  def execute[R, Tp](fjtask: TaskType[R, Tp]): () => R
 
-  /** Executes a result task, waits for it to finish, then returns its result. */
+  /** Executes a result task, waits for it to finish, then returns its result. Forwards an exception if some task threw it. */
   def executeAndWaitResult[R, Tp](task: TaskType[R, Tp]): R
 
   /** Retrieves the parallelism level of the task execution environment. */
@@ -93,19 +122,19 @@ trait AdaptiveWorkStealingTasks extends Tasks {
     /** The actual leaf computation. */
     def leaf(result: Option[R]): Unit
 
-    def compute = if (shouldSplitFurther) internal else leaf(None)
+    def compute = if (shouldSplitFurther) internal else tryLeaf(None)
 
     def internal = {
       var last = spawnSubtasks
 
-      last.leaf(None)
+      last.tryLeaf(None)
       result = last.result
 
       while (last.next != null) {
         val lastresult = Option(last.result)
         last = last.next
-        if (last.tryCancel) last.leaf(lastresult) else last.sync
-        merge(last.repr)
+        if (last.tryCancel) last.tryLeaf(lastresult) else last.sync
+        tryMerge(last.repr)
       }
     }
 
@@ -115,7 +144,7 @@ trait AdaptiveWorkStealingTasks extends Tasks {
       do {
         val subtasks = head.split
         head = subtasks.head
-        for (t <- subtasks.tail) {
+        for (t <- subtasks.tail.reverse) {
           t.next = last
           last = t
           t.start
@@ -147,7 +176,6 @@ trait HavingForkJoinPool {
 }
 
 
-
 /** An implementation trait for parallel tasks based on the fork/join framework.
  *
  *  @define fjdispatch
@@ -171,17 +199,22 @@ trait ForkJoinTasks extends Tasks with HavingForkJoinPool {
   def forkJoinPool: ForkJoinPool = environment
   var environment = ForkJoinTasks.defaultForkJoinPool
 
-  /** Executes a task on a fork/join pool and waits for it to finish.
+  /** Executes a task and does not wait for it to finish - instead returns a future.
    *
    *  $fjdispatch
    */
-  def executeAndWait[R, Tp](fjtask: Task[R, Tp]) {
+  def execute[R, Tp](fjtask: Task[R, Tp]): () => R = {
     if (currentThread.isInstanceOf[ForkJoinWorkerThread]) {
       fjtask.fork
     } else {
       forkJoinPool.execute(fjtask)
     }
-    fjtask.join
+
+    () => {
+      fjtask.join
+      fjtask.forwardThrowable
+      fjtask.result
+    }
   }
 
   /** Executes a task on a fork/join pool and waits for it to finish.
@@ -198,6 +231,7 @@ trait ForkJoinTasks extends Tasks with HavingForkJoinPool {
       forkJoinPool.execute(fjtask)
     }
     fjtask.join
+    fjtask.forwardThrowable
     fjtask.result
   }
 
@@ -205,8 +239,9 @@ trait ForkJoinTasks extends Tasks with HavingForkJoinPool {
 
 }
 
+
 object ForkJoinTasks {
-  val defaultForkJoinPool = new ForkJoinPool
+  val defaultForkJoinPool: ForkJoinPool = new ForkJoinPool
   defaultForkJoinPool.setParallelism(Runtime.getRuntime.availableProcessors)
   defaultForkJoinPool.setMaximumPoolSize(Runtime.getRuntime.availableProcessors)
 }

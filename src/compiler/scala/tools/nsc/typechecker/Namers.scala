@@ -96,6 +96,9 @@ trait Namers { self: Analyzer =>
       sym
     }
 
+    private def isCopyGetter(meth: Symbol) = {
+      meth.name startsWith (nme.copy + nme.DEFAULT_GETTER_STRING)
+    }
     private def isTemplateContext(context: Context): Boolean = context.tree match {
       case Template(_, _, _) => true
       case Import(_, _) => isTemplateContext(context.outer)
@@ -216,6 +219,7 @@ trait Namers { self: Analyzer =>
           assert(currentRun.canRedefine(clazz) || clazz.sourceFile == currentRun.symSource(c));
           currentRun.symSource(c) = clazz.sourceFile
         }
+        registerTopLevelSym(clazz)
       }
       assert(c.name.toString.indexOf('(') == -1)
       c
@@ -244,9 +248,10 @@ trait Namers { self: Analyzer =>
         m.moduleClass.setFlag(moduleClassFlags(moduleFlags))
         setPrivateWithin(tree, m.moduleClass, tree.mods)
       }
-      if (m.owner.isPackageClass) {
+      if (m.owner.isPackageClass && !m.isPackage) {
         m.moduleClass.sourceFile = context.unit.source.file
         currentRun.symSource(m) = m.moduleClass.sourceFile
+        registerTopLevelSym(m)
       }
       m
     }
@@ -273,6 +278,7 @@ trait Namers { self: Analyzer =>
 
     /** Replace type parameters with their TypeSkolems, which can later be deskolemized to the original type param
      * (a skolem is a representation of a bound variable when viewed inside its scope)
+     *  !!!Adriaan: this does not work for hk types.
      */
     def skolemize(tparams: List[TypeDef]) {
       val tskolems = newTypeSkolems(tparams map (_.symbol))
@@ -288,8 +294,10 @@ trait Namers { self: Analyzer =>
      *  @return the companion object symbol.
      */
      def ensureCompanionObject(tree: ClassDef, creator: => Tree): Symbol = {
-       val m: Symbol = context.scope.lookup(tree.name.toTermName).filter(! _.isSourceMethod)
-       if (m.isModule && inCurrentScope(m) && currentRun.compiles(m)) m
+       val m = companionModuleOf(tree.symbol, context)
+       // @luc: not sure why "currentRun.compiles(m)" is needed, things breaks
+       // otherwise. documentation welcome.
+       if (m != NoSymbol && currentRun.compiles(m)) m
        else enterSyntheticSym(creator)
      }
 
@@ -308,7 +316,7 @@ trait Namers { self: Analyzer =>
         if (sym.isTerm) skolemize(tparams)
       }
 
-      if (sym.name == nme.copy || sym.name.startsWith(nme.copy + "$default$")) {
+      if (sym.name == nme.copy || isCopyGetter(sym)) {
         // it could be a compiler-generated copy method or one of its default getters
         setInfo(sym)(mkTypeCompleter(tree)(copySym => {
           def copyIsSynthetic() = sym.owner.info.member(nme.copy).hasFlag(SYNTHETIC)
@@ -371,7 +379,7 @@ trait Namers { self: Analyzer =>
           case vd @ ValDef(mods, name, tp, rhs) =>
             if ((!context.owner.isClass ||
                  (mods.flags & (PRIVATE | LOCAL | CASEACCESSOR)) == (PRIVATE | LOCAL) ||
-                 name.endsWith(nme.OUTER, nme.OUTER.length) ||
+                 name.startsWith(nme.OUTER) ||
                  context.unit.isJava) &&
                  !mods.isLazy) {
               val vsym = owner.newValue(tree.pos, name).setFlag(mods.flags);
@@ -390,7 +398,7 @@ trait Namers { self: Analyzer =>
               // .isInstanceOf[..]: probably for (old) IDE hook. is this obsolete?
               val getter = enterAccessorMethod(tree, name, getterFlags(mods1.flags), mods1)
               setInfo(getter)(namerOf(getter).getterTypeCompleter(vd))
-              if (mods1.isVariable) {
+              if (mods1.isMutable) {
                 val setter = enterAccessorMethod(tree, nme.getterToSetter(name), setterFlags(mods1.flags), mods1)
                 setInfo(setter)(namerOf(setter).setterTypeCompleter(vd))
               }
@@ -570,9 +578,27 @@ trait Namers { self: Analyzer =>
       sym.setInfo(selftpe)
     }
 
-    private def widenIfNotFinal(sym: Symbol, tpe: Type, pt: Type): Type = {
+    /** This method has a big impact on the eventual compiled code.
+     *  At this point many values have the most specific possible
+     *  type (e.g. in val x = 42, x's type is Int(42), not Int) but
+     *  most need to be widened to avoid undesirable propagation of
+     *  those singleton types.
+     *
+     *  However, the compilation of pattern matches into switch
+     *  statements depends on constant folding, which will only take
+     *  place for those values which aren't widened.  The "final"
+     *  modifier is the present means of signaling that a constant
+     *  value should not be widened, so it has a use even in situations
+     *  whether it is otherwise redundant (such as in a singleton.)
+     *  Locally defined symbols are also excluded from widening.
+     *
+     *  PP:is there a useful difference in practice between widen
+     *  and deconst which wouldn't be achieved by simply calling widen
+     *  in both situations? If so, could an example of this be added?
+     */
+    private def widenIfNecessary(sym: Symbol, tpe: Type, pt: Type): Type = {
       val getter =
-        if (sym.isValue && sym.owner.isClass && (sym hasFlag PRIVATE))
+        if (sym.isValue && sym.owner.isClass && sym.isPrivate)
           sym.getter(sym.owner)
         else sym
       def isHidden(tp: Type): Boolean = tp match {
@@ -590,8 +616,8 @@ trait Namers { self: Analyzer =>
       if ((sym.isVariable || sym.isMethod && !(sym hasFlag ACCESSOR)))
         if (tpe2 <:< pt) tpe2 else tpe1
       else if (isHidden(tpe)) tpe2
-      else if (!(sym hasFlag FINAL)) tpe1
-      else tpe
+      else if (sym.isFinal || sym.isLocal) tpe
+      else tpe1
     }
 
     // sets each ValDef's symbol
@@ -714,11 +740,9 @@ trait Namers { self: Analyzer =>
       // add apply and unapply methods to companion objects of case classes,
       // unless they exist already; here, "clazz" is the module class
       if (clazz.isModuleClass) {
-        Namers.this.caseClassOfModuleClass get clazz match {
-          case Some(cdef) =>
-            addApplyUnapply(cdef, templateNamer)
-            caseClassOfModuleClass -= clazz
-          case None =>
+        Namers.this.caseClassOfModuleClass get clazz map { cdef =>
+          addApplyUnapply(cdef, templateNamer)
+          caseClassOfModuleClass -= clazz
         }
       }
 
@@ -728,16 +752,12 @@ trait Namers { self: Analyzer =>
       // @check: this seems to work only if the type completer of the class runs before the one of the
       // module class: the one from the module class removes the entry form caseClassOfModuleClass (see above).
       if (clazz.isClass && !clazz.hasFlag(MODULE)) {
-        Namers.this.caseClassOfModuleClass get companionModuleOf(clazz, context).moduleClass match {
-          case Some(cdef) =>
-            def hasCopy(decls: Scope) = {
-              decls.iterator exists (_.name == nme.copy)
-            }
-            if (!hasCopy(decls) &&
-                    !parents.exists(p => hasCopy(p.typeSymbol.info.decls)) &&
-                    !parents.flatMap(_.baseClasses).distinct.exists(bc => hasCopy(bc.info.decls)))
-              addCopyMethod(cdef, templateNamer)
-          case None =>
+        Namers.this.caseClassOfModuleClass get companionModuleOf(clazz, context).moduleClass map { cdef =>
+          def hasCopy(decls: Scope) = (decls lookup nme.copy) != NoSymbol
+          if (!hasCopy(decls) &&
+                  !parents.exists(p => hasCopy(p.typeSymbol.info.decls)) &&
+                  !parents.flatMap(_.baseClasses).distinct.exists(bc => hasCopy(bc.info.decls)))
+            addCopyMethod(cdef, templateNamer)
         }
       }
 
@@ -763,99 +783,68 @@ trait Namers { self: Analyzer =>
       val tparamSyms = typer.reenterTypeParams(tparams)
       // since the skolemized tparams are in scope, the TypeRefs in vparamSymss refer to skolemized tparams
       var vparamSymss = enterValueParams(meth, vparamss)
+      // DEPMETTODO: do we need to skolemize value parameter symbols?
 
       if (tpt.isEmpty && meth.name == nme.CONSTRUCTOR) {
         tpt defineType context.enclClass.owner.tpe
         tpt setPos meth.pos.focus
       }
 
-      def convertToDeBruijn(vparams: List[Symbol], level: Int): TypeMap = new TypeMap {
-        def debruijnFor(param: Symbol) =
-          DeBruijnIndex(level, vparams indexOf param)
-        def apply(tp: Type) = {
-          tp match {
-            case SingleType(_, sym) =>
-              if (settings.Xexperimental.value && sym.owner == meth && (vparams contains sym)) {
-/*
-                if (sym hasFlag IMPLICIT) {
-                  context.error(sym.pos, "illegal type dependence on implicit parameter")
-                  ErrorType
-                } else
-*/
-                debruijnFor(sym)
-              } else tp
-            case MethodType(params, restpe) =>
-              val params1 = this.mapOver(params)
-              val restpe1 = convertToDeBruijn(vparams, level + 1)(restpe)
-              if ((params1 eq params) && (restpe1 eq restpe)) tp
-              else copyMethodType(tp, params1, restpe1)
-            case _ =>
-              mapOver(tp)
-          }
-        }
-
-        // AnnotatedTypes can contain trees in the annotation arguments. When accessing a
-        // parameter in an annotation, set the type of the Ident to the DeBruijnIndex
-        object treeTrans extends TypeMapTransformer {
-          override def transform(tree: Tree): Tree =
-            tree match {
-              case Ident(name) if (vparams contains tree.symbol) =>
-                val dtpe = debruijnFor(tree.symbol)
-                val dsym =
-                  context.owner.newLocalDummy(tree.symbol.pos)
-                  .newValue(tree.symbol.pos, name)
-
-                dsym.setFlag(PARAM)
-                dsym.setInfo(dtpe)
-                Ident(name).setSymbol(dsym).copyAttrs(tree).setType(dtpe)
-              case tree => super.transform(tree)
-            }
-        }
-
-        // for type annotations (which may contain trees)
-        override def mapOver(arg: Tree) = Some(treeTrans.transform(arg))
-      }
-
-      val checkDependencies: TypeTraverser = new TypeTraverser {
-        def traverse(tp: Type) = {
-          tp match {
-            case SingleType(_, sym) =>
-              if (sym.owner == meth && (vparamSymss exists (_ contains sym)))
-                context.error(
-                  sym.pos,
-                  "illegal dependent method type"+
-                  (if (settings.Xexperimental.value)
-                     ": parameter appears in the type of another parameter in the same section or an earlier one"
-                   else ""))
-            case _ =>
-              mapOver(tp)
-          }
-          this
-        }
-      }
 
       /** Called for all value parameter lists, right to left
        *  @param vparams the symbols of one parameter list
        *  @param restpe  the result type (possibly a MethodType)
        */
       def makeMethodType(vparams: List[Symbol], restpe: Type) = {
+        // TODODEPMET: check that we actually don't need to do anything here
         // new dependent method types: probably OK already, since 'enterValueParams' above
         // enters them in scope, and all have a lazy type. so they may depend on other params. but: need to
         // check that params only depend on ones in earlier sections, not the same. (done by checkDependencies,
         // so re-use / adapt that)
         val params = vparams map (vparam =>
           if (meth hasFlag JAVA) vparam.setInfo(objToAny(vparam.tpe)) else vparam)
-        val restpe1 = convertToDeBruijn(vparams, 1)(restpe) // new dependent types: replace symbols in restpe with the ones in vparams
-        if (meth hasFlag JAVA) JavaMethodType(params, restpe1)
-        else MethodType(params, restpe1)
+         // TODODEPMET necessary?? new dependent types: replace symbols in restpe with the ones in vparams
+        if (meth hasFlag JAVA) JavaMethodType(params, restpe)
+        else MethodType(params, restpe)
       }
 
-      def thisMethodType(restpe: Type) =
+      def thisMethodType(restpe: Type) =  {
+        import scala.collection.mutable.ListBuffer
+        val okParams = ListBuffer[Symbol]()
+        // can we relax these restrictions? see test/files/pos/depmet_implicit_oopsla_session_2.scala and neg/depmet_try_implicit.scala for motivation
+        // should allow forward references since type selections on implicit args are like type parameters:
+        // def foo[T](a: T, x: w.T2)(implicit w: ComputeT2[T])
+        // is more compact than: def foo[T, T2](a: T, x: T2)(implicit w: ComputeT2[T, T2])
+        // moreover, the latter is not an encoding of the former, which hides type inference of T2, so you can specify T while T2 is purely computed
+        val checkDependencies: TypeTraverser = new TypeTraverser {
+          def traverse(tp: Type) = {
+            tp match {
+              case SingleType(_, sym) =>
+                if (sym.owner == meth && sym.isValueParameter && !(okParams contains sym))
+                  context.error(
+                    sym.pos,
+                    "illegal dependent method type"+
+                    (if (settings.YdepMethTpes.value)
+                       ": parameter appears in the type of another parameter in the same section or an earlier one"
+                     else ""))
+              case _ =>
+                mapOver(tp)
+            }
+            this
+          }
+        }
+        for(vps <- vparamSymss) {
+          for(p <- vps) checkDependencies(p.info)
+          if(settings.YdepMethTpes.value) okParams ++= vps // can only refer to symbols in earlier parameter sections (if the extension is enabled)
+        }
+        checkDependencies(restpe) // DEPMETTODO: check not needed when they become on by default
+
         polyType(
-          tparamSyms, // deSkolemized symbols
-          if (vparamSymss.isEmpty) PolyType(List(), restpe)
+          tparamSyms, // deSkolemized symbols  -- TODO: check that their infos don't refer to method args?
+          if (vparamSymss.isEmpty) PolyType(List(), restpe) // nullary method type
           // vparamss refer (if they do) to skolemized tparams
-          else checkDependencies((vparamSymss :\ restpe) (makeMethodType)))
+          else (vparamSymss :\ restpe) (makeMethodType))
+      }
 
       var resultPt = if (tpt.isEmpty) WildcardType else typer.typedType(tpt).tpe
       val site = meth.owner.thisType
@@ -925,7 +914,7 @@ trait Namers { self: Analyzer =>
           // replace deSkolemized symbols with skolemized ones (for resultPt computed by looking at overridden symbol, right?)
           val pt = resultPt.substSym(tparamSyms, tparams map (_.symbol))
           // compute result type from rhs
-          tpt defineType widenIfNotFinal(meth, typer.computeType(rhs, pt), pt)
+          tpt defineType widenIfNecessary(meth, typer.computeType(rhs, pt), pt)
           tpt setPos meth.pos.focus
           tpt.tpe
         } else typer.typedType(tpt).tpe
@@ -945,6 +934,7 @@ trait Namers { self: Analyzer =>
      * flag.
      */
     private def addDefaultGetters(meth: Symbol, vparamss: List[List[ValDef]], tparams: List[TypeDef], overriddenSymbol: => Symbol) {
+
       val isConstr = meth.isConstructor
       val overridden = if (isConstr || !meth.owner.isClass) NoSymbol
                        else overriddenSymbol
@@ -975,7 +965,7 @@ trait Namers { self: Analyzer =>
           if (sym hasFlag DEFAULTPARAM) {
             // generate a default getter for that argument
             val oflag = if (baseHasDefault) OVERRIDE else 0
-            val name = (if (isConstr) "init" else meth.name) +"$default$"+ posCounter
+            val name = nme.defaultGetterName(meth.name, posCounter)
 
             // Create trees for the defaultGetter. Uses tools from Unapplies.scala
             var deftParams = tparams map copyUntyped[TypeDef]
@@ -1167,7 +1157,7 @@ trait Namers { self: Analyzer =>
                   context.error(tpt.pos, "missing parameter type");
                   ErrorType
                 } else {
-                  tpt defineType widenIfNotFinal(
+                  tpt defineType widenIfNecessary(
                     sym,
                     newTyper(typer1.context.make(vdef, sym)).computeType(rhs, WildcardType),
                     WildcardType)
@@ -1234,19 +1224,19 @@ trait Namers { self: Analyzer =>
                   checkSelectors(rest)
                 case Nil =>
               }
-
               checkSelectors(selectors)
+              transformed(tree) = treeCopy.Import(tree, expr1, selectors)
               ImportType(expr1)
           }
         } catch {
           case ex: TypeError =>
-            //Console.println("caught " + ex + " in typeSig")//DEBUG
+            //Console.println("caught " + ex + " in typeSig")
             typer.reportTypeError(tree.pos, ex)
             ErrorType
         }
       result match {
-        case PolyType(tparams, restpe)
-        if (!tparams.isEmpty && tparams.head.owner.isTerm ||
+        case PolyType(tparams @ (tp :: _), _) if tp.owner.isTerm =>
+            // ||
             // Adriaan: The added condition below is quite a hack. It seems that HK type parameters is relying
             // on a pass that forces all infos in the type to get everything right.
             // The problem is that the same pass causes cyclic reference errors in
@@ -1257,7 +1247,7 @@ trait Namers { self: Analyzer =>
             // Maybe it's not a hack, then we need to document it better. But ideally, we should find
             // a way to deal with HK types that's not dependent on accidental side
             // effects like this.
-            tparams.exists(!_.typeParams.isEmpty)) =>
+            // tparams.exists(!_.typeParams.isEmpty)) =>
           new DeSkolemizeMap(tparams) mapOver result
         case _ =>
 //          println("not skolemizing "+result+" in "+context.owner)
@@ -1363,6 +1353,25 @@ trait Namers { self: Analyzer =>
         result
       } else member.accessed
     } else member
+
+  /**
+   * Finds the companion module of a class symbol. Calling .companionModule
+   * does not work for classes defined inside methods.
+   */
+  def companionModuleOf(clazz: Symbol, context: Context) = {
+    var res = clazz.companionModule
+    if (res == NoSymbol)
+      res = context.lookup(clazz.name.toTermName, clazz.owner).suchThat(sym =>
+        sym.hasFlag(MODULE) && sym.isCoDefinedWith(clazz))
+    res
+  }
+
+  def companionClassOf(module: Symbol, context: Context) = {
+    var res = module.companionClass
+    if (res == NoSymbol)
+      res = context.lookup(module.name.toTypeName, module.owner).suchThat(_.isCoDefinedWith(module))
+    res
+  }
 
   /** An explanatory note to be added to error messages
    *  when there's a problem with abstract var defs */

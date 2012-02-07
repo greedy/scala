@@ -5,10 +5,11 @@
 
 
 package scala.tools.nsc
-package backend.icode.analysis
+package backend.icode
+package analysis
 
-import scala.collection.mutable.{HashMap, Map}
-import scala.collection.immutable.{Set, ListSet}
+import scala.collection.{ mutable, immutable }
+import scala.collection.immutable.{ Set, ListSet }
 
 /**
  * Compute liveness information for local variables.
@@ -24,13 +25,8 @@ abstract class Liveness {
   object livenessLattice extends SemiLattice {
     type Elem = Set[Local]
 
-    val top: Elem = new ListSet[Local]() {
-      override def equals(that: Any): Boolean = this eq that.asInstanceOf[AnyRef]
-    }
-
-    val bottom: Elem = new ListSet[Local]() {
-      override def equals(that: Any): Boolean = this eq that.asInstanceOf[AnyRef]
-    }
+    object top extends ListSet[Local] with ReferenceEquality
+    object bottom extends ListSet[Local] with ReferenceEquality
 
     def lub2(exceptional: Boolean)(a: Elem, b: Elem): Elem = a ++ b
   }
@@ -41,8 +37,8 @@ abstract class Liveness {
 
     var method: IMethod = _
 
-    val gen: Map[BasicBlock, Set[Local]] = new HashMap()
-    val kill:Map[BasicBlock, Set[Local]] = new HashMap()
+    val gen: mutable.Map[BasicBlock, Set[Local]] = new mutable.HashMap()
+    val kill: mutable.Map[BasicBlock, Set[Local]] = new mutable.HashMap()
 
     def init(m: IMethod) {
       this.method = m

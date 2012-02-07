@@ -72,6 +72,12 @@ trait BenchmarkRegister {
   register(parallel_view.DummyViewBenchList.MediumReduce)
   register(parallel_view.DummyViewBenchList.ModifyThenReduce)
   register(parallel_view.DummyViewBenchList.ModifyThenForce)
+  register(parallel_view.DummyViewBenchList.Iteration)
+  register(parallel_view.DummyViewBenchList.IterationS)
+  register(parallel_view.DummyViewBenchList.IterationM)
+  register(parallel_view.DummyViewBenchList.IterationA)
+  register(parallel_view.DummyViewBenchList.IterationZ)
+  register(parallel_view.DummyViewBenchList.IterationP)
 
   // parallel ranges
   register(parallel_range.RangeBenches.Reduce)
@@ -99,8 +105,18 @@ trait BenchmarkRegister {
   // parallel hash trie benchmarks
   register(hashtries.RefParHashTrieBenches.Reduce)
   register(hashtries.RefParHashTrieBenches.ReduceMedium)
+  register(hashtries.RefParHashTrieBenches.Reduce2)
   register(hashtries.RefParHashTrieBenches.Map)
   register(hashtries.RefParHashTrieBenches.Map2)
+
+  // parallel hash table benchmarks
+  register(hashtables.RefParHashTableBenches.Reduce)
+  register(hashtables.RefParHashTableBenches.Reduce2)
+  register(hashtables.RefParHashTableBenches.Foreach)
+  register(hashtables.RefParHashTableBenches.ForeachSet)
+  register(hashtables.RefParHashTableBenches.Map)
+  register(hashtables.RefParHashTableBenches.Map2)
+  register(hashtables.RefParHashTableBenches.HeavyMap)
 }
 
 

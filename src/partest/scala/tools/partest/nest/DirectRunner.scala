@@ -12,10 +12,13 @@ import java.io.{File, PrintStream, FileOutputStream, BufferedReader,
                 InputStreamReader, StringWriter, PrintWriter}
 import java.util.StringTokenizer
 import scala.util.Properties.{ setProp }
+import scala.tools.nsc.util.ScalaClassLoader
 import scala.tools.nsc.io.Directory
 
 import scala.actors.Actor._
 import scala.actors.TIMEOUT
+
+case class TestRunParams(val scalaCheckParentClassLoader: ScalaClassLoader)
 
 trait DirectRunner {
 
@@ -23,21 +26,30 @@ trait DirectRunner {
 
   import PartestDefaults.numActors
 
-  if (isPartestDebug)
-    scala.actors.Debug.level = 3
+  def setProperties() {
+    if (isPartestDebug)
+      scala.actors.Debug.level = 3
 
-  if (PartestDefaults.poolSize.isEmpty) {
-    scala.actors.Debug.info("actors.corePoolSize not defined")
-    setProp("actors.corePoolSize", "16")
+    if (PartestDefaults.poolSize.isEmpty) {
+      scala.actors.Debug.info("actors.corePoolSize not defined")
+      setProp("actors.corePoolSize", "16")
+    }
   }
 
   def runTestsForFiles(kindFiles: List[File], kind: String): scala.collection.immutable.Map[String, Int] = {
     val len = kindFiles.length
     val (testsEach, lastFrag) = (len/numActors, len%numActors)
     val last = numActors-1
+    val consFM = new ConsoleFileManager
+    import consFM.{ latestCompFile, latestLibFile, latestPartestFile }
+    val scalacheckURL = PathSettings.scalaCheck.toURL
+    val scalaCheckParentClassLoader = ScalaClassLoader.fromURLs(
+      List(scalacheckURL, latestCompFile.toURI.toURL, latestLibFile.toURI.toURL, latestPartestFile.toURI.toURL)
+    )
+    Output.init
     val workers = for (i <- List.range(0, numActors)) yield {
       val toTest = kindFiles.slice(i*testsEach, (i+1)*testsEach)
-      val worker = new Worker(fileManager)
+      val worker = new Worker(fileManager, TestRunParams(scalaCheckParentClassLoader))
       worker.start()
       if (i == last)
         worker ! RunTests(kind, (kindFiles splitAt (last*testsEach))._2)

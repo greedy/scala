@@ -366,7 +366,12 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
           members collect { case d: Constructor => d }
         def primaryConstructor = constructors find { _.isPrimary }
       }
-    else
+    else if (isNestedObjectLazyVal(bSym)) {
+      new DocTemplateImpl(bSym, minimumInTpl) with Object {
+        override def isObject = true
+        override def isLazyVal = false
+      }
+    } else
       throw new Error("'" + bSym + "' that isn't a class, trait or object cannot be built as a documentable template")
   }
 
@@ -375,9 +380,14 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
 
     def makeMember0(bSym: Symbol): Option[MemberImpl] = {
       if (bSym.isGetter && bSym.isLazy)
-        Some(new NonTemplateMemberImpl(bSym, inTpl) with Val {
-          override def isLazyVal = true
-        })
+        if (isNestedObjectLazyVal(bSym))
+          if (templateShouldDocument(bSym))
+            Some(makeDocTemplate(bSym, inTpl))
+          else None
+        else
+          Some(new NonTemplateMemberImpl(bSym, inTpl) with Val {
+                override def isLazyVal = true
+              })
       else if (bSym.isGetter && bSym.accessed.isMutable)
         Some(new NonTemplateMemberImpl(bSym, inTpl) with Val {
           override def isVar = true
@@ -402,7 +412,7 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
       else if (bSym.isAliasType)
         Some(new NonTemplateMemberImpl(bSym, inTpl) with HigherKindedImpl with AliasType {
           override def isAliasType = true
-          def alias = makeType(appliedType(sym.tpe, sym.info.typeParams map {_.tpe}).normalize, inTpl, sym)
+          def alias = makeType(sym.tpe.dealias, inTpl, sym)
         })
       else if (bSym.isPackage)
         inTpl match { case inPkg: PackageImpl =>  makePackage(bSym, inPkg) }
@@ -510,7 +520,7 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
         case tp: TypeRef if (tp.typeSymbol == definitions.ByNameParamClass) =>
           nameBuffer append "⇒ "
           appendType0(tp.args.head)
-        case tp: TypeRef if (definitions.isTupleType(tp)) =>
+        case tp: TypeRef if (definitions.isTupleTypeOrSubtype(tp)) =>
           nameBuffer append '('
           appendTypes0(tp.args, ", ")
           nameBuffer append ')'
@@ -536,8 +546,14 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
             nameBuffer append " {...}" // TODO: actually print the refinement
           }
         /* Polymorphic types */
-        case PolyType(tparams, result) if (!tparams.isEmpty) =>
-          throw new Error("Polymorphic type '" + tpe + "' cannot be printed as a type")
+        case PolyType(tparams, result) if tparams nonEmpty =>
+//          throw new Error("Polymorphic type '" + tpe + "' cannot be printed as a type")
+          def typeParamsToString(tps: List[Symbol]): String = if(tps isEmpty) "" else
+            tps.map{tparam =>
+              tparam.varianceString + tparam.name + typeParamsToString(tparam.typeParams)
+            }.mkString("[", ", ", "]")
+          nameBuffer append typeParamsToString(tparams)
+          appendType0(result)
         case PolyType(tparams, result) if (tparams.isEmpty) =>
           nameBuffer append '⇒'
           appendType0(result)
@@ -555,12 +571,16 @@ class ModelFactory(val global: Global, val settings: doc.Settings) { thisFactory
     ( aSym.owner == NoSymbol || templateShouldDocument(aSym.owner) ) && !isEmptyJavaObject(aSym)
   }
 
+  def isNestedObjectLazyVal(aSym: Symbol): Boolean = {
+    aSym.isLazy && !aSym.isRootPackage && !aSym.owner.isPackageClass && (aSym.lazyAccessor != NoSymbol)
+  }
+
   def isEmptyJavaObject(aSym: Symbol): Boolean = {
     def hasMembers = aSym.info.members.exists(s => localShouldDocument(s) && (!s.isConstructor || s.owner == aSym))
     aSym.isModule && aSym.hasFlag(Flags.JAVA) && !hasMembers
   }
 
   def localShouldDocument(aSym: Symbol): Boolean = {
-    !aSym.isPrivate && (aSym.isProtected || aSym.privateWithin == NoSymbol) && !aSym.isSynthetic
+    !aSym.isPrivate && (aSym.isProtected || aSym.privateWithin == NoSymbol) && (!aSym.isSynthetic || isNestedObjectLazyVal(aSym))
   }
 }
