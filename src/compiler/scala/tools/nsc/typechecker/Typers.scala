@@ -1831,6 +1831,13 @@ trait Typers { self: Analyzer =>
         enterLabelDef(stat)
       }
       if (phaseId(currentPeriod) <= currentRun.typerPhase.id) {
+        // One reason for this code is that structural refinements
+        // come with strings attached; for instance the inferred type
+        // may not refer to enclosing type parameters.
+        // So abstracting out an anonymous class might lead to type errors.
+        // The setPrivateWithin below is is a quick hack to avoid escaping privates checks
+        // we need to go back and address the problem of escaping
+        // idents form ths ground up.
         block match {
           case block @ Block(List(classDef @ ClassDef(_, _, _, _)), newInst @ Apply(Select(New(_), _), _)) =>
             // The block is an anonymous class definitions/instantiation pair
@@ -1851,8 +1858,7 @@ trait Typers { self: Analyzer =>
             ) {
               member.resetFlag(PROTECTED)
               member.resetFlag(LOCAL)
-              member.setFlag(PRIVATE)
-              member.privateWithin = NoSymbol
+              member.privateWithin = classDef.symbol
             }
           case _ =>
         }
@@ -2516,7 +2522,10 @@ trait Typers { self: Analyzer =>
         annotationError
       }
 
-      def tryConst(tr: Tree, pt: Type) = typed(tr, EXPRmode, pt) match {
+      /** Calling constfold right here is necessary because some trees (negated
+       *  floats and literals in particular) are not yet folded.
+       */
+      def tryConst(tr: Tree, pt: Type) = typed(constfold(tr), EXPRmode, pt) match {
         // null cannot be used as constant value for classfile annotations
         case l @ Literal(c) if !(l.isErroneous || c.value == null) =>
           Some(LiteralAnnotArg(c))
@@ -2541,11 +2550,10 @@ trait Typers { self: Analyzer =>
         // and    Array.apply(x: Int, xs: Int*): Array[Int]       (and similar)
         case Apply(fun, args) =>
           val typedFun = typed(fun, funMode(mode), WildcardType)
-          if (typedFun.symbol.owner == ArrayModule.moduleClass &&
-              typedFun.symbol.name == nme.apply)
+          if (typedFun.symbol.owner == ArrayModule.moduleClass && typedFun.symbol.name == nme.apply)
             pt match {
-              case TypeRef(_, sym, argts) if (sym == ArrayClass && !argts.isEmpty) =>
-                trees2ConstArg(args, argts.head)
+              case TypeRef(_, ArrayClass, targ :: _) =>
+                trees2ConstArg(args, targ)
               case _ =>
                 // For classfile annotations, pt can only be T:
                 //   BT = Int, .., String, Class[_], JavaAnnotClass

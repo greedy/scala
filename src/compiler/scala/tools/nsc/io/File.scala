@@ -20,9 +20,7 @@ object File {
   def pathSeparator = JFile.pathSeparator
   def separator = JFile.separator
 
-  def apply(path: Path)(implicit codec: Codec = null) =
-    if (codec != null) new File(path.jfile)(codec)
-    else path.toFile
+  def apply(path: Path)(implicit codec: Codec) = new File(path.jfile)(codec)
 
   // Create a temporary file
   def makeTemp(prefix: String = Path.randomPrefix, suffix: String = null, dir: JFile = null) =
@@ -35,13 +33,18 @@ object File {
 
   // this is a workaround for http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=6503430
   // we are using a static initializer to statically initialize a java class so we don't
-  // trigger java.lang.InternalErrors later when using it concurrently.
-  {
+  // trigger java.lang.InternalErrors later when using it concurrently.  We ignore all
+  // the exceptions so as not to cause spurious failures when no write access is available,
+  // e.g. google app engine.
+  try {
     val tmp = JFile.createTempFile("bug6503430", null, null)
     val in = new FileInputStream(tmp).getChannel()
     val out = new FileOutputStream(tmp, true).getChannel()
     out.transferFrom(in, 0, 0)
-    ()
+    tmp.delete()
+  }
+  catch {
+    case _: IllegalArgumentException | _: IllegalStateException | _: IOException | _: SecurityException => ()
   }
 }
 import File._
@@ -56,10 +59,10 @@ import Path._
  *  @author  Paul Phillips
  *  @since   2.8
  */
-class File(jfile: JFile)(implicit val creationCodec: Codec = null)
-extends Path(jfile)
-with Streamable.Chars {
+class File(jfile: JFile)(implicit constructorCodec: Codec) extends Path(jfile) with Streamable.Chars {
+  override val creationCodec = constructorCodec
   def withCodec(codec: Codec): File = new File(jfile)(codec)
+
   override def addExtension(ext: String): File = super.addExtension(ext).toFile
   override def toAbsolute: File = if (isAbsolute) this else super.toAbsolute.toFile
   override def toDirectory: Directory = new Directory(jfile)
@@ -82,12 +85,16 @@ with Streamable.Chars {
    *  This should behave like a less broken version of java.io.FileWriter,
    *  in that unlike the java version you can specify the encoding.
    */
-  def writer(append: Boolean = false, codec: Codec = getCodec()) =
+  def writer(): OutputStreamWriter = writer(false)
+  def writer(append: Boolean): OutputStreamWriter = writer(append, creationCodec)
+  def writer(append: Boolean, codec: Codec): OutputStreamWriter =
     new OutputStreamWriter(outputStream(append), codec.charSet)
 
   /** Wraps a BufferedWriter around the result of writer().
    */
-  def bufferedWriter(append: Boolean = false, codec: Codec = getCodec()) =
+  def bufferedWriter(): BufferedWriter = bufferedWriter(false)
+  def bufferedWriter(append: Boolean): BufferedWriter = bufferedWriter(append, creationCodec)
+  def bufferedWriter(append: Boolean, codec: Codec): BufferedWriter =
     new BufferedWriter(writer(append, codec))
 
   /** Creates a new file and writes all the Strings to it. */

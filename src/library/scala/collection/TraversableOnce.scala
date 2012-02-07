@@ -66,6 +66,12 @@ trait TraversableOnce[+A] {
    */
   def toTraversable: Traversable[A]
 
+  /** Converts this $coll to a stream.
+   *  $willNotTerminateInf
+   *  @return a stream containing all elements of this $coll.
+   */
+  def toStream: Stream[A]
+
   /** Presently these are abstract because the Traversable versions use
    *  breakable/break, and I wasn't sure enough of how that's supposed to
    *  function to consolidate them with the Iterator versions.
@@ -271,7 +277,7 @@ trait TraversableOnce[+A] {
    *   @tparam  B    the result type of the `+` operator.
    *   @return       the sum of all elements of this $coll with respect to the `+` operator in `num`.
    *
-   *   @usecase def sum: Int
+   *   @usecase def sum: A
    *
    *   @return       the sum of all elements in this $coll of numbers of type `Int`.
    *   Instead of `Int`, any other type `T` with an implicit `Numeric[T]` implementation
@@ -383,7 +389,7 @@ trait TraversableOnce[+A] {
       copyToArray(result, 0)
       result
     }
-    else toStream.toArray
+    else toBuffer.toArray
   }
 
   /** Converts this $coll to a list.
@@ -392,17 +398,20 @@ trait TraversableOnce[+A] {
    */
   def toList: List[A] = new ListBuffer[A] ++= self toList
 
-  /** Converts this $coll to an iterable collection.
+  /** Converts this $coll to an iterable collection.  Note that
+   *  the choice of target Iterable must be lazy as this TraversableOnce
+   *  may be lazy and unevaluated.
+   *
    *  $willNotTerminateInf
    *  @return an `Iterable` containing all elements of this $coll.
    */
   def toIterable: Iterable[A] = toStream
 
-  /** Converts this $coll to a sequence.
+  /** Converts this $coll to a sequence.  As with toIterable, it must be lazy.
    *  $willNotTerminateInf
    *  @return a sequence containing all elements of this $coll.
    */
-  def toSeq: Seq[A] = toList
+  def toSeq: Seq[A] = toStream
 
   /** Converts this $coll to an indexed sequence.
    *  $willNotTerminateInf
@@ -415,12 +424,6 @@ trait TraversableOnce[+A] {
    *  @return a buffer containing all elements of this $coll.
    */
   def toBuffer[B >: A]: mutable.Buffer[B] = new ArrayBuffer[B] ++= self
-
-  /** Converts this $coll to a stream.
-   *  $willNotTerminateInf
-   *  @return a stream containing all elements of this $coll.
-   */
-  def toStream: Stream[A] = toList.toStream
 
   /** Converts this $coll to a set.
    *  $willNotTerminateInf

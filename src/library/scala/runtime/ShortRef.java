@@ -16,4 +16,5 @@ public class ShortRef implements java.io.Serializable {
 
     public short elem;
     public ShortRef(short elem) { this.elem = elem; }
+    public String toString() { return java.lang.Short.toString(elem); }
 }
