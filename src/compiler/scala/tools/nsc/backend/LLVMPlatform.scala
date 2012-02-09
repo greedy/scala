@@ -15,7 +15,7 @@ trait LLVMPlatform extends Platform[AbstractFile] {
   import definitions._
 
   lazy val classPath  = new LLVMPathResolver(settings).result
-  def rootLoader = new loaders.LLVMPackageLoader(classPath)
+  def rootLoader = new loaders.JavaPackageLoader(classPath)
 
   object genLLVM extends {
     val global: LLVMPlatform.this.global.type = LLVMPlatform.this.global
