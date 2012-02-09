@@ -7,16 +7,15 @@ package scala.tools.nsc
 package backend
 
 import io.AbstractFile
-import util.{MergedClassPath, JavaClassPath}
+import util.JavaClassPath
 import util.ClassPath.{ JavaContext, DefaultJavaContext }
-import scala.tools.util.JavaPathResolver
+import scala.tools.util.PathResolver
 
 trait JavaPlatform extends Platform[AbstractFile] {
   import global._
   import definitions._
 
-  lazy val classPath : MergedClassPath[AbstractFile] =
-    new JavaPathResolver(settings).result
+  lazy val classPath  = new PathResolver(settings).result
   def rootLoader = new loaders.JavaPackageLoader(classPath)
 
   private def depAnalysisPhase =
