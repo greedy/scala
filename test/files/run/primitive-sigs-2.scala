@@ -25,7 +25,7 @@ object Test {
   val c1: Class[_] = classOf[T[_]]
   val c2: Class[_] = classOf[C]
   val c3: Class[_] = classOf[Arr]
-
+  
   val c1m = c1.getMethods.toList filter (_.getName == "f") map (_.getGenericReturnType.toString)
   val c2m = c2.getMethods.toList filter (_.getName == "f") map (_.getGenericReturnType.toString)
   val c3m = c3.getDeclaredMethods.toList map (_.toGenericString)
@@ -34,6 +34,6 @@ object Test {
     println(c2.getGenericInterfaces.map(_.toString).sorted mkString " ")
     println(c1m ++ c2m sorted)
     println(new C f)
-    c3m foreach println
+    c3m.sorted foreach println
   }
 }

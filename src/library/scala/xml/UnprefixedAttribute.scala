@@ -22,7 +22,7 @@ extends Attribute
   final val pre = null
   val next = if (value ne null) next1 else next1.remove(key)
 
-  /** same as this(key, Text(value), next) */
+  /** same as this(key, Text(value), next), or no attribute if value is null */
   def this(key: String, value: String, next: MetaData) =
     this(key, if (value ne null) Text(value) else null: NodeSeq, next)
 
@@ -56,5 +56,5 @@ extends Attribute
     next(namespace, scope, key)
 }
 object UnprefixedAttribute {
-  def unapply(x: UnprefixedAttribute) = Some(x.key, x.value, x.next)
+  def unapply(x: UnprefixedAttribute) = Some((x.key, x.value, x.next))
 }

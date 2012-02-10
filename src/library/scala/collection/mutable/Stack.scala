@@ -26,14 +26,11 @@ object Stack extends SeqFactory[Stack] {
   class StackBuilder[A] extends Builder[A, Stack[A]] {
     val lbuff = new ListBuffer[A]
     def +=(elem: A) = { lbuff += elem; this }
-    def clear = lbuff.clear
-    def result = {
-      val lst = lbuff.result
-      new Stack(lst)
-    }
+    def clear() = lbuff.clear()
+    def result = new Stack(lbuff.result)
   }
 
-  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, Stack[A]] = new GenericCanBuildFrom[A]
+  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, Stack[A]] = ReusableCBF.asInstanceOf[GenericCanBuildFrom[A]]
   def newBuilder[A]: Builder[A, Stack[A]] = new StackBuilder[A]
   val empty: Stack[Nothing] = new Stack(Nil)
 }
@@ -47,6 +44,8 @@ object Stack extends SeqFactory[Stack] {
  *  @author  Martin Odersky
  *  @version 2.8
  *  @since   1
+ *  @see [[http://docs.scala-lang.org/overviews/collections/concrete-mutable-collection-classes.html#stacks"Scala's Collection Library overview"]]
+ *  section on `Stacks` for more information.
  *  @define Coll Stack
  *  @define coll stack
  *  @define orderDependent
@@ -56,7 +55,8 @@ object Stack extends SeqFactory[Stack] {
  */
 @cloneable
 class Stack[A] private (var elems: List[A])
-extends Seq[A]
+extends AbstractSeq[A]
+   with Seq[A]
    with SeqLike[A, Stack[A]]
    with GenericTraversableTemplate[A, Stack]
    with Cloneable[Stack[A]]
@@ -75,7 +75,7 @@ extends Seq[A]
   /** The number of elements in the stack */
   override def length = elems.length
 
-  /** Retrieve n'th element from stack, where top of stack has index 0.
+  /** Retrieve `n`-th element from stack, where top of stack has index `0`.
    *
    *  This is a linear time operation.
    *
@@ -85,8 +85,7 @@ extends Seq[A]
    */
   override def apply(index: Int) = elems(index)
 
-  /** Replace element at index <code>n</code> with the new element
-   *  <code>newelem</code>.
+  /** Replace element at index `n` with the new element `newelem`.
    *
    *  This is a linear time operation.
    *
@@ -114,18 +113,13 @@ extends Seq[A]
   def push(elem1: A, elem2: A, elems: A*): this.type =
     this.push(elem1).push(elem2).pushAll(elems)
 
-  /** Push all elements in the given traversable object onto
-   *  the stack. The last element in the traversable object
-   *  will be on top of the new stack.
+  /** Push all elements in the given traversable object onto the stack. The
+   *  last element in the traversable object will be on top of the new stack.
    *
    *  @param xs the traversable object.
    *  @return the stack with the new elements on top.
    */
   def pushAll(xs: TraversableOnce[A]): this.type = { xs.seq foreach push ; this }
-
-  @deprecated("use pushAll", "2.8.0")
-  @migration(2, 8, "Stack ++= now pushes arguments on the stack from left to right.")
-  def ++=(xs: TraversableOnce[A]): this.type = pushAll(xs)
 
   /** Returns the top element of the stack. This method will not remove
    *  the element from the stack. An error is signaled if there is no
@@ -157,22 +151,22 @@ extends Seq[A]
   /** Returns an iterator over all elements on the stack. This iterator
    *  is stable with respect to state changes in the stack object; i.e.
    *  such changes will not be reflected in the iterator. The iterator
-   *  issues elements in the reversed order they were inserted into the stack
-   *  (LIFO order).
+   *  issues elements in the reversed order they were inserted into the
+   *  stack (LIFO order).
    *
    *  @return an iterator over all stack elements.
    */
-  @migration(2, 8, "Stack iterator and foreach now traverse in FIFO order.")
+  @migration("`iterator` traverses in FIFO order.", "2.8.0")
   override def iterator: Iterator[A] = elems.iterator
 
   /** Creates a list of all stack elements in LIFO order.
    *
    *  @return the created list.
    */
-  @migration(2, 8, "Stack iterator and foreach now traverse in FIFO order.")
+  @migration("`toList` traverses in FIFO order.", "2.8.0")
   override def toList: List[A] = elems
 
-  @migration(2, 8, "Stack iterator and foreach now traverse in FIFO order.")
+  @migration("`foreach` traverses in FIFO order.", "2.8.0")
   override def foreach[U](f: A => U): Unit = super.foreach(f)
 
   /** This method clones the stack.
@@ -181,4 +175,3 @@ extends Seq[A]
    */
   override def clone(): Stack[A] = new Stack[A](elems)
 }
-

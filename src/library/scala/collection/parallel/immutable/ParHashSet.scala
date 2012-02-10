@@ -49,7 +49,7 @@ self =>
 
   override def empty: ParHashSet[T] = new ParHashSet[T]
 
-  def splitter: IterableSplitter[T] = new ParHashSetIterator(trie.iterator, trie.size) with SCPI
+  def splitter: IterableSplitter[T] = new ParHashSetIterator(trie.iterator, trie.size)
 
   override def seq = trie
 
@@ -66,11 +66,8 @@ self =>
     case None => newc
   }
 
-  type SCPI = SignalContextPassingIterator[ParHashSetIterator]
-
   class ParHashSetIterator(var triter: Iterator[T], val sz: Int)
-  extends super.ParIterator {
-  self: SignalContextPassingIterator[ParHashSetIterator] =>
+  extends IterableSplitter[T] {
     var i = 0
     def dup = triter match {
       case t: TrieIterator[_] =>
@@ -81,26 +78,26 @@ self =>
         dupFromIterator(buff.iterator)
     }
     private def dupFromIterator(it: Iterator[T]) = {
-      val phit = new ParHashSetIterator(it, sz) with SCPI
+      val phit = new ParHashSetIterator(it, sz)
       phit.i = i
       phit
     }
-    def split: Seq[ParIterator] = if (remaining < 2) Seq(this) else triter match {
+    def split: Seq[IterableSplitter[T]] = if (remaining < 2) Seq(this) else triter match {
       case t: TrieIterator[_] =>
         val previousRemaining = remaining
         val ((fst, fstlength), snd) = t.split
         val sndlength = previousRemaining - fstlength
         Seq(
-          new ParHashSetIterator(fst, fstlength) with SCPI,
-          new ParHashSetIterator(snd, sndlength) with SCPI
+          new ParHashSetIterator(fst, fstlength),
+          new ParHashSetIterator(snd, sndlength)
         )
       case _ =>
         // iterator of the collision map case
         val buff = triter.toBuffer
         val (fp, sp) = buff.splitAt(buff.length / 2)
-        Seq(fp, sp) map { b => new ParHashSetIterator(b.iterator, b.length) with SCPI }
+        Seq(fp, sp) map { b => new ParHashSetIterator(b.iterator, b.length) }
     }
-    def next: T = {
+    def next(): T = {
       i += 1
       triter.next
     }
@@ -109,7 +106,6 @@ self =>
     }
     def remaining = sz - i
   }
-
 }
 
 
@@ -208,7 +204,6 @@ extends collection.parallel.BucketCombiner[T, ParHashSet[T], Any, HashSetCombine
     }
     def shouldSplitFurther = howmany > collection.parallel.thresholdFromSize(root.length, parallelismLevel)
   }
-
 }
 
 
@@ -218,45 +213,3 @@ object HashSetCombiner {
   private[immutable] val rootbits = 5
   private[immutable] val rootsize = 1 << 5
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -6,8 +6,6 @@
 **                          |/                                          **
 \*                                                                      */
 
-
-
 package scala.collection
 package immutable
 
@@ -20,11 +18,8 @@ import mutable.{ ArrayBuffer, Builder }
  */
 object Stack extends SeqFactory[Stack] {
   /** $genericCanBuildFromInfo */
-  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, Stack[A]] = new GenericCanBuildFrom[A]
+  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, Stack[A]] = ReusableCBF.asInstanceOf[GenericCanBuildFrom[A]]
   def newBuilder[A]: Builder[A, Stack[A]] = new ArrayBuffer[A] mapResult (buf => new Stack(buf.toList))
-
-  @deprecated("Use Stack.empty instead", "2.8.0")
-  val Empty: Stack[Nothing] = Stack()
 }
 
 /** This class implements immutable stacks using a list-based data
@@ -39,6 +34,9 @@ object Stack extends SeqFactory[Stack] {
  *  @author  Matthias Zenger
  *  @version 1.0, 10/07/2003
  *  @since   1
+ *  @see [[http://docs.scala-lang.org/overviews/collections/concrete-immutable-collection-classes.html#immutable_stacks "Scala's Collection Library overview"]]
+ *  section on `Immutable stacks` for more information.
+ *
  *  @define Coll immutable.Stack
  *  @define coll immutable stack
  *  @define orderDependent
@@ -48,7 +46,8 @@ object Stack extends SeqFactory[Stack] {
  */
 @SerialVersionUID(1976480595012942526L)
 class Stack[+A] protected (protected val elems: List[A])
-                    extends LinearSeq[A]
+                 extends AbstractSeq[A]
+                    with LinearSeq[A]
                     with GenericTraversableTemplate[A, Stack]
                     with LinearSeqOptimized[A, Stack[A]]
                     with Serializable {
@@ -102,7 +101,7 @@ class Stack[+A] protected (protected val elems: List[A])
     else throw new NoSuchElementException("top of empty stack")
 
   /** Removes the top element from the stack.
-   *  Note: should return <code>(A, Stack[A])</code> as for queues (mics)
+   *  Note: should return `(A, Stack[A])` as for queues (mics)
    *
    *  @throws Predef.NoSuchElementException
    *  @return the new stack without the former top element.
@@ -129,4 +128,3 @@ class Stack[+A] protected (protected val elems: List[A])
    */
   override def toString() = elems.mkString("Stack(", ", ", ")")
 }
-

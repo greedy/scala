@@ -18,6 +18,9 @@ import BitSetLike.{LogWL, updateArray}
  *
  *  $bitsetinfo
  *
+ *  @see [[http://docs.scala-lang.org/overviews/collections/concrete-mutable-collection-classes.html#mutable_bitsets "Scala's Collection Library overview"]]
+ *  section on `Mutable Bitsets` for more information.
+ *
  *  @define Coll BitSet
  *  @define coll bitset
  *  @define thatinfo the class of the returned collection. In the standard library configuration,
@@ -33,7 +36,8 @@ import BitSetLike.{LogWL, updateArray}
  *  @define willNotTerminateInf
  */
 @SerialVersionUID(8483111450368547763L)
-class BitSet(protected var elems: Array[Long]) extends Set[Int]
+class BitSet(protected var elems: Array[Long]) extends AbstractSet[Int]
+                                                  with SortedSet[Int]
                                                   with scala.collection.BitSet
                                                   with BitSetLike[BitSet]
                                                   with SetLike[Int, BitSet]
@@ -64,7 +68,7 @@ class BitSet(protected var elems: Array[Long]) extends Set[Int]
     elems(idx) = w
   }
 
-  protected def fromArray(words: Array[Long]): BitSet = new BitSet(words)
+  protected def fromBitMaskNoCopy(words: Array[Long]): BitSet = new BitSet(words)
 
   override def add(elem: Int): Boolean = {
     require(elem >= 0)
@@ -99,7 +103,7 @@ class BitSet(protected var elems: Array[Long]) extends Set[Int]
    *
    *  @return an immutable set containing all the elements of this set.
    */
-  def toImmutable = immutable.BitSet.fromArray(elems)
+  def toImmutable = immutable.BitSet.fromBitMaskNoCopy(elems)
 
   override def clone(): BitSet = {
     val elems1 = new Array[Long](elems.length)
@@ -120,4 +124,17 @@ object BitSet extends BitSetFactory[BitSet] {
 
   /** $bitsetCanBuildFrom */
   implicit def canBuildFrom: CanBuildFrom[BitSet, Int, BitSet] = bitsetCanBuildFrom
+
+  /** A bitset containing all the bits in an array */
+  def fromBitMask(elems: Array[Long]): BitSet = {
+    val len = elems.length
+    val a = new Array[Long](len)
+    Array.copy(elems, 0, a, 0, len)
+    new BitSet(a)
+  }
+
+  /** A bitset containing all the bits in an array, wrapping the existing
+   *  array without copying.
+   */
+  def fromBitMaskNoCopy(elems: Array[Long]): BitSet = new BitSet(elems)
 }

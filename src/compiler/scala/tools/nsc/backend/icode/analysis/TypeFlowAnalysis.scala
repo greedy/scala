@@ -3,13 +3,12 @@
  * @author  Martin Odersky
  */
 
-
 package scala.tools.nsc
 package backend.icode.analysis
 
 import scala.collection.{mutable, immutable}
 
-/** A data-flow analysis on types, that works on <code>ICode</code>.
+/** A data-flow analysis on types, that works on `ICode`.
  *
  *  @author Iulian Dragos
  */
@@ -111,16 +110,16 @@ abstract class TypeFlowAnalysis {
       this.method = m
       //typeFlowLattice.lubs = 0
       init {
-        worklist += m.code.startBlock
+        worklist += m.startBlock
         worklist ++= (m.exh map (_.startBlock))
-        m.code.blocks.foreach { b =>
+        m foreachBlock { b =>
           in(b)  = typeFlowLattice.bottom
           out(b) = typeFlowLattice.bottom
         }
 
         // start block has var bindings for each of its parameters
         val entryBindings     = new VarBinding ++= (m.params map (p => ((p, p.kind))))
-        in(m.code.startBlock) = lattice.IState(entryBindings, typeStackLattice.bottom)
+        in(m.startBlock) = lattice.IState(entryBindings, typeStackLattice.bottom)
 
         m.exh foreach { e =>
           in(e.startBlock) = lattice.IState(in(e.startBlock).vars, typeStackLattice.exceptionHandlerStack)
@@ -133,16 +132,18 @@ abstract class TypeFlowAnalysis {
       if (this.method == null || this.method.symbol != m.symbol)
         init(m)
       else reinit {
-        for (b <- m.code.blocks; if !in.isDefinedAt(b)) {
-          for (p <- b.predecessors) {
-            if (out.isDefinedAt(p)) {
-              in(b) = out(p)
-              worklist += p
-            }
-/*            else
-              in(b)  = typeFlowLattice.bottom
-*/        }
-          out(b) = typeFlowLattice.bottom
+        m foreachBlock { b =>
+          if (!in.contains(b)) {
+            for (p <- b.predecessors) {
+              if (out.isDefinedAt(p)) {
+                in(b) = out(p)
+                worklist += p
+              }
+  /*            else
+                in(b)  = typeFlowLattice.bottom
+  */        }
+            out(b) = typeFlowLattice.bottom
+          }
         }
         for (handler <- m.exh) {
           val start = handler.startBlock
@@ -165,7 +166,7 @@ abstract class TypeFlowAnalysis {
       forwardAnalysis(blockTransfer)
       val t = timer.stop
       if (settings.debug.value) {
-        linearizer.linearize(method).foreach(b => if (b != method.code.startBlock)
+        linearizer.linearize(method).foreach(b => if (b != method.startBlock)
           assert(visited.contains(b),
             "Block " + b + " in " + this.method + " has input equal to bottom -- not visited? .." + visited));
       }
@@ -175,7 +176,7 @@ abstract class TypeFlowAnalysis {
     }
 
     def blockTransfer(b: BasicBlock, in: lattice.Elem): lattice.Elem = {
-      b.foldLeft(in)(interpret)
+      b.iterator.foldLeft(in)(interpret)
     }
     /** The flow function of a given basic block. */
     /* var flowFun: immutable.Map[BasicBlock, TransferFunction] = new immutable.HashMap */
@@ -359,9 +360,7 @@ abstract class TypeFlowAnalysis {
           stack.push(typeLattice.Object)
 
         case _ =>
-          dump
-          abort("Unknown instruction: " + i)
-
+          dumpClassesAndAbort("Unknown instruction: " + i)
         }
 
         new TransferFunction(consumed, gens)
@@ -538,14 +537,12 @@ abstract class TypeFlowAnalysis {
         case SCOPE_ENTER(_) | SCOPE_EXIT(_) =>
           ()
 
-        case LOAD_EXCEPTION(_) =>
+        case LOAD_EXCEPTION(clasz) =>
           stack.pop(stack.length)
-          stack.push(typeLattice.top)
+          stack.push(toTypeKind(clasz.tpe))
 
         case _ =>
-          dump
-          abort("Unknown instruction: " + i)
-
+          dumpClassesAndAbort("Unknown instruction: " + i)
       }
       out
     } // interpret
@@ -620,6 +617,50 @@ abstract class TypeFlowAnalysis {
         out
       }
 	}
+  }
+
+  class MTFAGrowable extends MethodTFA {
+
+    import icodes._
+
+    /** discards what must be discarded, blanks what needs to be blanked out, and keeps the rest. */
+    def reinit(m: icodes.IMethod, staleOut: List[BasicBlock], inlined: collection.Set[BasicBlock], staleIn: collection.Set[BasicBlock]) {
+      if (this.method == null || this.method.symbol != m.symbol) {
+        init(m)
+        return
+      } else if(staleOut.isEmpty && inlined.isEmpty && staleIn.isEmpty) {
+        // this promotes invoking reinit if in doubt, no performance degradation will ensue!
+        return;
+      }
+
+      reinit {
+        // asserts conveying an idea what CFG shapes arrive here.
+        // staleIn foreach (p => assert( !in.isDefinedAt(p), p))
+        // staleIn foreach (p => assert(!out.isDefinedAt(p), p))
+        // inlined foreach (p => assert( !in.isDefinedAt(p), p))
+        // inlined foreach (p => assert(!out.isDefinedAt(p), p))
+        // inlined foreach (p => assert(!p.successors.isEmpty || p.lastInstruction.isInstanceOf[icodes.opcodes.THROW], p))
+        // staleOut foreach (p => assert(  in.isDefinedAt(p), p))
+
+        // never rewrite in(m.startBlock)
+        staleOut foreach { b =>
+          if(!inlined.contains(b)) { worklist += b }
+          out(b)    = typeFlowLattice.bottom
+        }
+        // nothing else is added to the worklist, bb's reachable via succs will be tfa'ed
+        blankOut(inlined)
+        blankOut(staleIn)
+        // no need to add startBlocks from m.exh
+      }
+    }
+
+    private def blankOut(blocks: collection.Set[BasicBlock]) {
+      blocks foreach { b =>
+        in(b)     = typeFlowLattice.bottom
+        out(b)    = typeFlowLattice.bottom
+      }
+    }
+
   }
 
   class Timer {

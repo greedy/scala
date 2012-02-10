@@ -9,14 +9,14 @@
 package scala
 
 /** This class implements a simple proxy that forwards all calls to
- *  the public, non-final methods defined in class "Any" to another
+ *  the public, non-final methods defined in class `Any` to another
  *  object self.  Those methods are:
- *
+ *  {{{
  *    def hashCode(): Int
  *    def equals(other: Any): Boolean
  *    def toString(): String
- *
- *  Note: forwarding methods in this way will most likely create
+ *  }}}
+ *  '''Note:''' forwarding methods in this way will most likely create
  *  an asymmetric equals method, which is not generally recommended.
  *
  *  @author  Matthias Zenger
@@ -27,11 +27,10 @@ trait Proxy {
 
   override def hashCode: Int = self.hashCode
   override def equals(that: Any): Boolean = that match {
-    case null       => false
-    case x: Equals  => (x canEqual self) && (x equals self)
-    case x          => (x equals self)
+    case null      => false
+    case x: AnyRef => (x eq this) || (x eq self.asInstanceOf[AnyRef]) || (x equals self)
   }
-  override def toString: String = self.toString
+  override def toString = "" + self
 }
 
 object Proxy {

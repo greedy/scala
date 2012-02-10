@@ -17,7 +17,7 @@ import scala.annotation.tailrec
 /** Abandons any pretense of type safety for speed.  You can't say I
  *  didn't try: see r23934.
  */
-private[collection] abstract class TrieIterator[+T](elems: Array[Iterable[T]]) extends Iterator[T] {
+private[collection] abstract class TrieIterator[+T](elems: Array[Iterable[T]]) extends AbstractIterator[T] {
   outer =>
 
   private[immutable] def getElem(x: AnyRef): T
@@ -92,7 +92,7 @@ private[collection] abstract class TrieIterator[+T](elems: Array[Iterable[T]]) e
     }
 
   def hasNext = (subIter ne null) || depth >= 0
-  def next: T = {
+  def next(): T = {
     if (subIter ne null) {
       val el = subIter.next
       if (!subIter.hasNext)

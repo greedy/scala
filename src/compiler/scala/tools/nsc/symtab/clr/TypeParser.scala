@@ -2,16 +2,14 @@
  * Copyright 2004-2011 LAMP/EPFL
  */
 
-
 package scala.tools.nsc
 package symtab
 package clr
 
 import java.io.IOException
-
+import io.MsilFile
 import ch.epfl.lamp.compiler.msil.{Type => MSILType, Attribute => MSILAttribute, _}
-
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.{ mutable, immutable }
 import scala.reflect.internal.pickling.UnPickler
 import ch.epfl.lamp.compiler.msil.Type.TMVarUsage
 
@@ -35,6 +33,8 @@ abstract class TypeParser {
   protected def statics: Symbol = staticModule.moduleClass
 
   protected var busy: Boolean = false       // lock to detect recursive reads
+
+  private implicit def stringToTermName(s: String): TermName = newTermName(s)
 
   private object unpickler extends UnPickler {
     val global: TypeParser.this.global.type = TypeParser.this.global
@@ -155,8 +155,8 @@ abstract class TypeParser {
     val canBeTakenAddressOf = (typ.IsValueType || typ.IsEnum) && (typ.FullName != "System.Enum")
 
     if(canBeTakenAddressOf) {
-      clazzBoxed = clazz.owner.newClass(clazz.name.toTypeName append "Boxed")
-      clazzMgdPtr = clazz.owner.newClass(clazz.name.toTypeName append "MgdPtr")
+      clazzBoxed = clazz.owner.newClass(clazz.name.toTypeName append newTypeName("Boxed"))
+      clazzMgdPtr = clazz.owner.newClass(clazz.name.toTypeName append newTypeName("MgdPtr"))
       clrTypes.mdgptrcls4clssym(clazz) =  clazzMgdPtr
       /* adding typMgdPtr to clrTypes.sym2type should happen early (before metadata for supertypes is parsed,
          before metadata for members are parsed) so that clazzMgdPtr can be found by getClRType. */
@@ -165,7 +165,7 @@ abstract class TypeParser {
       clrTypes.sym2type(typMgdPtr) = clazzMgdPtr
       /* clazzMgdPtr but not clazzBoxed is mapped by clrTypes.types into an msil.Type instance,
          because there's no metadata-level representation for a "boxed valuetype" */
-      val instanceDefsMgdPtr = new Scope
+      val instanceDefsMgdPtr = newScope
       val classInfoMgdPtr = ClassInfoType(definitions.anyvalparam, instanceDefsMgdPtr, clazzMgdPtr)
       clazzMgdPtr.setFlag(flags)
       clazzMgdPtr.setInfo(classInfoMgdPtr)
@@ -175,7 +175,7 @@ abstract class TypeParser {
     // first pass
     for (tvarCILDef <- typ.getSortedTVars() ) {
       val tpname = newTypeName(tvarCILDef.Name.replaceAll("!", "")) // TODO are really all type-params named in all assemblies out there? (NO)
-      val tpsym = clazz.newTypeParameter(NoPosition, tpname)
+      val tpsym = clazz.newTypeParameter(tpname)
       classTParams.put(tvarCILDef.Number, tpsym)
       newTParams += tpsym
       // TODO wouldn't the following also be needed later, i.e. during getCLRType
@@ -196,8 +196,8 @@ abstract class TypeParser {
       }
     }
 /* END CLR generics (snippet 2) */
-    instanceDefs = new Scope
-    staticDefs = new Scope
+    instanceDefs = newScope
+    staticDefs = newScope
 
     val classInfoAsInMetadata = {
         val ifaces: Array[MSILType] = typ.getInterfaces()
@@ -212,7 +212,7 @@ abstract class TypeParser {
         }
         // methods, properties, events, fields are entered in a moment
         if (canBeTakenAddressOf) {
-          val instanceDefsBoxed = new Scope
+          val instanceDefsBoxed = newScope
           ClassInfoType(parents.toList, instanceDefsBoxed, clazzBoxed)
         } else
           ClassInfoType(parents.toList, instanceDefs, clazz)
@@ -258,9 +258,9 @@ abstract class TypeParser {
     for (ntype <- typ.getNestedTypes() if !(ntype.IsNestedPrivate || ntype.IsNestedAssembly || ntype.IsNestedFamANDAssem)
 				                                 || ntype.IsInterface /* TODO why shouldn't nested ifaces be type-parsed too? */ )
       {
-	val loader = new loaders.MSILTypeLoader(ntype)
-	val nclazz = statics.newClass(NoPosition, ntype.Name.toTypeName)
-	val nmodule = statics.newModule(NoPosition, ntype.Name)
+        val loader = new loaders.MsilFileLoader(new MsilFile(ntype))
+	val nclazz = statics.newClass(ntype.Name.toTypeName)
+	val nmodule = statics.newModule(ntype.Name)
 	nclazz.setInfo(loader)
 	nmodule.setInfo(loader)
 	staticDefs.enter(nclazz)
@@ -295,7 +295,7 @@ abstract class TypeParser {
       createMethod(constr);
 
     // initially also contains getters and setters of properties.
-    val methodsSet = new HashSet[MethodInfo]();
+    val methodsSet = new mutable.HashSet[MethodInfo]();
     methodsSet ++= typ.getMethods();
 
     for (prop <- typ.getProperties) {
@@ -449,7 +449,7 @@ abstract class TypeParser {
       // first pass
       for (mvarCILDef <- method.getSortedMVars() ) {
         val mtpname = newTypeName(mvarCILDef.Name.replaceAll("!", "")) // TODO are really all method-level-type-params named in all assemblies out there? (NO)
-        val mtpsym = methodSym.newTypeParameter(NoPosition, mtpname)
+        val mtpsym = methodSym.newTypeParameter(mtpname)
         methodTParams.put(mvarCILDef.Number, mtpsym)
         newMethodTParams += mtpsym
         // TODO wouldn't the following also be needed later, i.e. during getCLRType

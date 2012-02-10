@@ -89,6 +89,9 @@ abstract class AbstractFile extends AnyRef with Iterable[AbstractFile] {
   /** Returns the path of this abstract file. */
   def path: String
 
+  /** Returns the path of this abstract file in a canonical form. */
+  def canonicalPath: String = if (file == null) path else file.getCanonicalPath
+
   /** Checks extension case insensitively. */
   def hasExtension(other: String) = extension == other.toLowerCase
   private lazy val extension: String = Path.extension(name)
@@ -149,7 +152,7 @@ abstract class AbstractFile extends AnyRef with Iterable[AbstractFile] {
   @throws(classOf[IOException])
   def toByteArray: Array[Byte] = {
     val in = input
-    var rest = sizeOption.get
+    var rest = sizeOption.getOrElse(0)
     val arr = new Array[Byte](rest)
     while (rest > 0) {
       val res = in.read(arr, arr.length - rest, rest)
@@ -208,7 +211,7 @@ abstract class AbstractFile extends AnyRef with Iterable[AbstractFile] {
     var start = 0
     while (true) {
       val index = path.indexOf(separator, start)
-      assert(index < 0 || start < index)
+      assert(index < 0 || start < index, ((path, directory, start, index)))
       val name = path.substring(start, if (index < 0) length else index)
       file = getFile(file, name, if (index < 0) directory else true)
       if ((file eq null) || index < 0) return file

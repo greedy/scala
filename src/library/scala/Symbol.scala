@@ -6,23 +6,16 @@
 **                          |/                                          **
 \*                                                                      */
 
-
-
 package scala
 
-/** <p>
- *    This class provides a simple way to get unique objects for
- *    equal strings. Since symbols are interned, they can be compared using
- *    reference equality. Instances of
- *    <code>Symbol</code> can be created easily with Scala's built-in
-*     quote mechanism.
- *  </p>
- *  <p>
- *    For instance, the <a href="http://scala-lang.org/" target="_top">Scala</a>
- *    term <code>'mysym</code> will invoke the constructor of the
- *    <code>Symbol</code> class in the following way:
- *    <code>Symbol("mysym")</code>.
- *  </p>
+/** This class provides a simple way to get unique objects for equal strings.
+ *  Since symbols are interned, they can be compared using reference equality.
+ *  Instances of `Symbol` can be created easily with Scala's built-in quote
+ *  mechanism.
+ *
+ *  For instance, the [[http://scala-lang.org/#_top Scala]] term `'mysym` will
+ *  invoke the constructor of the `Symbol` class in the following way:
+ *  `Symbol("mysym")`.
  *
  *  @author  Martin Odersky, Iulian Dragos
  *  @version 1.8
@@ -34,10 +27,12 @@ final class Symbol private (val name: String) extends Serializable {
 
   @throws(classOf[java.io.ObjectStreamException])
   private def readResolve(): Any = Symbol.apply(name)
+  override def hashCode = name.hashCode()
+  override def equals(other: Any) = this eq other.asInstanceOf[AnyRef]
 }
 
-object Symbol extends UniquenessCache[String, Symbol]
-{
+object Symbol extends UniquenessCache[String, Symbol] {
+  override def apply(name: String): Symbol = super.apply(name)
   protected def valueFromKey(name: String): Symbol = new Symbol(name)
   protected def keyFromValue(sym: Symbol): Option[String] = Some(sym.name)
 }

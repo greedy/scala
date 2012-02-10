@@ -8,7 +8,7 @@ package typechecker
 
 import scala.tools.nsc.symtab.Flags._
 import scala.collection.mutable
-import mutable.{ HashMap, HashSet, ListBuffer }
+import mutable.ListBuffer
 import util.returning
 
 abstract class TreeCheckers extends Analyzer {
@@ -33,12 +33,13 @@ abstract class TreeCheckers extends Analyzer {
   /** This is a work in progress, don't take it too seriously.
    */
   object SymbolTracker extends Traverser {
-    type PhaseMap = HashMap[Symbol, List[Tree]]
-    val maps: ListBuffer[(Phase, PhaseMap)] = ListBuffer()
+    type PhaseMap = mutable.HashMap[Symbol, List[Tree]]
+
+    val maps          = ListBuffer[(Phase, PhaseMap)]()
     def prev          = maps.init.last._2
     def latest        = maps.last._2
-    val defSyms       = new HashMap[Symbol, List[DefTree]]
-    val newSyms       = new HashSet[Symbol]
+    val defSyms       = mutable.HashMap[Symbol, List[DefTree]]()
+    val newSyms       = mutable.HashSet[Symbol]()
     val movedMsgs     = new ListBuffer[String]
     def sortedNewSyms = newSyms.toList.distinct sortBy (_.name.toString)
 
@@ -68,12 +69,12 @@ abstract class TreeCheckers extends Analyzer {
     def reportChanges(): Unit = {
       // new symbols
       if (newSyms.nonEmpty) {
-        val str =
-          if (settings.debug.value) "New symbols: " + (sortedNewSyms mkString " ")
-          else newSyms.size + " new symbols."
+        informFn(newSyms.size + " new symbols.")
+        val toPrint = if (settings.debug.value) sortedNewSyms mkString " " else ""
 
         newSyms.clear()
-        errorFn(str)
+        if (toPrint != "")
+          informFn(toPrint)
       }
 
       // moved symbols
@@ -110,7 +111,7 @@ abstract class TreeCheckers extends Analyzer {
     }
   }
 
-  lazy val tpeOfTree = new HashMap[Tree, Type]
+  lazy val tpeOfTree = mutable.HashMap[Tree, Type]()
 
   def posstr(p: Position) =
     try p.source.path + ":" + p.line
@@ -118,6 +119,10 @@ abstract class TreeCheckers extends Analyzer {
 
   def errorFn(msg: Any): Unit                = println("[check: %s] %s".format(phase.prev, msg))
   def errorFn(pos: Position, msg: Any): Unit = errorFn(posstr(pos) + ": " + msg)
+  def informFn(msg: Any) {
+    if (settings.verbose.value || settings.debug.value)
+      println("[check: %s] %s".format(phase.prev, msg))
+  }
 
   def assertFn(cond: Boolean, msg: => Any) =
     if (!cond) errorFn(msg)
@@ -137,11 +142,11 @@ abstract class TreeCheckers extends Analyzer {
     result
   }
   def runWithUnit[T](unit: CompilationUnit)(body: => Unit): Unit = {
-    val unit0 = currentRun.currentUnit
+    val unit0 = currentUnit
     currentRun.currentUnit = unit
     body
     currentRun.advanceUnit
-    assertFn(currentRun.currentUnit == unit, "currentUnit is " + currentRun.currentUnit + ", but unit is " + unit)
+    assertFn(currentUnit == unit, "currentUnit is " + currentUnit + ", but unit is " + unit)
     currentRun.currentUnit = unit0
   }
   def check(unit: CompilationUnit) {
@@ -161,7 +166,7 @@ abstract class TreeCheckers extends Analyzer {
   override def newTyper(context: Context): Typer = new TreeChecker(context)
 
   class TreeChecker(context0: Context) extends Typer(context0) {
-    override protected def typerAddSyntheticMethods(templ: Template, clazz: Symbol, context: Context): Template = {
+    override protected def finishMethodSynthesis(templ: Template, clazz: Symbol, context: Context): Template = {
       // If we don't intercept this all the synthetics get added at every phase,
       // with predictably unfortunate results.
       templ

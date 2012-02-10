@@ -21,13 +21,13 @@ class B { };
 // we are informed if the status changes.
 class Contra {
   // Not an Ordering<Character>.
-  static Ordering<Object> charOrd = scala.math.Ordering$Char$.MODULE$;
-
+  static Ordering<Object> charOrd = scala.math.Ordering.Char$.MODULE$;
+  
   public boolean useCharOrd() {
     return charOrd.compare(new Object(), new Object()) == 0;
   }
-
-  static Numeric<?> intNum = scala.math.Numeric$IntIsIntegral$.MODULE$;
+  
+  static Numeric<?> intNum = scala.math.Numeric.IntIsIntegral$.MODULE$;
 }
 
 public class fromjava {
@@ -36,13 +36,13 @@ public class fromjava {
       return null;
     }
   };
-
+  
   public static Function1<Tuple2<? extends Object, B>, B> f2 = new scala.runtime.AbstractFunction1<Tuple2<? extends Object, B>, B>() {
     public B apply(Tuple2<? extends Object, B> tup) {
       return tup._2();
     }
   };
-
+  
   public static String vector(Vector<String> x) {
     Vector<String> y = x.take(2);
     return y.head();

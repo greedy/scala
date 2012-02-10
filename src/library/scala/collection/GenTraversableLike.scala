@@ -26,10 +26,12 @@ import annotation.migration
  *    and the new element type `B`.
  *  @define orderDependent
  *
- *    Note: might return different results for different runs, unless the underlying collection type is ordered.
+ *    Note: might return different results for different runs, unless the
+ *    underlying collection type is ordered.
  *  @define orderDependentFold
  *
- *    Note: might return different results for different runs, unless the underlying collection type is ordered.
+ *    Note: might return different results for different runs, unless the
+ *    underlying collection type is ordered.
  *    or the operator is associative and commutative.
  *  @define mayNotTerminateInf
  *
@@ -43,6 +45,7 @@ import annotation.migration
  *
  *  @define Coll GenTraversable
  *  @define coll general collection
+ *  @define collectExample
  *  @tparam A    the collection element type.
  *  @tparam Repr the actual type of the element container.
  *
@@ -120,10 +123,7 @@ trait GenTraversableLike[+A, +Repr] extends GenTraversableOnce[A] with Paralleli
    *  @param bf      $bfinfo
    *  @return        collection with intermediate results
    */
-  @migration(2, 9,
-    "This scanRight definition has changed in 2.9.\n" +
-    "The previous behavior can be reproduced with scanRight.reverse."
-  )
+  @migration("The behavior of `scanRight` has changed. The previous behavior can be reproduced with scanRight.reverse.", "2.9.0")
   def scanRight[B, That](z: B)(op: (A, B) => B)(implicit bf: CanBuildFrom[Repr, B, That]): That
 
   /** Applies a function `f` to all elements of this $coll.
@@ -158,6 +158,8 @@ trait GenTraversableLike[+A, +Repr] extends GenTraversableOnce[A] with Paralleli
   /** Builds a new collection by applying a partial function to all elements of this $coll
    *  on which the function is defined.
    *
+   *  $collectExample
+   *
    *  @param pf     the partial function which filters and maps the $coll.
    *  @tparam B     the element type of the returned collection.
    *  @tparam That  $thatinfo
@@ -175,7 +177,28 @@ trait GenTraversableLike[+A, +Repr] extends GenTraversableOnce[A] with Paralleli
   def collect[B, That](pf: PartialFunction[A, B])(implicit bf: CanBuildFrom[Repr, B, That]): That
 
   /** Builds a new collection by applying a function to all elements of this $coll
-   *  and concatenating the results.
+   *  and using the elements of the resulting collections. For example:
+   *
+   *  {{{
+   *  def getWords(lines: Seq[String]): Seq[String] = lines flatMap (line => line split "\\W+")
+   *  }}}
+   *
+   *  The type of the resulting collection is guided by the static type of $coll. This might
+   *  cause unexpected results sometimes. For example:
+   *
+   *  {{{
+   *  // lettersOf will return a Seq[Char] of likely repeated letters, instead of a Set
+   *  def lettersOf(words: Seq[String]) = words flatMap (word => word.toSet)
+   *
+   *  // lettersOf will return a Set[Char], not a Seq
+   *  def lettersOf(words: Seq[String]) = words.toSet flatMap (word => word.toSeq)
+   *
+   *  // xs will be a an Iterable[Int]
+   *  val xs = Map("a" -> List(11,111), "b" -> List(22,222)).flatMap(_._2)
+   *
+   *  // ys will be a Map[Int, Int]
+   *  val ys = Map("a" -> List(1 -> 11,1 -> 111), "b" -> List(2 -> 22,2 -> 222)).flatMap(_._2)
+   *  }}}
    *
    *  @param f      the function to apply to each element.
    *  @tparam B     the element type of the returned collection.
@@ -191,7 +214,27 @@ trait GenTraversableLike[+A, +Repr] extends GenTraversableOnce[A] with Paralleli
    */
   def flatMap[B, That](f: A => GenTraversableOnce[B])(implicit bf: CanBuildFrom[Repr, B, That]): That
 
-  /** Concatenates this $coll with the elements of a traversable collection.
+  /** Returns a new $coll containing the elements from the left hand operand followed by the elements from the
+   *  right hand operand. The element type of the $coll is the most specific superclass encompassing
+   *  the element types of the two operands (see example).
+   *
+   * Example:
+   * {{{
+   *     scala> val a = LinkedList(1)
+   *     a: scala.collection.mutable.LinkedList[Int] = LinkedList(1)
+   *
+   *     scala> val b = LinkedList(2)
+   *     b: scala.collection.mutable.LinkedList[Int] = LinkedList(2)
+   *
+   *     scala> val c = a ++ b
+   *     c: scala.collection.mutable.LinkedList[Int] = LinkedList(1, 2)
+   *
+   *     scala> val d = LinkedList('a')
+   *     d: scala.collection.mutable.LinkedList[Char] = LinkedList(a)
+   *
+   *     scala> val e = c ++ d
+   *     e: scala.collection.mutable.LinkedList[AnyVal] = LinkedList(1, 2, a)
+   * }}}
    *
    *  @param that   the traversable to append.
    *  @tparam B     the element type of the returned collection.

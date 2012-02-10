@@ -48,7 +48,7 @@ object Path {
   implicit def jfile2path(jfile: JFile): Path = apply(jfile)
 
   // java 7 style, we don't use it yet
-  // object AccessMode extends Enumeration("AccessMode") {
+  // object AccessMode extends Enumeration {
   //   val EXECUTE, READ, WRITE = Value
   // }
   // def checkAccess(modes: AccessMode*): Boolean = {
@@ -194,8 +194,12 @@ class Path private[io] (val jfile: JFile) {
   def stripExtension: String = name stripSuffix ("." + extension)
   // returns the Path with the extension.
   def addExtension(ext: String): Path = Path(path + "." + ext)
-  // changes the existing extension out for a new one
-  def changeExtension(ext: String): Path = Path(path stripSuffix extension) addExtension ext
+  // changes the existing extension out for a new one, or adds it
+  // if the current path has none.
+  def changeExtension(ext: String): Path = (
+    if (extension == "") addExtension(ext)
+    else Path(path.stripSuffix(extension) + ext)
+  )
 
   // conditionally execute
   def ifFile[T](f: File => T): Option[T] = if (isFile) Some(f(toFile)) else None

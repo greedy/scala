@@ -28,7 +28,7 @@ abstract class ExplicitOuter extends InfoTransform
   import Debug.TRACE
 
   /** The following flags may be set by this phase: */
-  override def phaseNewFlags: Long = notPRIVATE | notPROTECTED | lateFINAL
+  override def phaseNewFlags: Long = notPROTECTED
 
   /** the name of the phase: */
   val phaseName: String = "explicitouter"
@@ -68,6 +68,8 @@ abstract class ExplicitOuter extends InfoTransform
 
     result
   }
+  
+  private val innerClassConstructorParamName: TermName = newTermName("arg" + nme.OUTER)
 
   class RemoveBindingsTransformer(toRemove: Set[Symbol]) extends Transformer {
     override def transform(tree: Tree) = tree match {
@@ -89,6 +91,21 @@ abstract class ExplicitOuter extends InfoTransform
     if (firstTry != NoSymbol && firstTry.outerSource == clazz) firstTry
     else clazz.info.decls find (_.outerSource == clazz) getOrElse NoSymbol
    }
+  def newOuterAccessor(clazz: Symbol) = {
+    val accFlags = SYNTHETIC | METHOD | STABLE | ( if (clazz.isTrait) DEFERRED else 0 )
+    val sym      = clazz.newMethodSymbol(nme.OUTER, clazz.pos, accFlags)
+    val restpe   = if (clazz.isTrait) clazz.outerClass.tpe else clazz.outerClass.thisType
+    
+    sym expandName clazz
+    sym.referenced = clazz
+    sym setInfo MethodType(Nil, restpe)
+  }
+  def newOuterField(clazz: Symbol) = {
+    val accFlags = SYNTHETIC | PARAMACCESSOR | ( if (clazz.isEffectivelyFinal) PrivateLocal else PROTECTED )
+    val sym      = clazz.newValue(nme.OUTER_LOCAL, clazz.pos, accFlags)
+
+    sym setInfo clazz.outerClass.thisType
+  }
 
   /** <p>
    *    The type transformation method:
@@ -123,6 +140,8 @@ abstract class ExplicitOuter extends InfoTransform
    *      Remove protected flag from all members of traits.
    *    </li>
    *  </ol>
+   *  Note: this transformInfo need not be reflected as the JVM reflection already
+   *  elides outer pointers.
    */
   def transformInfo(sym: Symbol, tp: Type): Type = tp match {
     case MethodType(params, restpe1) =>
@@ -132,7 +151,7 @@ abstract class ExplicitOuter extends InfoTransform
       }
       if (sym.owner.isTrait) sym setNotFlag PROTECTED // 6
       if (sym.isClassConstructor && isInner(sym.owner)) { // 1
-        val p = sym.newValueParameter(sym.pos, "arg" + nme.OUTER)
+        val p = sym.newValueParameter(innerClassConstructorParamName, sym.pos)
                    .setInfo(sym.owner.outerClass.thisType)
         MethodType(p :: params, restpe)
       } else if (restpe ne restpe1)
@@ -142,27 +161,20 @@ abstract class ExplicitOuter extends InfoTransform
       var decls1 = decls
       if (isInner(clazz) && !clazz.isInterface) {
         decls1 = decls.cloneScope
-        val outerAcc = clazz.newMethod(clazz.pos, nme.OUTER) // 3
+        val outerAcc = clazz.newMethod(nme.OUTER, clazz.pos) // 3
         outerAcc expandName clazz
-
-        val restpe = if (clazz.isTrait) clazz.outerClass.tpe else clazz.outerClass.thisType
-        decls1 enter (clazz.newOuterAccessor(clazz.pos) setInfo MethodType(Nil, restpe))
-        if (hasOuterField(clazz)) { //2
-          val access = if (clazz.isFinal) PRIVATE | LOCAL else PROTECTED
-          decls1 enter (
-            clazz.newValue(clazz.pos, nme.OUTER_LOCAL)
-            setFlag (SYNTHETIC | PARAMACCESSOR | access)
-            setInfo clazz.outerClass.thisType
-          )
-        }
+        
+        decls1 enter newOuterAccessor(clazz)
+        if (hasOuterField(clazz)) //2
+          decls1 enter newOuterField(clazz)
       }
       if (!clazz.isTrait && !parents.isEmpty) {
         for (mc <- clazz.mixinClasses) {
           val mixinOuterAcc: Symbol = atPhase(phase.next)(outerAccessor(mc))
           if (mixinOuterAcc != NoSymbol) {
             if (decls1 eq decls) decls1 = decls.cloneScope
-            val newAcc = mixinOuterAcc.cloneSymbol(clazz)
-            newAcc resetFlag DEFERRED setInfo (clazz.thisType memberType mixinOuterAcc)
+            val newAcc = mixinOuterAcc.cloneSymbol(clazz, mixinOuterAcc.flags & ~DEFERRED)
+            newAcc setInfo (clazz.thisType memberType mixinOuterAcc)
             decls1 enter newAcc
           }
         }
@@ -213,7 +225,7 @@ abstract class ExplicitOuter extends InfoTransform
       val outerFld =
         if (outerAcc.owner == currentClass &&
             base.tpe =:= currentClass.thisType &&
-            outerAcc.owner.isFinal)
+            outerAcc.owner.isEffectivelyFinal)
           outerField(currentClass) suchThat (_.owner == currentClass)
         else
           NoSymbol
@@ -344,16 +356,20 @@ abstract class ExplicitOuter extends InfoTransform
      *  @pre mixinClass is an inner class
      */
     def mixinOuterAccessorDef(mixinClass: Symbol): Tree = {
-      val outerAcc = outerAccessor(mixinClass) overridingSymbol currentClass
-      assert(outerAcc != NoSymbol)
-      val path =
-        if (mixinClass.owner.isTerm) THIS(mixinClass.owner.enclClass)
-        else gen.mkAttributedQualifier(currentClass.thisType baseType mixinClass prefix)
-
+      val outerAcc    = outerAccessor(mixinClass) overridingSymbol currentClass
+      def mixinPrefix = currentClass.thisType baseType mixinClass prefix;
+      assert(outerAcc != NoSymbol, "No outer accessor for inner mixin " + mixinClass + " in " + currentClass)
+      // I added the mixinPrefix.typeArgs.nonEmpty condition to address the
+      // crash in SI-4970.  I feel quite sure this can be improved.
+      val path = (
+        if (mixinClass.owner.isTerm) gen.mkAttributedThis(mixinClass.owner.enclClass)
+        else if (mixinPrefix.typeArgs.nonEmpty) gen.mkAttributedThis(mixinPrefix.typeSymbol)
+        else gen.mkAttributedQualifier(mixinPrefix)
+      )
       localTyper typed {
         (DEF(outerAcc) withPos currentClass.pos) === {
           // Need to cast for nested outer refs in presence of self-types. See ticket #3274.
-          transformer.transform(path) AS_ANY outerAcc.info.resultType
+          gen.mkCast(transformer.transform(path), outerAcc.info.resultType)
         }
       }
     }
@@ -364,15 +380,13 @@ abstract class ExplicitOuter extends InfoTransform
 
       def makeGuardDef(vs: List[Symbol], guard: Tree) = {
         val gdname = unit.freshTermName("gd")
-        val method = currentOwner.newMethod(tree.pos, gdname) setFlag SYNTHETIC
-        val fmls   = vs map (_.tpe)
-        val tpe    = new MethodType(method newSyntheticValueParams fmls, BooleanClass.tpe)
-        method setInfo tpe
+        val method = currentOwner.newMethod(gdname, tree.pos, SYNTHETIC)
+        val params = method newSyntheticValueParams vs.map(_.tpe)
+        method setInfo new MethodType(params, BooleanClass.tpe)
 
-        localTyper typed (DEF(method) === {
-          new ChangeOwnerTraverser(currentOwner, method) traverse guard
-          new TreeSymSubstituter(vs, method.paramss.head) transform (guard)
-        })
+        localTyper typed {
+          DEF(method) === guard.changeOwner(currentOwner -> method).substTreeSyms(vs zip params: _*)
+        }
       }
 
       val nguard = new ListBuffer[Tree]
@@ -405,13 +419,15 @@ abstract class ExplicitOuter extends InfoTransform
           if (unchecked)
             nselector = nselector1
 
-          (!unchecked, isSwitchAnnotation(tpt.tpe))
+          // Don't require a tableswitch if there are 1-2 casedefs
+          // since the matcher intentionally emits an if-then-else.
+          (!unchecked, isSwitchAnnotation(tpt.tpe) && ncases.size > 2)
         case _  =>
           (true, false)
       }
 
       val t = atPos(tree.pos) {
-        val context     = MatrixContext(currentRun.currentUnit, transform, localTyper, currentOwner, tree.tpe)
+        val context     = MatrixContext(currentUnit, transform, localTyper, currentOwner, tree.tpe)
         val t_untyped   = handlePattern(nselector, ncases, checkExhaustive, context)
 
         /* if @switch annotation is present, verify the resulting tree is a Match */
@@ -465,7 +481,7 @@ abstract class ExplicitOuter extends InfoTransform
                 val vparamss1 =
                   if (isInner(clazz)) { // (4)
                     val outerParam =
-                      sym.newValueParameter(sym.pos, nme.OUTER) setInfo outerField(clazz).info
+                      sym.newValueParameter(nme.OUTER, sym.pos) setInfo outerField(clazz).info
                     ((ValDef(outerParam) setType NoType) :: vparamss.head) :: vparamss.tail
                   } else vparamss
                 super.transform(treeCopy.DefDef(tree, mods, name, tparams, vparamss1, tpt, rhs))
@@ -490,7 +506,7 @@ abstract class ExplicitOuter extends InfoTransform
           val outerVal = atPos(tree.pos)(qual match {
             // it's a call between constructors of same class
             case _: This  =>
-              assert(outerParam != NoSymbol)
+              assert(outerParam != NoSymbol, tree)
               outerValue
             case _        =>
               gen.mkAttributedQualifier(qual.tpe.prefix match {
@@ -505,6 +521,29 @@ abstract class ExplicitOuter extends InfoTransform
           matchTranslation(mch)
 
         case _ =>
+          if (opt.virtPatmat) { // this turned out to be expensive, hence the hacky `if` and `return`
+            tree match {
+              // for patmatvirtualiser
+              // base.<outer>.eq(o) --> base.$outer().eq(o) if there's an accessor, else the whole tree becomes TRUE
+              // TODO remove the synthetic `<outer>` method from outerFor??
+              case Apply(eqsel@Select(eqapp@Apply(sel@Select(base, outerAcc), Nil), eq), args)  if outerAcc == nme.OUTER_SYNTH =>
+                val outerFor = sel.symbol.owner.toInterface // TODO: toInterface necessary?
+                val acc = outerAccessor(outerFor)
+                if(acc == NoSymbol) {
+                  // println("WARNING: no outer for "+ outerFor)
+                  return transform(TRUE) // urgh... drop condition if there's no accessor
+                } else {
+                  // println("(base, acc)= "+(base, acc))
+                  val outerSelect = localTyper typed Apply(Select(base, acc), Nil)
+                  // achieves the same as: localTyper typed atPos(tree.pos)(outerPath(base, base.tpe.typeSymbol, outerFor.outerClass))
+                  // println("(b, tpsym, outerForI, outerFor, outerClass)= "+ (base, base.tpe.typeSymbol, outerFor, sel.symbol.owner, outerFor.outerClass))
+                  // println("outerSelect = "+ outerSelect)
+                  return transform(treeCopy.Apply(tree, treeCopy.Select(eqsel, outerSelect, eq), args))
+                }
+              case _ =>
+            }
+          }
+
           if (settings.Xmigration28.value) tree match {
             case TypeApply(fn @ Select(qual, _), args) if fn.symbol == Object_isInstanceOf || fn.symbol == Any_isInstanceOf =>
               if (isArraySeqTest(qual.tpe, args.head.tpe))
@@ -529,9 +568,5 @@ abstract class ExplicitOuter extends InfoTransform
 
   class Phase(prev: scala.tools.nsc.Phase) extends super.Phase(prev) {
     override val checkable = false
-    override def run() {
-      super.run
-      Pattern.clear()    // clear the cache
-    }
   }
 }

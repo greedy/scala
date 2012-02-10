@@ -22,6 +22,8 @@ import collection.parallel.mutable.ParHashSet
  *  @author  Martin Odersky
  *  @version 2.0, 31/12/2006
  *  @since   1
+ *  @see [[http://docs.scala-lang.org/overviews/collections/concrete-mutable-collection-classes.html#hash_tables "Scala's Collection Library overview"]]
+ *  section on `Hash Tables` for more information.
  *
  *  @define Coll mutable.HashSet
  *  @define coll mutable hash set
@@ -37,7 +39,8 @@ import collection.parallel.mutable.ParHashSet
  */
 @SerialVersionUID(1L)
 class HashSet[A] private[collection] (contents: FlatHashTable.Contents[A])
-extends Set[A]
+extends AbstractSet[A]
+   with Set[A]
    with GenericSetTemplate[A, HashSet]
    with SetLike[A, HashSet[A]]
    with FlatHashTable[A]
@@ -55,11 +58,13 @@ extends Set[A]
   def contains(elem: A): Boolean = containsEntry(elem)
 
   def += (elem: A): this.type = { addEntry(elem); this }
+
   def -= (elem: A): this.type = { removeEntry(elem); this }
 
   override def par = new ParHashSet(hashTableContents)
 
   override def add(elem: A): Boolean = addEntry(elem)
+
   override def remove(elem: A): Boolean = removeEntry(elem).isDefined
 
   override def clear() = clearTable()

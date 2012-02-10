@@ -23,6 +23,9 @@ import parallel.mutable.ParArray
  *  @author  Martin Odersky
  *  @version 2.8
  *  @since   1
+ *  @see [[http://docs.scala-lang.org/overviews/collections/concrete-mutable-collection-classes.html#array_buffers "Scala's Collection Library overview"]]
+ *  section on `Array Buffers` for more information.
+
  *
  *  @tparam A    the type of this arraybuffer's elements.
  *
@@ -42,7 +45,8 @@ import parallel.mutable.ParArray
  */
 @SerialVersionUID(1529165946227428979L)
 class ArrayBuffer[A](override protected val initialSize: Int)
-  extends Buffer[A]
+  extends AbstractBuffer[A]
+     with Buffer[A]
      with GenericTraversableTemplate[A, ArrayBuffer]
      with BufferLike[A, ArrayBuffer[A]]
      with IndexedSeqOptimized[A, ArrayBuffer[A]]
@@ -89,7 +93,7 @@ class ArrayBuffer[A](override protected val initialSize: Int)
    *  @return      the updated buffer.
    */
   override def ++=(xs: TraversableOnce[A]): this.type = xs match {
-    case v: IndexedSeq[_] =>
+    case v: collection.IndexedSeqLike[_, _] =>
       val n = v.length
       ensureSize(size0 + n)
       v.copyToArray(array.asInstanceOf[scala.Array[Any]], size0, n)
@@ -187,7 +191,7 @@ class ArrayBuffer[A](override protected val initialSize: Int)
  */
 object ArrayBuffer extends SeqFactory[ArrayBuffer] {
   /** $genericCanBuildFromInfo */
-  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, ArrayBuffer[A]] = new GenericCanBuildFrom[A]
+  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, ArrayBuffer[A]] = ReusableCBF.asInstanceOf[GenericCanBuildFrom[A]]
   def newBuilder[A]: Builder[A, ArrayBuffer[A]] = new ArrayBuffer[A]
 }
 

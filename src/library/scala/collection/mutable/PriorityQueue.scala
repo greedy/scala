@@ -12,7 +12,7 @@ package scala.collection
 package mutable
 
 import generic._
-import annotation.{migration, bridge}
+import annotation.bridge
 
 /** This class implements priority queues using a heap.
  *  To prioritize elements of type A there must be an implicit
@@ -34,7 +34,8 @@ import annotation.{migration, bridge}
  */
 @cloneable
 class PriorityQueue[A](implicit val ord: Ordering[A])
-      extends Iterable[A]
+   extends AbstractIterable[A]
+      with Iterable[A]
       with GenericOrderedTraversableTemplate[A, PriorityQueue]
       with IterableLike[A, PriorityQueue[A]]
       with Growable[A]
@@ -43,7 +44,7 @@ class PriorityQueue[A](implicit val ord: Ordering[A])
 {
   import ord._
 
-  private final class ResizableArrayAccess[A] extends ResizableArray[A] {
+  private final class ResizableArrayAccess[A] extends AbstractSeq[A] with ResizableArray[A] {
     @inline def p_size0 = size0
     @inline def p_size0_=(s: Int) = size0 = s
     @inline def p_array = array
@@ -90,23 +91,6 @@ class PriorityQueue[A](implicit val ord: Ordering[A])
       }
     }
   }
-
-  @deprecated(
-    "Use `+=` instead if you intend to add by side effect to an existing collection.\n"+
-    "Use `clone() +=` if you intend to create a new collection.", "2.8.0"
-  )
-  def +(elem: A): PriorityQueue[A] = { this.clone() += elem }
-
-  /** Add two or more elements to this set.
-   *  @param    elem1 the first element.
-   *  @param    kv2 the second element.
-   *  @param    kvs the remaining elements.
-   */
-  @deprecated(
-    "Use `++=` instead if you intend to add by side effect to an existing collection.\n"+
-    "Use `clone() ++=` if you intend to create a new collection.", "2.8.0"
-  )
-  def +(elem1: A, elem2: A, elems: A*) = { this.clone().+=(elem1, elem2, elems : _*) }
 
   /** Inserts a single element into the priority queue.
    *
@@ -186,7 +170,7 @@ class PriorityQueue[A](implicit val ord: Ordering[A])
    *
    *  @return  an iterator over all elements sorted in descending order.
    */
-  override def iterator: Iterator[A] = new Iterator[A] {
+  override def iterator: Iterator[A] = new AbstractIterator[A] {
     private var i = 1
     def hasNext: Boolean = i < resarr.p_size0
     def next(): A = {
@@ -218,7 +202,7 @@ class PriorityQueue[A](implicit val ord: Ordering[A])
     revq
   }
 
-  def reverseIterator = new Iterator[A] {
+  def reverseIterator: Iterator[A] = new AbstractIterator[A] {
     private var i = resarr.p_size0 - 1
     def hasNext: Boolean = i >= 1
     def next(): A = {

@@ -26,13 +26,15 @@ abstract class SourceFile {
     new OffsetPosition(this, offset)
   }
   def position(line: Int, column: Int) : Position = new OffsetPosition(this, lineToOffset(line) + column)
+
   def offsetToLine(offset: Int): Int
   def lineToOffset(index : Int): Int
+
   /** Map a position to a position in the underlying source file.
    *  For regular source files, simply return the argument.
    */
   def positionInUltimateSource(position: Position) = position
-  override def toString(): String = file.name /* + ":" + content.length */
+  override def toString() = file.name
   def dbg(offset: Int) = (new OffsetPosition(this, offset)).dbgString
   def path = file.path
 
@@ -49,13 +51,28 @@ abstract class SourceFile {
   def identifier(pos: Position): Option[String] = None
 }
 
+/** An object representing a missing source file.
+ */
+object NoSourceFile extends SourceFile {
+  def content                   = Array()
+  def file                      = NoFile
+  def isLineBreak(idx: Int)     = false
+  def isSelfContained           = true
+  def length                    = -1
+  def offsetToLine(offset: Int) = -1
+  def lineToOffset(index : Int) = -1
+  override def toString = "<no source file>"
+}
+
+object NoFile extends VirtualFile("<no file>", "<no file>")
+
 object ScriptSourceFile {
   /** Length of the script header from the given content, if there is one.
    *  The header begins with "#!" or "::#!" and ends with a line starting
    *  with "!#" or "::!#".
    */
   def headerLength(cs: Array[Char]): Int = {
-    val headerPattern = Pattern.compile("""^(::)?!#.*(\r|\n|\r\n)""", Pattern.MULTILINE)
+    val headerPattern = Pattern.compile("""((?m)^(::)?!#.*|^.*/env .*)(\r|\n|\r\n)""")
     val headerStarts  = List("#!", "::#!")
 
     if (headerStarts exists (cs startsWith _)) {

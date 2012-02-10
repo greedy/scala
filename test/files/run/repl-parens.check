@@ -20,6 +20,12 @@ scala>   (  (2 + 2 )  )
 res5: Int = 4
 
 scala> 5 ;   (  (2 + 2 )  ) ; ((5))
+<console>:7: warning: a pure expression does nothing in statement position; you may be omitting necessary parentheses
+              5 ;   (  (2 + 2 )  ) ;;
+              ^
+<console>:7: warning: a pure expression does nothing in statement position; you may be omitting necessary parentheses
+              5 ;   (  (2 + 2 )  ) ;;
+                          ^
 res6: Int = 5
 
 scala> (((2 + 2)), ((2 + 2)))
@@ -34,18 +40,33 @@ res9: String = 4423
 scala> 
 
 scala> 55 ; ((2 + 2)) ; (1, 2, 3)
+<console>:7: warning: a pure expression does nothing in statement position; you may be omitting necessary parentheses
+              55 ; ((2 + 2)) ;;
+              ^
+<console>:7: warning: a pure expression does nothing in statement position; you may be omitting necessary parentheses
+              55 ; ((2 + 2)) ;;
+                       ^
 res10: (Int, Int, Int) = (1,2,3)
+
+scala> 55 ; (x: Int) => x + 1 ; () => ((5))
+<console>:7: warning: a pure expression does nothing in statement position; you may be omitting necessary parentheses
+              55 ; (x: Int) => x + 1 ;;
+              ^
+res11: () => Int = <function0>
 
 scala> 
 
 scala> () => 5
-res11: () => Int = <function0>
-
-scala> 55 ; () => 5
 res12: () => Int = <function0>
 
+scala> 55 ; () => 5
+<console>:7: warning: a pure expression does nothing in statement position; you may be omitting necessary parentheses
+              55 ;;
+              ^
+res13: () => Int = <function0>
+
 scala> () => { class X ; new X }
-res13: () => java.lang.Object with ScalaObject = <function0>
+res14: () => Object with ScalaObject = <function0>
 
 scala> 
 
@@ -53,6 +74,11 @@ scala> def foo(x: Int)(y: Int)(z: Int) = x+y+z
 foo: (x: Int)(y: Int)(z: Int)Int
 
 scala> foo(5)(10)(15)+foo(5)(10)(15)
-res14: Int = 60
+res15: Int = 60
+
+scala> 
+
+scala> List(1) ++ List('a')
+res16: List[AnyVal] = List(1, a)
 
 scala> 

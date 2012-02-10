@@ -27,14 +27,6 @@ abstract class Future[+T] extends Responder[T] with Function0[T] {
   private[actors] var fvalue: Option[Any] = None
   private[actors] def fvalueTyped = fvalue.get.asInstanceOf[T]
 
-  @deprecated("this member is going to be removed in a future release", "2.8.0")
-  def ch: InputChannel[Any] = inputChannel
-
-  @deprecated("this member is going to be removed in a future release", "2.8.0")
-  protected def value: Option[Any] = fvalue
-  @deprecated("this member is going to be removed in a future release", "2.8.0")
-  protected def value_=(x: Option[Any]) { fvalue = x }
-
   /** Tests whether the future's result is available.
    *
    *  @return `true`  if the future's result is available,
@@ -102,7 +94,9 @@ private class FutureActor[T](fun: SyncVar[T] => Unit, channel: Channel[T]) exten
 
       loop {
         react {
-          case Eval => reply()
+          // This is calling ReplyReactor#reply(msg: Any).
+          // Was: reply().  Now: reply(()).
+          case Eval => reply(())
         }
       }
     }
@@ -206,8 +200,8 @@ object Futures {
     Actor.timer.schedule(timerTask, timeout)
 
     def awaitWith(partFuns: Seq[PartialFunction[Any, Pair[Int, Any]]]) {
-      val reaction: PartialFunction[Any, Unit] = new PartialFunction[Any, Unit] {
-        def isDefinedAt(msg: Any) = msg match {
+      val reaction: PartialFunction[Any, Unit] = new scala.runtime.AbstractPartialFunction[Any, Unit] {
+        def _isDefinedAt(msg: Any) = msg match {
           case TIMEOUT => true
           case _ => partFuns exists (_ isDefinedAt msg)
         }

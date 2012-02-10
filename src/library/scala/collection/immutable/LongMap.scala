@@ -79,7 +79,7 @@ object LongMap {
 import LongMap._
 
 // Iterator over a non-empty LongMap.
-private[immutable] abstract class LongMapIterator[V, T](it : LongMap[V]) extends Iterator[T]{
+private[immutable] abstract class LongMapIterator[V, T](it : LongMap[V]) extends AbstractIterator[T] {
 
   // Basically this uses a simple stack to emulate conversion over the tree. However
   // because we know that Longs are only 64 bits we can have at most 64 LongMap.Bins and
@@ -152,7 +152,11 @@ import LongMap._;
  *  @define mayNotTerminateInf
  *  @define willNotTerminateInf
  */
-sealed abstract class LongMap[+T] extends Map[Long, T] with MapLike[Long, T, LongMap[T]] {
+sealed abstract class LongMap[+T]
+extends AbstractMap[Long, T]
+   with Map[Long, T]
+   with MapLike[Long, T, LongMap[T]] {
+
   override def empty: LongMap[T] = LongMap.Nil;
 
   override def toList = {
@@ -309,8 +313,9 @@ sealed abstract class LongMap[+T] extends Map[Long, T] with MapLike[Long, T, Lon
   }
 
   /**
-   * A combined transform and filter function. Returns an LongMap such that for each (key, value) mapping
-   * in this map, if f(key, value) == None the map contains no mapping for key, and if <code>f(key, value)
+   * A combined transform and filter function. Returns an `LongMap` such that
+   * for each `(key, value)` mapping in this map, if `f(key, value) == None`
+   * the map contains no mapping for key, and if `f(key, value)`.
    *
    * @tparam S    The type of the values in the resulting `LongMap`.
    * @param f     The transforming function.
@@ -332,7 +337,6 @@ sealed abstract class LongMap[+T] extends Map[Long, T] with MapLike[Long, T, Lon
       }
     case LongMap.Nil => LongMap.Nil;
   }
-
 
   /**
    * Forms a union map with that map, using the combining function to resolve conflicts.
@@ -364,9 +368,9 @@ sealed abstract class LongMap[+T] extends Map[Long, T] with MapLike[Long, T, Lon
   }
 
   /**
-   * Forms the intersection of these two maps with a combining function. The resulting map is
-   * a map that has only keys present in both maps and has values produced from the original mappings
-   * by combining them with f.
+   * Forms the intersection of these two maps with a combining function. The
+   * resulting map is a map that has only keys present in both maps and has
+   * values produced from the original mappings by combining them with `f`.
    *
    * @tparam S      The type of values in `that`.
    * @tparam R      The type of values in the resulting `LongMap`.

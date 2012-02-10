@@ -25,7 +25,9 @@ import annotation.migration
  *  @since   1
  */
 class ImmutableMapAdaptor[A, B](protected var imap: immutable.Map[A, B])
-extends Map[A, B] with Serializable
+extends AbstractMap[A, B]
+   with Map[A, B]
+   with Serializable
 {
 
   override def size: Int = imap.size
@@ -44,18 +46,15 @@ extends Map[A, B] with Serializable
 
   override def keysIterator: Iterator[A] = imap.keysIterator
 
-  @migration(2, 8, "As of 2.8, keys returns Iterable[A] rather than Iterator[A].")
+  @migration("`keys` returns Iterable[A] rather than Iterator[A].", "2.8.0")
   override def keys: collection.Iterable[A] = imap.keys
 
   override def valuesIterator: Iterator[B] = imap.valuesIterator
 
-  @migration(2, 8, "As of 2.8, values returns Iterable[B] rather than Iterator[B].")
+  @migration("`values` returns Iterable[B] rather than Iterator[B].", "2.8.0")
   override def values: collection.Iterable[B] = imap.values
 
   def iterator: Iterator[(A, B)] = imap.iterator
-
-  @deprecated("use `iterator` instead", "2.8.0")
-  override def elements = iterator
 
   override def toList: List[(A, B)] = imap.toList
 

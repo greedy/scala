@@ -15,15 +15,72 @@ import generic.CanBuildFrom
 import annotation.{ elidable, implicitNotFound }
 import annotation.elidable.ASSERTION
 
-/** The <code>Predef</code> object provides definitions that are
- *  accessible in all Scala compilation units without explicit
- *  qualification.
+/** The `Predef` object provides definitions that are accessible in all Scala
+ *  compilation units without explicit qualification.
+ *
+ *  === Commonly Used Types ===
+ *  Predef provides type aliases for types which are commonly used, such as
+ *  the immutable collection types [[scala.collection.immutable.Map]],
+ *  [[scala.collection.immutable.Set]], and the [[scala.collection.immutable.List]]
+ *  constructors ([[scala.collection.immutable.::]] and
+ *  [[scala.collection.immutable.Nil]]).
+ *  The types `Pair` (a [[scala.Tuple2]]) and `Triple` (a [[scala.Tuple3]]), with
+ *  simple constructors, are also provided.
+ *
+ *  === Console I/O ===
+ *  Predef provides a number of simple functions for console I/O, such as
+ *  `print`, `println`, `readLine`, `readInt`, etc. These functions are all
+ *  aliases of the functions provided by [[scala.Console]].
+ *
+ *  === Assertions ===
+ *
+ *  A set of `assert` functions are provided for use as a way to document
+ *  and dynamically check invariants in code. `assert` statements can be elided
+ *  at runtime by providing the command line argument `-Xdisable-assertions` to
+ *  the `scala` command.
+ *
+ *  Variants of `assert` intended for use with static analysis tools are also
+ *  provided: `assume`, `require` and `ensuring`. `require` and `ensuring` are
+ *  intended for use as a means of design-by-contract style specification
+ *  of pre- and post-conditions on functions, with the intention that these
+ *  specifications could be consumed by a static analysis tool. For instance,
+ *
+ *  {{{
+ *  def addNaturals(nats: List[Int]): Int = {
+ *    require(nats forall (_ >= 0), "List contains negative numbers")
+ *    nats.foldLeft(0)(_ + _)
+ *  } ensuring(_ >= 0)
+ *  }}}
+ *
+ *  The declaration of `addNaturals` states that the list of integers passed should
+ *  only contain natural numbers (i.e. non-negative), and that the result returned
+ *  will also be natural. `require` is distinct from `assert` in that if the
+ *  condition fails, then the caller of the function is to blame rather than a
+ *  logical error having been made within `addNaturals` itself. `ensures` is a
+ *  form of `assert` that declares the guarantee the function is providing with
+ *  regards to it's return value.
+ *
+ *  === Implicit Conversions ===
+ *  A number of commonly applied implicit conversions are also defined here, and
+ *  in the parent type [[scala.LowPriorityImplicits]]. Implicit conversions
+ *  are provided for the "widening" of numeric values, for instance, converting a
+ *  Short value to a Long value as required, and to add additional higher-order
+ *  functions to Array values. These are described in more detail in the documentation of [[scala.Array]].
  */
 object Predef extends LowPriorityImplicits {
-  /** Return the runtime representation of a class type.  This is a stub method.
-   *  The actual implementation is filled in by the compiler.
+  /**
+   * Retrieve the runtime representation of a class type. `classOf[T]` is equivalent to
+   * the class literal `T.class` in Java.
+   *
+   * @example {{{
+   * val listClass = classOf[List[_]]
+   * // listClass is java.lang.Class[List[_]] = class scala.collection.immutable.List
+   *
+   * val mapIntString = classOf[Map[Int,String]]
+   * // mapIntString is java.lang.Class[Map[Int,String]] = interface scala.collection.immutable.Map
+   * }}}
    */
-  def classOf[T]: Class[T] = null
+  def classOf[T]: Class[T] = null // This is a stub method. The actual implementation is filled in by the compiler.
 
   type String        = java.lang.String
   type Class[T]      = java.lang.Class[T]
@@ -54,7 +111,7 @@ object Predef extends LowPriorityImplicits {
 
   // Minor variations on identity functions
   def identity[A](x: A): A         = x    // @see `conforms` for the implicit version
-  def implicitly[T](implicit e: T) = e    // for summoning implicit values from the nether world
+  @inline def implicitly[T](implicit e: T) = e    // for summoning implicit values from the nether world -- TODO: when dependent method types are on by default, give this result type `e.type`, so that inliner has better chance of knowing which method to inline in calls like `implicitly[MatchingStrategy[Option]].zero`
   @inline def locally[T](x: T): T  = x    // to communicate intent and avoid unmoored statements
 
   // Apparently needed for the xml library
@@ -76,9 +133,9 @@ object Predef extends LowPriorityImplicits {
 
   // errors and asserts -------------------------------------------------
 
-  /** Tests an expression, throwing an AssertionError if false.
-   *  Calls to this method will not be generated if -Xelide-below
-   *  is at least ASSERTION.
+  /** Tests an expression, throwing an `AssertionError` if false.
+   *  Calls to this method will not be generated if `-Xelide-below`
+   *  is at least `ASSERTION`.
    *
    *  @see elidable
    *  @param p   the expression to test
@@ -89,9 +146,9 @@ object Predef extends LowPriorityImplicits {
       throw new java.lang.AssertionError("assertion failed")
   }
 
-  /** Tests an expression, throwing an AssertionError if false.
-   *  Calls to this method will not be generated if -Xelide-below
-   *  is at least ASSERTION.
+  /** Tests an expression, throwing an `AssertionError` if false.
+   *  Calls to this method will not be generated if `-Xelide-below`
+   *  is at least `ASSERTION`.
    *
    *  @see elidable
    *  @param p   the expression to test
@@ -103,11 +160,11 @@ object Predef extends LowPriorityImplicits {
       throw new java.lang.AssertionError("assertion failed: "+ message)
   }
 
-  /** Tests an expression, throwing an AssertionError if false.
+  /** Tests an expression, throwing an `AssertionError` if false.
    *  This method differs from assert only in the intent expressed:
    *  assert contains a predicate which needs to be proven, while
    *  assume contains an axiom for a static checker.  Calls to this method
-   *  will not be generated if -Xelide-below is at least ASSERTION.
+   *  will not be generated if `-Xelide-below` is at least `ASSERTION`.
    *
    *  @see elidable
    *  @param p   the expression to test
@@ -118,11 +175,11 @@ object Predef extends LowPriorityImplicits {
       throw new java.lang.AssertionError("assumption failed")
   }
 
-  /** Tests an expression, throwing an AssertionError if false.
+  /** Tests an expression, throwing an `AssertionError` if false.
    *  This method differs from assert only in the intent expressed:
    *  assert contains a predicate which needs to be proven, while
    *  assume contains an axiom for a static checker.  Calls to this method
-   *  will not be generated if -Xelide-below is at least ASSERTION.
+   *  will not be generated if `-Xelide-below` is at least `ASSERTION`.
    *
    *  @see elidable
    *  @param p   the expression to test
@@ -134,8 +191,8 @@ object Predef extends LowPriorityImplicits {
       throw new java.lang.AssertionError("assumption failed: "+ message)
   }
 
-  /** Tests an expression, throwing an IllegalArgumentException if false.
-   *  This method is similar to assert, but blames the caller of the method
+  /** Tests an expression, throwing an `IllegalArgumentException` if false.
+   *  This method is similar to `assert`, but blames the caller of the method
    *  for violating the condition.
    *
    *  @param p   the expression to test
@@ -145,8 +202,8 @@ object Predef extends LowPriorityImplicits {
       throw new IllegalArgumentException("requirement failed")
   }
 
-  /** Tests an expression, throwing an IllegalArgumentException if false.
-   *  This method is similar to assert, but blames the caller of the method
+  /** Tests an expression, throwing an `IllegalArgumentException` if false.
+   *  This method is similar to `assert`, but blames the caller of the method
    *  for violating the condition.
    *
    *  @param p   the expression to test
@@ -157,13 +214,23 @@ object Predef extends LowPriorityImplicits {
       throw new IllegalArgumentException("requirement failed: "+ message)
   }
 
-  final class Ensuring[A](val x: A) {
-    def ensuring(cond: Boolean): A = { assert(cond); x }
-    def ensuring(cond: Boolean, msg: => Any): A = { assert(cond, msg); x }
-    def ensuring(cond: A => Boolean): A = { assert(cond(x)); x }
-    def ensuring(cond: A => Boolean, msg: => Any): A = { assert(cond(x), msg); x }
+  final class Ensuring[A](val __resultOfEnsuring: A) {
+    // `__resultOfEnsuring` must be a public val to allow inlining.
+    // See comments in ArrowAssoc for more.
+    @deprecated("Use __resultOfEnsuring instead", "2.10.0")
+    def x = __resultOfEnsuring
+
+    def ensuring(cond: Boolean): A = { assert(cond); __resultOfEnsuring }
+    def ensuring(cond: Boolean, msg: => Any): A = { assert(cond, msg); __resultOfEnsuring }
+    def ensuring(cond: A => Boolean): A = { assert(cond(__resultOfEnsuring)); __resultOfEnsuring }
+    def ensuring(cond: A => Boolean, msg: => Any): A = { assert(cond(__resultOfEnsuring), msg); __resultOfEnsuring }
   }
   implicit def any2Ensuring[A](x: A): Ensuring[A] = new Ensuring(x)
+
+  /** `???` can be used for marking methods that remain to be implemented.
+   *  @throws  A `NotImplementedError`
+   */
+  def ??? : Nothing = throw new NotImplementedError
 
   // tupling ------------------------------------------------------------
 
@@ -179,8 +246,17 @@ object Predef extends LowPriorityImplicits {
     def unapply[A, B, C](x: Tuple3[A, B, C]): Option[Tuple3[A, B, C]] = Some(x)
   }
 
-  final class ArrowAssoc[A](val x: A) {
-    @inline def -> [B](y: B): Tuple2[A, B] = Tuple2(x, y)
+  final class ArrowAssoc[A](val __leftOfArrow: A) {
+    // `__leftOfArrow` must be a public val to allow inlining. The val
+    // used to be called `x`, but now goes by `__leftOfArrow`, as that
+    // reduces the chances of a user's writing `foo.__leftOfArrow` and
+    // being confused why they get an ambiguous implicit conversion
+    // error. (`foo.x` used to produce this error since both
+    // any2Ensuring and any2ArrowAssoc pimped an `x` onto everything)
+    @deprecated("Use __leftOfArrow instead", "2.10.0")
+    def x = __leftOfArrow
+
+    @inline def -> [B](y: B): Tuple2[A, B] = Tuple2(__leftOfArrow, y)
     def →[B](y: B): Tuple2[A, B] = ->(y)
   }
   implicit def any2ArrowAssoc[A](x: A): ArrowAssoc[A] = new ArrowAssoc(x)
@@ -193,7 +269,7 @@ object Predef extends LowPriorityImplicits {
   def printf(text: String, xs: Any*) = Console.print(text.format(xs: _*))
 
   def readLine(): String = Console.readLine()
-  def readLine(text: String, args: Any*) = Console.readLine(text, args)
+  def readLine(text: String, args: Any*) = Console.readLine(text, args: _*)
   def readBoolean() = Console.readBoolean()
   def readByte() = Console.readByte()
   def readShort() = Console.readShort()
@@ -212,12 +288,12 @@ object Predef extends LowPriorityImplicits {
   implicit def exceptionWrapper(exc: Throwable) = new runtime.RichException(exc)
 
   implicit def zipped2ToTraversable[El1, El2](zz: Tuple2[_, _]#Zipped[_, El1, _, El2]): Traversable[(El1, El2)] =
-    new Traversable[(El1, El2)] {
+    new collection.AbstractTraversable[(El1, El2)] {
       def foreach[U](f: ((El1, El2)) => U): Unit = zz foreach Function.untupled(f)
     }
 
   implicit def zipped3ToTraversable[El1, El2, El3](zz: Tuple3[_, _, _]#Zipped[_, El1, _, El2, _, El3]): Traversable[(El1, El2, El3)] =
-    new Traversable[(El1, El2, El3)] {
+    new collection.AbstractTraversable[(El1, El2, El3)] {
       def foreach[U](f: ((El1, El2, El3)) => U): Unit = zz foreach Function.untupled(f)
     }
 
@@ -341,12 +417,12 @@ object Predef extends LowPriorityImplicits {
    *
    * @note we need a new type constructor `<:<` and evidence `conforms`,
    * as reusing `Function1` and `identity` leads to ambiguities in
-   * case of type errors (any2stringadd is inferred)
+   * case of type errors (`any2stringadd` is inferred)
    *
    * To constrain any abstract type T that's in scope in a method's
    * argument list (not just the method's own type parameters) simply
-   * add an implicit argument of type `T <:< U`, where U is the required
-   * upper bound; or for lower-bounds, use: `L <:< T`, where L is the
+   * add an implicit argument of type `T <:< U`, where `U` is the required
+   * upper bound; or for lower-bounds, use: `L <:< T`, where `L` is the
    * required lower bound.
    *
    * In part contributed by Jason Zaugg.
@@ -360,7 +436,7 @@ object Predef extends LowPriorityImplicits {
 
   /** An instance of `A =:= B` witnesses that the types `A` and `B` are equal.
    *
-   * @see <:< for expressing subtyping constraints
+   * @see `<:<` for expressing subtyping constraints
    */
   @implicitNotFound(msg = "Cannot prove that ${From} =:= ${To}.")
   sealed abstract class =:=[From, To] extends (From => To) with Serializable
@@ -383,7 +459,7 @@ object Predef extends LowPriorityImplicits {
 
   object DummyImplicit {
 
-    /** An implicit value yielding a DummyImplicit.
+    /** An implicit value yielding a `DummyImplicit`.
      *   @see fallbackCanBuildFrom in Array.scala
      */
     implicit def dummyImplicit: DummyImplicit = new DummyImplicit

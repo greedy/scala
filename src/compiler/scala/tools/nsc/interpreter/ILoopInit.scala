@@ -6,6 +6,7 @@
 package scala.tools.nsc
 package interpreter
 
+import util.Position
 import scala.tools.util.SignalManager
 import scala.util.control.Exception.ignoring
 
@@ -46,7 +47,7 @@ trait ILoopInit {
     }
     ignoring(classOf[Exception]) {
       SignalManager("INT") = {
-        if (intp == null)
+        if (intp == null || intp.lineManager == null)
           onExit()
         else if (intp.lineManager.running)
           intp.lineManager.cancel()
@@ -58,6 +59,9 @@ trait ILoopInit {
         else onExit()
       }
     }
+  }
+  protected def removeSigIntHandler() {
+    squashAndLog("removeSigIntHandler")(SignalManager("INT") = null)
   }
 
   private val initLock = new java.util.concurrent.locks.ReentrantLock()
@@ -95,12 +99,19 @@ trait ILoopInit {
     if (!initIsComplete)
       withLock { while (!initIsComplete) initLoopCondition.await() }
   }
+  // private def warningsThunks = List(
+  //   () => intp.bind("lastWarnings", "" + manifest[List[(Position, String)]], intp.lastWarnings _),
+  // )
+
   protected def postInitThunks = List[Option[() => Unit]](
     Some(intp.setContextClassLoader _),
     if (isReplPower) Some(() => enablePowerMode(true)) else None,
     // do this last to avoid annoying uninterruptible startups
     Some(installSigIntHandler _)
   ).flatten
+  // ++ (
+  //   warningsThunks
+  // )
   // called once after init condition is signalled
   protected def postInitialization() {
     postInitThunks foreach (f => addThunk(f()))

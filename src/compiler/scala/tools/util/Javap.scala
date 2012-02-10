@@ -13,24 +13,44 @@ import java.io.{ InputStream, PrintWriter, ByteArrayInputStream, FileNotFoundExc
 import scala.tools.nsc.io.{ File, NullPrintStream }
 import Javap._
 
-class Javap(
-  val loader: ScalaClassLoader = ScalaClassLoader.getSystemLoader(),
+trait Javap {
+  def loader: ScalaClassLoader
+  def printWriter: PrintWriter
+  def apply(args: Seq[String]): List[JpResult]
+  def tryFile(path: String): Option[Array[Byte]]
+  def tryClass(path: String): Array[Byte]
+}
+
+object NoJavap extends Javap {
+  def loader: ScalaClassLoader                   = getClass.getClassLoader
+  def printWriter: PrintWriter                   = new PrintWriter(System.err, true)
+  def apply(args: Seq[String]): List[JpResult]   = Nil
+  def tryFile(path: String): Option[Array[Byte]] = None
+  def tryClass(path: String): Array[Byte]        = Array()
+}
+
+class JavapClass(
+  val loader: ScalaClassLoader = ScalaClassLoader.appLoader,
   val printWriter: PrintWriter = new PrintWriter(System.out, true)
-) {
+) extends Javap {
 
   lazy val parser = new JpOptions
 
-  val EnvClass = loader.tryToInitializeClass[FakeEnvironment](Env).orNull
-  val EnvCtr   = EnvClass.getConstructor(List[Class[_]](): _*)
-
+  val EnvClass     = loader.tryToInitializeClass[FakeEnvironment](Env).orNull
   val PrinterClass = loader.tryToInitializeClass[FakePrinter](Printer).orNull
-  val PrinterCtr   = PrinterClass.getConstructor(classOf[InputStream], classOf[PrintWriter], EnvClass)
+  private def failed = (EnvClass eq null) || (PrinterClass eq null)
+
+  val PrinterCtr   = (
+    if (failed) null
+    else PrinterClass.getConstructor(classOf[InputStream], classOf[PrintWriter], EnvClass)
+  )
 
   def findBytes(path: String): Array[Byte] =
     tryFile(path) getOrElse tryClass(path)
 
   def apply(args: Seq[String]): List[JpResult] = {
-    args.toList filterNot (_ startsWith "-") map { path =>
+    if (failed) Nil
+    else args.toList filterNot (_ startsWith "-") map { path =>
       val bytes = findBytes(path)
       if (bytes.isEmpty) new JpError("Could not find class bytes for '%s'".format(path))
       else new JpSuccess(newPrinter(new ByteArrayInputStream(bytes), newEnv(args)))
@@ -38,12 +58,14 @@ class Javap(
   }
 
   def newPrinter(in: InputStream, env: FakeEnvironment): FakePrinter =
-    PrinterCtr.newInstance(in, printWriter, env)
+    if (failed) null
+    else PrinterCtr.newInstance(in, printWriter, env)
 
   def newEnv(opts: Seq[String]): FakeEnvironment = {
-    val env: FakeEnvironment = EnvClass.newInstance()
+    lazy val env: FakeEnvironment = EnvClass.newInstance()
 
-    parser(opts) foreach { case (name, value) =>
+    if (failed) null
+    else parser(opts) foreach { case (name, value) =>
       val field = EnvClass getDeclaredField name
       field setAccessible true
       field.set(env, value.asInstanceOf[AnyRef])
@@ -79,7 +101,7 @@ object Javap {
   val Env     = "sun.tools.javap.JavapEnvironment"
   val Printer = "sun.tools.javap.JavapPrinter"
 
-  def isAvailable(cl: ScalaClassLoader = ScalaClassLoader.getSystemLoader()) =
+  def isAvailable(cl: ScalaClassLoader = ScalaClassLoader.appLoader) =
     cl.tryToInitializeClass[AnyRef](Env).isDefined
 
   // "documentation"
@@ -87,7 +109,7 @@ object Javap {
   type FakePrinter = AnyRef
 
   def apply(path: String): Unit      = apply(Seq(path))
-  def apply(args: Seq[String]): Unit = new Javap() apply args foreach (_.show())
+  def apply(args: Seq[String]): Unit = new JavapClass() apply args foreach (_.show())
 
   sealed trait JpResult {
     type ResultType
@@ -121,15 +143,15 @@ object Javap {
     }
     private val envActionMap: Map[String, (String, Any)] = {
       val map = Map(
-        "-l"         -> ("showLineAndLocal", true),
-        "-c"         -> ("showDisassembled", true),
-        "-s"         -> ("showInternalSigs", true),
-        "-verbose"   -> ("showVerbose", true),
-        "-private"   -> ("showAccess", Access.PRIVATE),
-        "-package"   -> ("showAccess", Access.PACKAGE),
-        "-protected" -> ("showAccess", Access.PROTECTED),
-        "-public"    -> ("showAccess", Access.PUBLIC),
-        "-all"       -> ("showallAttr", true)
+        "-l"         -> (("showLineAndLocal", true)),
+        "-c"         -> (("showDisassembled", true)),
+        "-s"         -> (("showInternalSigs", true)),
+        "-verbose"   -> (("showVerbose", true)),
+        "-private"   -> (("showAccess", Access.PRIVATE)),
+        "-package"   -> (("showAccess", Access.PACKAGE)),
+        "-protected" -> (("showAccess", Access.PROTECTED)),
+        "-public"    -> (("showAccess", Access.PUBLIC)),
+        "-all"       -> (("showallAttr", true))
       )
       map ++ List(
         "-v" -> map("-verbose"),

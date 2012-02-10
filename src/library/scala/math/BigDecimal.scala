@@ -13,7 +13,6 @@ import java.{ lang => jl }
 import java.math.{ MathContext, BigDecimal => BigDec }
 import scala.collection.immutable.NumericRange
 
-import annotation.migration
 
 /**
  *  @author  Stephane Micheloud
@@ -34,8 +33,10 @@ object BigDecimal {
   /** Cache ony for defaultMathContext using BigDecimals in a small range. */
   private lazy val cache = new Array[BigDecimal](maxCached - minCached + 1)
 
-  object RoundingMode extends Enumeration(java.math.RoundingMode.values map (_.toString) : _*) with Serializable {
+  object RoundingMode extends Enumeration {
     type RoundingMode = Value
+    // These are supposed to be the same as java.math.RoundingMode.values,
+    // though it seems unwise to rely on the correspondence.
     val UP, DOWN, CEILING, FLOOR, HALF_UP, HALF_DOWN, HALF_EVEN, UNNECESSARY = Value
   }
 
@@ -225,11 +226,11 @@ extends ScalaNumber with ScalaNumericConversions with Serializable {
 
   /** Addition of BigDecimals
    */
-  def +  (that: BigDecimal): BigDecimal = this.bigDecimal.add(that.bigDecimal, mc)
+  def +  (that: BigDecimal): BigDecimal = this.bigDecimal.add(that.bigDecimal)
 
   /** Subtraction of BigDecimals
    */
-  def -  (that: BigDecimal): BigDecimal = this.bigDecimal.subtract(that.bigDecimal, mc)
+  def -  (that: BigDecimal): BigDecimal = this.bigDecimal.subtract(that.bigDecimal)
 
   /** Multiplication of BigDecimals
    */
@@ -243,14 +244,14 @@ extends ScalaNumber with ScalaNumericConversions with Serializable {
    *  divideToIntegralValue and the remainder.
    */
   def /% (that: BigDecimal): (BigDecimal, BigDecimal) =
-    this.bigDecimal.divideAndRemainder(that.bigDecimal, mc) match {
+    this.bigDecimal.divideAndRemainder(that.bigDecimal) match {
       case Array(q, r)  => (q, r)
     }
 
   /** Divide to Integral value.
    */
   def quot (that: BigDecimal): BigDecimal =
-    this.bigDecimal.divideToIntegralValue(that.bigDecimal, mc)
+    this.bigDecimal.divideToIntegralValue(that.bigDecimal)
 
   /** Returns the minimum of this and that
    */
@@ -262,7 +263,7 @@ extends ScalaNumber with ScalaNumericConversions with Serializable {
 
   /** Remainder after dividing this by that.
    */
-  def remainder (that: BigDecimal): BigDecimal = this.bigDecimal.remainder(that.bigDecimal, mc)
+  def remainder (that: BigDecimal): BigDecimal = this.bigDecimal.remainder(that.bigDecimal)
 
   /** Remainder after dividing this by that.
    */
@@ -274,11 +275,11 @@ extends ScalaNumber with ScalaNumericConversions with Serializable {
 
   /** Returns a BigDecimal whose value is the negation of this BigDecimal
    */
-  def unary_- : BigDecimal = this.bigDecimal.negate(mc)
+  def unary_- : BigDecimal = this.bigDecimal.negate()
 
   /** Returns the absolute value of this BigDecimal
    */
-  def abs: BigDecimal = this.bigDecimal abs mc
+  def abs: BigDecimal = this.bigDecimal abs
 
   /** Returns the sign of this BigDecimal, i.e.
    *   -1 if it is less than 0,
@@ -366,11 +367,32 @@ extends ScalaNumber with ScalaNumericConversions with Serializable {
    */
   def doubleValue = this.bigDecimal.doubleValue
 
-  /** This BigDecimal as an exact value.
-   */
+  /** Converts this `BigDecimal` to a [[scala.Byte]], checking for lost information.
+    * If this `BigDecimal` has a nonzero fractional part, or is out of the possible
+    * range for a [[scala.Byte]] result, then a `java.lang.ArithmeticException` is
+    * thrown.
+    */
   def toByteExact = bigDecimal.byteValueExact
+
+  /** Converts this `BigDecimal` to a [[scala.Short]], checking for lost information.
+    * If this `BigDecimal` has a nonzero fractional part, or is out of the possible
+    * range for a [[scala.Short]] result, then a `java.lang.ArithmeticException` is
+    * thrown.
+    */
   def toShortExact = bigDecimal.shortValueExact
+
+  /** Converts this `BigDecimal` to a [[scala.Int]], checking for lost information.
+    * If this `BigDecimal` has a nonzero fractional part, or is out of the possible
+    * range for an [[scala.Int]] result, then a `java.lang.ArithmeticException` is
+    * thrown.
+    */
   def toIntExact = bigDecimal.intValueExact
+
+  /** Converts this `BigDecimal` to a [[scala.Long]], checking for lost information.
+    * If this `BigDecimal` has a nonzero fractional part, or is out of the possible
+    * range for a [[scala.Long]] result, then a `java.lang.ArithmeticException` is
+    * thrown.
+    */
   def toLongExact = bigDecimal.longValueExact
 
   /** Creates a partially constructed NumericRange[BigDecimal] in range

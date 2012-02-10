@@ -20,6 +20,7 @@ trait IndexedSeq[+A] extends Seq[A]
                     with GenericTraversableTemplate[A, IndexedSeq]
                     with IndexedSeqLike[A, IndexedSeq[A]] {
   override def companion: GenericCompanion[IndexedSeq] = IndexedSeq
+  override def seq: IndexedSeq[A] = this
 }
 
 /** $factoryInfo
@@ -28,7 +29,7 @@ trait IndexedSeq[+A] extends Seq[A]
  *  @define Coll IndexedSeq
  */
 object IndexedSeq extends SeqFactory[IndexedSeq] {
-  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, IndexedSeq[A]] = new GenericCanBuildFrom[A]
+  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, IndexedSeq[A]] = ReusableCBF.asInstanceOf[GenericCanBuildFrom[A]]
   def newBuilder[A]: Builder[A, IndexedSeq[A]] = immutable.IndexedSeq.newBuilder[A]
 }
 

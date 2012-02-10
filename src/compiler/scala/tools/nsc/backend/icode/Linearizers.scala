@@ -14,6 +14,8 @@ import mutable.ListBuffer
 
 trait Linearizers {
   self: ICodes =>
+
+  import global.debuglog
   import opcodes._
 
   abstract class Linearizer {
@@ -34,7 +36,7 @@ trait Linearizers {
     var blocks: List[BasicBlock] = Nil
 
     def linearize(m: IMethod): List[BasicBlock] = {
-      val b = m.code.startBlock;
+      val b = m.startBlock;
       blocks = Nil;
 
       run {
@@ -104,7 +106,7 @@ trait Linearizers {
     def linearize(m: IMethod): List[BasicBlock] = {
       blocks = Nil;
 
-      dfs(m.code.startBlock);
+      dfs(m.startBlock);
       m.exh foreach (b => dfs(b.startBlock));
 
       blocks.reverse
@@ -148,14 +150,14 @@ trait Linearizers {
       added.clear;
 
       m.exh foreach (b => rpo(b.startBlock));
-      rpo(m.code.startBlock);
+      rpo(m.startBlock);
 
       // if the start block has predecessors, it won't be the first one
       // in the linearization, so we need to enforce it here
-      if (m.code.startBlock.predecessors eq Nil)
+      if (m.startBlock.predecessors eq Nil)
         blocks
       else
-        m.code.startBlock :: (blocks.filterNot(_ == m.code.startBlock))
+        m.startBlock :: (blocks.filterNot(_ == m.startBlock))
     }
 
     def linearizeAt(m: IMethod, start: BasicBlock): List[BasicBlock] = {
@@ -178,11 +180,14 @@ trait Linearizers {
      * Prepend b to the list, if not already scheduled.
      * @return Returns true if the block was added.
      */
-    def add(b: BasicBlock) =
+    def add(b: BasicBlock) = {
+      debuglog("Linearizer adding block " + b.label)
+
       if (!added(b.label)) {
         added += b.label
         blocks = b :: blocks;
       }
+    }
   }
 
   /** A 'dump' of the blocks in this method, which does not
@@ -190,7 +195,7 @@ trait Linearizers {
    *  the last instruction being a jump).
    */
   class DumpLinearizer extends Linearizer {
-    def linearize(m: IMethod): List[BasicBlock] = m.code.blocks.toList
+    def linearize(m: IMethod): List[BasicBlock] = m.blocks
     def linearizeAt(m: IMethod, start: BasicBlock): List[BasicBlock] = sys.error("not implemented")
   }
 
@@ -245,7 +250,7 @@ trait Linearizers {
      *  @param frozen blocks can't be moved (fist block of a method, blocks directly following a try-catch)
      */
     def groupBlocks(method: IMethod, blocks: List[BasicBlock], handlers: List[ExceptionHandler], frozen: mutable.HashSet[BasicBlock]) = {
-      assert(blocks.head == method.code.startBlock, method)
+      assert(blocks.head == method.startBlock, method)
 
       // blocks before the try, and blocks for the try
       val beforeAndTry = new ListBuffer[BasicBlock]()
@@ -279,7 +284,7 @@ trait Linearizers {
         handler.startBlock +=: lb
       }
 
-      // The first block emitted after a try-catch must be the the one that the try / catch
+      // The first block emitted after a try-catch must be the one that the try / catch
       // blocks jump to (because in msil, these jumps cannot be emitted manually)
       var firstAfter: Option[BasicBlock] = None
 

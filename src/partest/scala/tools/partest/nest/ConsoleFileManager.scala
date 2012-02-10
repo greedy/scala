@@ -44,7 +44,7 @@ class ConsoleFileManager extends FileManager {
 
   def this(buildPath: String, rawClasses: Boolean, moreOpts: String) = {
     this(buildPath, rawClasses)
-    SCALAC_OPTS = SCALAC_OPTS+" "+moreOpts
+    SCALAC_OPTS = SCALAC_OPTS ++ moreOpts.split(' ').toSeq.filter(_.length > 0)
   }
 
   lazy val srcDir        = PathSettings.srcDir
@@ -157,9 +157,13 @@ class ConsoleFileManager extends FileManager {
     }
 
     LATEST_LIB = latestLibFile.getAbsolutePath
+    LATEST_COMP = latestCompFile.getAbsolutePath
+    LATEST_PARTEST = latestPartestFile.getAbsolutePath
   }
 
   var LATEST_LIB: String = ""
+  var LATEST_COMP: String = ""
+  var LATEST_PARTEST: String = ""
 
   var latestFile: File = _
   var latestLibFile: File = _

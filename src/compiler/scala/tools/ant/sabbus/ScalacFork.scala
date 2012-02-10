@@ -6,38 +6,68 @@
 **                          |/                                          **
 \*                                                                      */
 
-
 package scala.tools.ant
 package sabbus
 
-import java.io.File
-import java.io.FileWriter
+import java.io.{ File, FileWriter }
 import org.apache.tools.ant.Project
 import org.apache.tools.ant.taskdefs.Java
 import org.apache.tools.ant.util.{ GlobPatternMapper, SourceFileScanner }
+import org.apache.tools.ant.BuildException
 import scala.tools.nsc.io
 import scala.tools.nsc.util.ScalaClassLoader
 
+/** An Ant task to compile with the new Scala compiler (NSC).
+ *
+ *  This task can take the following parameters as attributes:
+ *  - `srcdir` (mandatory),
+ *  - `failonerror`,
+ *  - `timeout`,
+ *  - `jvmargs`,
+ *  - `argfile`,
+ *  - `params`.
+ *
+ *  It also takes the following parameters as nested elements:
+ *  - `src` (for `srcdir`),
+ *  - `classpath`,
+ *  - `sourcepath`,
+ *  - `bootclasspath`,
+ *  - `extdirs`,
+ *  - `compilerarg`.
+ *
+ *  @author Gilles Dubochet
+ */
 class ScalacFork extends ScalaMatchingTask with ScalacShared with TaskArgs {
+
   private def originOfThis: String =
     ScalaClassLoader.originOfClass(classOf[ScalacFork]) map (_.toString) getOrElse "<unknown>"
 
+  /** Sets the `srcdir` attribute. Used by [[http://ant.apache.org Ant]].
+   *  @param input The value of `sourceDir`. */
   def setSrcdir(input: File) {
     sourceDir = Some(input)
   }
 
+  /** Sets the `failonerror` attribute. Used by [[http://ant.apache.org Ant]].
+   *  @param input The value of `failOnError`. */
   def setFailOnError(input: Boolean) {
     failOnError = input
   }
 
+  /** Sets the `timeout` attribute. Used by [[http://ant.apache.org Ant]].
+   *  @param input The value of `timeout`. */
   def setTimeout(input: Long) {
     timeout = Some(input)
   }
 
+  /** Sets the `jvmargs` attribute. Used by [[http://ant.apache.org Ant]].
+   *  @param input The value of `jvmArgs`. */
   def setJvmArgs(input: String) {
     jvmArgs = Some(input)
   }
 
+  /** Sets the `argfile` attribute. Used by [[http://ant.apache.org Ant]].
+   *  @param input The value of `argfile`. */
   def setArgfile(input: File) {
     argfile = Some(input)
   }
@@ -72,7 +102,7 @@ class ScalacFork extends ScalaMatchingTask with ScalacShared with TaskArgs {
     compTarget foreach (settings.target = _)
     compilationPath foreach (settings.classpath = _)
     sourcePath foreach (settings.sourcepath = _)
-    params foreach (settings.more = _)
+    settings.extraParams = extraArgsFlat
 
     if (isMSIL)
       settings.sourcedir = sourceDir
@@ -105,16 +135,23 @@ class ScalacFork extends ScalaMatchingTask with ScalacShared with TaskArgs {
     java setClasspath compilerPath
     java setClassname MainClass
 
+    // Encode scalac/javac args for use in a file to be read back via "@file.txt"
+    def encodeScalacArgsFile(t: Traversable[String]) = t map { s =>
+      if(s.find(c => c <= ' ' || "\"'\\".contains(c)).isDefined)
+        "\"" + s.flatMap(c => (if(c == '"' || c == '\\') "\\" else "") + c ) + "\""
+      else s
+    } mkString "\n"
+
     // dump the arguments to a file and do "java @file"
     val tempArgFile = io.File.makeTemp("scalacfork")
     val tokens = settings.toArgs ++ (includedFiles map (_.getPath))
-    tempArgFile writeAll (tokens mkString " ")
+    tempArgFile writeAll encodeScalacArgsFile(tokens)
 
     val paths = List(Some(tempArgFile.toAbsolute.path), argfile).flatten map (_.toString)
     val res = execWithArgFiles(java, paths)
 
     if (failOnError && res != 0)
-      sys.error("Compilation failed because of an internal compiler error;"+
+      throw new BuildException("Compilation failed because of an internal compiler error;"+
             " see the error output for details.")
   }
 }

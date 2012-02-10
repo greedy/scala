@@ -85,7 +85,7 @@ trait Picklers { self: Global =>
   implicit lazy val position: Pickler[Position] = transparentPosition | rangePosition | offsetPosition | noPosition
 
   implicit lazy val namePickler: Pickler[Name] =
-    pkl[String] .wrapped {
+    pkl[String] .wrapped[Name] {
       str => if ((str.length > 1) && (str endsWith "!")) newTypeName(str.init) else newTermName(str)
     } {
       name => if (name.isTypeName) name.toString+"!" else name.toString
@@ -101,7 +101,7 @@ trait Picklers { self: Global =>
           if (sym1.isOverloaded) {
             val index = sym1.alternatives.indexOf(sym)
             assert(index >= 0, sym1+" not found in alternatives "+sym1.alternatives)
-            buf += index.toString
+            buf += newTermName(index.toString)
           }
         }
       }

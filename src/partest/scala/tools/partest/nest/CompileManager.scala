@@ -9,8 +9,10 @@ package scala.tools.partest
 package nest
 
 import scala.tools.nsc.{ Global, Settings, CompilerCommand, FatalError, io }
+import scala.tools.nsc.interactive.RangePositions
 import scala.tools.nsc.reporters.{ Reporter, ConsoleReporter }
 import scala.tools.nsc.util.{ ClassPath, FakePos }
+import scala.tools.nsc.Properties.{ setProp, propOrEmpty }
 import scala.tools.util.PathResolver
 import io.Path
 import java.io.{ File, BufferedReader, PrintWriter, FileReader, Writer, FileWriter, StringWriter }
@@ -25,7 +27,7 @@ class TestSettings(cp: String, error: String => Unit) extends Settings(error) {
 
   deprecation.value = true
   nowarnings.value  = false
-  encoding.value    = "ISO-8859-1"
+  encoding.value    = "UTF-8"
   classpath.value   = cp
 }
 
@@ -35,7 +37,10 @@ abstract class SimpleCompiler {
 
 class DirectCompiler(val fileManager: FileManager) extends SimpleCompiler {
   def newGlobal(settings: Settings, reporter: Reporter): Global =
-    new Global(settings, reporter)
+    if (settings.Yrangepos.value)
+      new Global(settings, reporter) with RangePositions
+    else
+      new Global(settings, reporter)
 
   def newGlobal(settings: Settings, logWriter: FileWriter): Global =
     newGlobal(settings, new ExtConsoleReporter(settings, new PrintWriter(logWriter)))
@@ -71,10 +76,11 @@ class DirectCompiler(val fileManager: FileManager) extends SimpleCompiler {
     val logWriter = new FileWriter(log)
 
     // check whether there is a ".flags" file
-    val flagsFileName = "%s.flags" format (basename(log.getName) dropRight 4) // 4 is "-run" or similar
+    val logFile = basename(log.getName)
+    val flagsFileName = "%s.flags" format (logFile.substring(0, logFile.lastIndexOf("-")))
     val argString = (io.File(log).parent / flagsFileName) ifFile (x => updatePluginPath(x.slurp())) getOrElse ""
-    val allOpts = fileManager.SCALAC_OPTS+" "+argString
-    val args = (allOpts split "\\s").toList
+    val allOpts = fileManager.SCALAC_OPTS.toList ::: argString.split(' ').toList.filter(_.length > 0)
+    val args = allOpts.toList
 
     NestUI.verbose("scalac options: "+allOpts)
 
@@ -92,6 +98,7 @@ class DirectCompiler(val fileManager: FileManager) extends SimpleCompiler {
       case "scalacheck"   => ScalaCheckTestFile.apply
       case "specialized"  => SpecializedTestFile.apply
       case "presentation" => PresentationTestFile.apply
+      case "ant"          => AntTestFile.apply
     }
     val test: TestFile = testFileFn(files.head, fileManager)
     if (!test.defineSettings(command.settings, out.isEmpty)) {
@@ -105,6 +112,8 @@ class DirectCompiler(val fileManager: FileManager) extends SimpleCompiler {
 
     try {
       NestUI.verbose("compiling "+toCompile)
+      NestUI.verbose("with classpath: "+global.classPath.toString)
+      NestUI.verbose("and java classpath: "+ propOrEmpty("java.class.path"))
       try new global.Run compile toCompile
       catch {
         case FatalError(msg) =>

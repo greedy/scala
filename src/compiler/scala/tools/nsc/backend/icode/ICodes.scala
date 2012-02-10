@@ -35,10 +35,10 @@ abstract class ICodes extends AnyRef
                                  with Repository
 {
   val global: Global
-  import global.{ definitions, settings }
+  import global.{ log, definitions, settings, perRunCaches }
 
   /** The ICode representation of classes */
-  val classes = new mutable.HashMap[global.Symbol, IClass]
+  val classes = perRunCaches.newMap[global.Symbol, IClass]()
 
   /** Debugging flag */
   def shouldCheckIcode = settings.check contains global.genicode.phaseName
@@ -53,6 +53,9 @@ abstract class ICodes extends AnyRef
     case x        => global.abort("Unknown linearizer: " + x)
   }
 
+  def newTextPrinter() =
+    new TextPrinter(new PrintWriter(Console.out, true), new DumpLinearizer)
+
   /** Have to be careful because dump calls around, possibly
    *  re-entering methods which initiated the dump (like foreach
    *  in BasicBlocks) which leads to the icode output olympics.
@@ -61,22 +64,37 @@ abstract class ICodes extends AnyRef
 
   /** Print all classes and basic blocks. Used for debugging. */
 
-  def dump() {
-    if (alreadyDumping) return
+  def dumpClassesAndAbort(msg: String): Nothing = {
+    if (alreadyDumping) global.abort(msg)
     else alreadyDumping = true
 
-    val printer = new TextPrinter(new PrintWriter(Console.out, true),
-                                  new DumpLinearizer)
-
+    Console.println(msg)
+    val printer = newTextPrinter()
     classes.values foreach printer.printClass
+    global.abort(msg)
   }
 
+  def dumpMethodAndAbort(m: IMethod, msg: String): Nothing = {
+    Console.println("Fatal bug in inlinerwhile traversing " + m + ": " + msg)
+    m.dump()
+    global.abort("" + m)
+  }
+  def dumpMethodAndAbort(m: IMethod, b: BasicBlock): Nothing =
+    dumpMethodAndAbort(m, "found open block " + b + " " + b.flagsString)
+
   def checkValid(m: IMethod) {
-    for (b <- m.code.blocks)
+    // always slightly dicey to iterate over mutable structures
+    m foreachBlock { b =>
       if (!b.closed) {
-        m.dump
-        global.abort("Open block: " + b + " " + b.flagsString)
+        // Something is leaving open/empty blocks around (see SI-4840) so
+        // let's not kill the deal unless it's nonempty.
+        if (b.isEmpty) {
+          log("!!! Found open but empty block while inlining " + m + ": removing from block list.")
+          m.code removeBlock b
+        }
+        else dumpMethodAndAbort(m, b)
       }
+    }
   }
 
   object liveness extends Liveness {

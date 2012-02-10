@@ -23,10 +23,13 @@ import immutable.{List, Nil}
  *  @author  Martin Odersky
  *  @version 2.8
  *  @since   1
+ *  @see [[http://docs.scala-lang.org/overviews/collections/concrete-mutable-collection-classes.html#mutable_lists "Scala's Collection Library overview"]]
+ *  section on `Mutable Lists` for more information.
  */
 @SerialVersionUID(5938451523372603072L)
 class MutableList[A]
-extends LinearSeq[A]
+extends AbstractSeq[A]
+   with LinearSeq[A]
    with LinearSeqOptimized[A, MutableList[A]]
    with GenericTraversableTemplate[A, MutableList]
    with Builder[A, MutableList[A]]
@@ -72,17 +75,17 @@ extends LinearSeq[A]
    */
   override def length: Int = len
 
-  /** Returns the <code>n</code>th element of this list.
+  /** Returns the `n`-th element of this list.
    *  @throws IndexOutOfBoundsException if index does not exist.
    */
   override def apply(n: Int): A = first0.apply(n)
 
-  /** Updates the <code>n</code>th element of this list to a new value.
+  /** Updates the `n`-th element of this list to a new value.
    *  @throws IndexOutOfBoundsException if index does not exist.
    */
   def update(n: Int, x: A): Unit = first0.update(n, x)
 
-  /** Returns the <code>n</code>th element of this list or <code>None</code>
+  /** Returns the `n`-th element of this list or `None`
    *  if index does not exist.
    */
   def get(n: Int): Option[A] = first0.get(n)
@@ -93,7 +96,7 @@ extends LinearSeq[A]
     len = len + 1
   }
 
-  protected def appendElem(elem: A): Unit =
+  protected def appendElem(elem: A) {
     if (len == 0) {
       prependElem(elem)
     } else {
@@ -103,9 +106,7 @@ extends LinearSeq[A]
       last0.next = new LinkedList[A] // for performance, use sentinel `object` instead?
       len = len + 1
     }
-
-  @deprecated("use clear() instead", "2.8.0")
-  def reset() { clear() }
+  }
 
   /** Returns an iterator over all elements of this list.
    */
@@ -116,7 +117,7 @@ extends LinearSeq[A]
     last0.elem
   }
 
-  /** Returns an instance of <code>scala.List</code> containing the same
+  /** Returns an instance of [[scala.List]] containing the same
    *  sequence of elements.
    */
   override def toList: List[A] = first0.toList
@@ -143,11 +144,8 @@ extends LinearSeq[A]
 
 
 object MutableList extends SeqFactory[MutableList] {
-  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, MutableList[A]] = new GenericCanBuildFrom[A]
+  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, MutableList[A]] =
+    ReusableCBF.asInstanceOf[GenericCanBuildFrom[A]]
 
   def newBuilder[A]: Builder[A, MutableList[A]] = new MutableList[A]
 }
-
-
-
-

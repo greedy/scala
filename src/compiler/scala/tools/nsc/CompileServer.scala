@@ -29,9 +29,7 @@ class StandardCompileServer extends SocketServer {
   var shutdown = false
   var verbose = false
 
-  val versionMsg = "Fast Scala compiler " +
-    Properties.versionString + " -- " +
-    Properties.copyrightString
+  val versionMsg = "Fast " + Properties.versionMsg
 
   val MaxCharge = 0.8
 
@@ -87,8 +85,7 @@ class StandardCompileServer extends SocketServer {
     val input           = in.readLine()
 
     def fscError(msg: String): Unit = out println (
-      FakePos("fsc"),
-      msg + "\n  fsc -help  gives more information"
+      FakePos("fsc") + msg + "\n  fsc -help  gives more information"
     )
     if (input == null || password != guessedPassword)
       return
@@ -139,9 +136,9 @@ class StandardCompileServer extends SocketServer {
     }
 
     if (command.shouldStopWithInfo)
-      reporter.info(null, command.getInfoMessage(newGlobal(newSettings, reporter)), true)
+      reporter.echo(command.getInfoMessage(newGlobal(newSettings, reporter)))
     else if (command.files.isEmpty)
-      reporter.info(null, command.usageMsg, true)
+      reporter.echo(command.usageMsg)
     else {
       if (isCompilerReusable) {
         info("[Reusing existing Global instance.]")
@@ -176,8 +173,9 @@ object CompileServer extends StandardCompileServer {
   /** A directory holding redirected output */
   private lazy val redirectDir = (compileSocket.tmpDir / "output-redirects").createDirectory()
 
-  private def redirect(setter: PrintStream => Unit, filename: String): Unit =
+  private def redirect(setter: PrintStream => Unit, filename: String) {
     setter(new PrintStream((redirectDir / filename).createFile().bufferedOutput()))
+  }
 
   def main(args: Array[String]) {
     val debug = args contains "-v"
@@ -191,10 +189,10 @@ object CompileServer extends StandardCompileServer {
     redirect(System.setErr, "scala-compile-server-err.log")
     System.err.println("...starting server on socket "+port+"...")
     System.err.flush()
-    compileSocket.setPort(port)
+    compileSocket setPort port
     run()
 
-    compileSocket.deletePort(port)
-    sys.exit(0)
+    compileSocket deletePort port
+    sys exit 0
   }
 }

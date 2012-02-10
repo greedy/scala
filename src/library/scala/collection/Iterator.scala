@@ -9,7 +9,7 @@
 package scala.collection
 
 import mutable.ArrayBuffer
-import annotation.{ tailrec, migration }
+import annotation.migration
 import immutable.Stream
 
 /** The `Iterator` object provides various functions for creating specialized iterators.
@@ -22,7 +22,7 @@ import immutable.Stream
 object Iterator {
 
   /** The iterator which produces no values. */
-  val empty = new Iterator[Nothing] {
+  val empty: Iterator[Nothing] = new AbstractIterator[Nothing] {
     def hasNext: Boolean = false
     def next(): Nothing = throw new NoSuchElementException("next on empty iterator")
   }
@@ -34,7 +34,7 @@ object Iterator {
    *  @return An iterator which produces `elem` on the first call to `next`,
    *          and which has no further elements.
    */
-  def single[A](elem: A) = new Iterator[A] {
+  def single[A](elem: A): Iterator[A] = new AbstractIterator[A] {
     private var hasnext = true
     def hasNext: Boolean = hasnext
     def next(): A =
@@ -52,11 +52,11 @@ object Iterator {
 
   /** Creates iterator that produces the results of some element computation a number of times.
    *
-   *  @param   n  the number of elements returned by the iterator.
+   *  @param   len  the number of elements returned by the iterator.
    *  @param   elem the element computation
    *  @return  An iterator that produces the results of `n` evaluations of `elem`.
    */
-  def fill[A](len: Int)(elem: => A) = new Iterator[A] {
+  def fill[A](len: Int)(elem: => A): Iterator[A] = new AbstractIterator[A] {
     private var i = 0
     def hasNext: Boolean = i < len
     def next(): A =
@@ -66,11 +66,11 @@ object Iterator {
 
   /** Creates an iterator producing the values of a given function over a range of integer values starting from 0.
    *
-   *  @param  n   The number of elements returned by the iterator
+   *  @param  end The number of elements returned by the iterator
    *  @param  f   The function computing element values
    *  @return An iterator that produces the values `f(0), ..., f(n -1)`.
    */
-  def tabulate[A](end: Int)(f: Int => A) = new Iterator[A] {
+  def tabulate[A](end: Int)(f: Int => A): Iterator[A] = new AbstractIterator[A] {
     private var i = 0
     def hasNext: Boolean = i < end
     def next(): A =
@@ -93,7 +93,7 @@ object Iterator {
    *  @param step  the increment value of the iterator (must be positive or negative)
    *  @return      the iterator producing values `start, start + step, ...` up to, but excluding `end`
    */
-  def range(start: Int, end: Int, step: Int) = new Iterator[Int] {
+  def range(start: Int, end: Int, step: Int): Iterator[Int] = new AbstractIterator[Int] {
     if (step == 0) throw new IllegalArgumentException("zero step")
     private var i = start
     def hasNext: Boolean = (step <= 0 || i < end) && (step >= 0 || i > end)
@@ -108,7 +108,7 @@ object Iterator {
    *  @param f     the function that's repeatedly applied
    *  @return      the iterator producing the infinite sequence of values `start, f(start), f(f(start)), ...`
    */
-  def iterate[T](start: T)(f: T => T): Iterator[T] = new Iterator[T] {
+  def iterate[T](start: T)(f: T => T): Iterator[T] = new AbstractIterator[T] {
     private[this] var first = true
     private[this] var acc = start
     def hasNext: Boolean = true
@@ -133,7 +133,7 @@ object Iterator {
    *  @param step  the increment between successive values
    *  @return      the iterator producing the infinite sequence of values `start, start + 1 * step, start + 2 * step, ...`
    */
-  def from(start: Int, step: Int): Iterator[Int] = new Iterator[Int] {
+  def from(start: Int, step: Int): Iterator[Int] = new AbstractIterator[Int] {
     private var i = start
     def hasNext: Boolean = true
     def next(): Int = { val result = i; i += step; result }
@@ -145,89 +145,9 @@ object Iterator {
    *  @param elem the element computation.
    *  @return the iterator containing an infinite number of results of evaluating `elem`.
    */
-  def continually[A](elem: => A): Iterator[A] = new Iterator[A] {
+  def continually[A](elem: => A): Iterator[A] = new AbstractIterator[A] {
     def hasNext = true
     def next = elem
-  }
-
-  @deprecated("use `xs.iterator` or `Iterator(xs)` instead", "2.8.0")
-  def fromValues[a](xs: a*) = xs.iterator
-
-  /** @param xs the array of elements
-   *  @see also: IndexedSeq.iterator and slice
-   */
-  @deprecated("use `xs.iterator` instead", "2.8.0")
-  def fromArray[a](xs: Array[a]): Iterator[a] =
-    fromArray(xs, 0, xs.length)
-
-  /**
-   *  @param xs     the array of elements
-   *  @param start  the start index
-   *  @param length  the length
-   *  @see also: IndexedSeq.iterator and slice
-   */
-  @deprecated("use `xs.slice(start, start + length).iterator` instead", "2.8.0")
-  def fromArray[a](xs: Array[a], start: Int, length: Int): Iterator[a] =
-    xs.slice(start, start + length).iterator
-
-  /**
-   *  @param n the product arity
-   *  @return  the iterator on `Product&lt;n&gt;`.
-   */
-  @deprecated("use `product.productIterator instead`", "2.8.0")
-  def fromProduct(n: Product): Iterator[Any] = new Iterator[Any] {
-    private var c: Int = 0
-    private val cmax = n.productArity
-    def hasNext = c < cmax
-    def next() = { val a = n productElement c; c += 1; a }
-  }
-
-  /** Create an iterator with elements `e<sub>n+1</sub> = step(e<sub>n</sub>)` where `e<sub>0</sub> = start`
-   *  and elements are in the range between `start` (inclusive) and `end` (exclusive).
-   *
-   *  @param start the start value of the iterator
-   *  @param end   the end value of the iterator
-   *  @param step  the increment function of the iterator, must be monotonically increasing or decreasing
-   *  @return      the iterator with values in range `[start;end)`.
-   */
-  @deprecated("use `Iterator.iterate(start, end - start)(step)` instead", "2.8.0")
-  def range(start: Int, end: Int, step: Int => Int) = new Iterator[Int] {
-    private val up = step(start) > start
-    private val down = step(start) < start
-    private var i = start
-    def hasNext: Boolean = (!up || i < end) && (!down || i > end)
-    def next(): Int =
-      if (hasNext) { val j = i; i = step(i); j }
-      else empty.next()
-  }
-
-  /** Create an iterator with elements `e<sub>n+1</sub> = step(e<sub>n</sub>)` where `e<sub>0</sub> = start`.
-   *
-   *  @param start the start value of the iterator
-   *  @param step  the increment function of the iterator
-   *  @return      the iterator starting at value `start`.
-   */
-  @deprecated("use `iterate(start)(step)` instead", "2.8.0")
-  def from(start: Int, step: Int => Int): Iterator[Int] = new Iterator[Int] {
-    private var i = start
-    override def hasNext: Boolean = true
-    def next(): Int = { val j = i; i = step(i); j }
-  }
-
-  /** Create an iterator that is the concatenation of all iterators returned by a given iterator of iterators.
-   *
-   *  @param its   The iterator which returns on each call to next
-   *               a new iterator whose elements are to be concatenated to the result.
-   */
-  @deprecated("use `its.flatten` instead", "2.8.0")
-  def flatten[T](its: Iterator[Iterator[T]]): Iterator[T] = new Iterator[T] {
-    private var cur = its.next
-    def hasNext: Boolean = {
-      while (!cur.hasNext && its.hasNext) cur = its.next
-      cur.hasNext
-    }
-    def next(): T =
-      (if (hasNext) cur else empty).next()
   }
 }
 
@@ -238,6 +158,31 @@ import Iterator.empty
  *  if there is a next element available, and a `next` method
  *  which returns the next element and discards it from the iterator.
  *
+ *  An iterator is mutable: most operations on it change its state. While it is often used
+ *  to iterate through the elements of a collection, it can also be used without
+ *  being backed by any collection (see constructors on the companion object).
+ *
+ *  It is of particular importance to note that, unless stated otherwise, ''one should never
+ *  use an iterator after calling a method on it''. The two most important exceptions
+ *  are also the sole abstract methods: `next` and `hasNext`.
+ *
+ *  Both these methods can be called any number of times without having to discard the
+ *  iterator. Note that even `hasNext` may cause mutation -- such as when iterating
+ *  from an input stream, where it will block until the stream is closed or some
+ *  input becomes available.
+ *
+ *  Consider this example for safe and unsafe use:
+ *
+ *  {{{
+ *  def f[A](it: Iterator[A]) = {
+ *    if (it.hasNext) {            // Safe to reuse "it" after "hasNext"
+ *      it.next                    // Safe to reuse "it" after "next"
+ *      val remainder = it.drop(2) // it is *not* safe to use "it" again after this line!
+ *      remainder.take(2)          // it is *not* safe to use "remainder" after this line!
+ *    } else it
+ *  }
+ *  }}}
+ *
  *  @author  Martin Odersky, Matthias Zenger
  *  @version 2.8
  *  @since   1
@@ -245,6 +190,30 @@ import Iterator.empty
  *  Note: will not terminate for infinite iterators.
  *  @define mayNotTerminateInf
  *  Note: may not terminate for infinite iterators.
+ *  @define preservesIterator
+ *  The iterator remains valid for further use whatever result is returned.
+ *  @define consumesIterator
+ *  After calling this method, one should discard the iterator it was called
+ *  on. Using it is undefined and subject to change.
+ *  @define consumesAndProducesIterator
+ *  After calling this method, one should discard the iterator it was called
+ *  on, and use only the iterator that was returned. Using the old iterator
+ *  is undefined, subject to change, and may result in changes to the new
+ *  iterator as well.
+ *  @define consumesTwoAndProducesOneIterator
+ *  After calling this method, one should discard the iterator it was called
+ *  on, as well as the one passed as a parameter, and use only the iterator
+ *  that was returned. Using the old iterators is undefined, subject to change,
+ *  and may result in changes to the new iterator as well.
+ *  @define consumesOneAndProducesTwoIterators
+ *  After calling this method, one should discard the iterator it was called
+ *  on, and use only the iterators that were returned. Using the old iterator
+ *  is undefined, subject to change, and may result in changes to the new
+ *  iterators as well.
+ *  @define consumesTwoIterators
+ *  After calling this method, one should discard the iterator it was called
+ *  on, as well as the one passed as parameter. Using the old iterators is
+ *  undefined and subject to change.
  */
 trait Iterator[+A] extends TraversableOnce[A] {
   self =>
@@ -255,6 +224,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *
    *  @return  `true` if a subsequent call to `next` will yield an element,
    *           `false` otherwise.
+   *  @note    Reuse: $preservesIterator
    */
   def hasNext: Boolean
 
@@ -262,24 +232,28 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *
    *  @return  the next element of this iterator, if `hasNext` is `true`,
    *           undefined behavior otherwise.
+   *  @note    Reuse: $preservesIterator
    */
   def next(): A
 
   /** Tests whether this iterator is empty.
    *
    *  @return   `true` if hasNext is false, `false` otherwise.
+   *  @note     Reuse: $preservesIterator
    */
   def isEmpty: Boolean = !hasNext
 
   /** Tests whether this Iterator can be repeatedly traversed.
    *
    *  @return   `false`
+   *  @note     Reuse: $preservesIterator
    */
   def isTraversableAgain = false
 
   /** Tests whether this Iterator has a known size.
    *
    *  @return   `true` for empty Iterators, `false` otherwise.
+   *  @note     Reuse: $preservesIterator
    */
   def hasDefiniteSize = isEmpty
 
@@ -288,6 +262,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  @param  n    the number of values to take
    *  @return an iterator producing only of the first `n` values of this iterator, or else the
    *          whole iterator, if it produces fewer than `n` values.
+   *  @note   Reuse: $consumesAndProducesIterator
    */
   def take(n: Int): Iterator[A] = slice(0, n)
 
@@ -296,6 +271,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  @param n the number of elements to drop
    *  @return  an iterator which produces all values of the current iterator, except
    *           it omits the first `n` values.
+   *  @note    Reuse: $consumesAndProducesIterator
    */
   def drop(n: Int): Iterator[A] = slice(n, Int.MaxValue)
 
@@ -305,6 +281,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  @param until  the index of the first element following the slice.
    *  @return an iterator which advances this iterator past the first `from` elements using `drop`,
    *  and then takes `until - from` elements, using `take`.
+   *  @note         Reuse: $consumesAndProducesIterator
    */
   def slice(from: Int, until: Int): Iterator[A] = {
     val lo = from max 0
@@ -314,7 +291,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
       toDrop -= 1
     }
 
-    new Iterator[A] {
+    new AbstractIterator[A] {
       private var remaining = until - lo
       def hasNext = remaining > 0 && self.hasNext
       def next(): A =
@@ -332,8 +309,9 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  @param f  the transformation function
    *  @return a new iterator which transforms every value produced by this
    *          iterator by applying the function `f` to it.
+   *  @note   Reuse: $consumesAndProducesIterator
    */
-  def map[B](f: A => B): Iterator[B] = new Iterator[B] {
+  def map[B](f: A => B): Iterator[B] = new AbstractIterator[B] {
     def hasNext = self.hasNext
     def next() = f(self.next())
   }
@@ -343,9 +321,10 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  @param   that   the other iterator
    *  @return  a new iterator that first yields the values produced by this
    *  iterator followed by the values produced by iterator `that`.
+   *  @note    Reuse: $consumesTwoAndProducesOneIterator
    *  @usecase def ++(that: => Iterator[A]): Iterator[A]
    */
-  def ++[B >: A](that: => GenTraversableOnce[B]): Iterator[B] = new Iterator[B] {
+  def ++[B >: A](that: => GenTraversableOnce[B]): Iterator[B] = new AbstractIterator[B] {
     // optimize a little bit to prevent n log n behavior.
     private var cur : Iterator[B] = self
     // since that is by-name, make sure it's only referenced once -
@@ -366,10 +345,11 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  and concatenating the results.
    *
    *  @param f the function to apply on each element.
-   *  @return   the iterator resulting from applying the given iterator-valued function
-   *                `f` to each value produced by this iterator and concatenating the results.
+   *  @return  the iterator resulting from applying the given iterator-valued function
+   *           `f` to each value produced by this iterator and concatenating the results.
+   *  @note    Reuse: $consumesAndProducesIterator
    */
-  def flatMap[B](f: A => GenTraversableOnce[B]): Iterator[B] = new Iterator[B] {
+  def flatMap[B](f: A => GenTraversableOnce[B]): Iterator[B] = new AbstractIterator[B] {
     private var cur: Iterator[B] = empty
     def hasNext: Boolean =
       cur.hasNext || self.hasNext && { cur = f(self.next).toIterator; hasNext }
@@ -381,8 +361,9 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *
    *  @param p the predicate used to test values.
    *  @return  an iterator which produces those values of this iterator which satisfy the predicate `p`.
+   *  @note    Reuse: $consumesAndProducesIterator
    */
-  def filter(p: A => Boolean): Iterator[A] = new Iterator[A] {
+  def filter(p: A => Boolean): Iterator[A] = new AbstractIterator[A] {
     private var hd: A = _
     private var hdDefined: Boolean = false
 
@@ -407,6 +388,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *
    *  @param p the predicate used to test values.
    *  @return  an iterator which produces those values of this iterator which satisfy the predicate `p`.
+   *  @note    Reuse: $consumesAndProducesIterator
    */
   def withFilter(p: A => Boolean): Iterator[A] = filter(p)
 
@@ -415,30 +397,42 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *
    *  @param p the predicate used to test values.
    *  @return  an iterator which produces those values of this iterator which do not satisfy the predicate `p`.
+   *  @note    Reuse: $consumesAndProducesIterator
    */
   def filterNot(p: A => Boolean): Iterator[A] = filter(!p(_))
 
  /** Creates an iterator by transforming values
   *  produced by this iterator with a partial function, dropping those
   *  values for which the partial function is not defined.
+  *
   *  @param pf the partial function which filters and maps the iterator.
-  *  @return a new iterator which yields each value `x` produced by this iterator for
-  *          which `pf` is defined the image `pf(x)`.
+  *  @return   a new iterator which yields each value `x` produced by this iterator for
+  *  which `pf` is defined the image `pf(x)`.
+  *  @note     Reuse: $consumesAndProducesIterator
   */
-  @migration(2, 8,
-    "This collect implementation bears no relationship to the one before 2.8.\n"+
-    "The previous behavior can be reproduced with toSeq."
-  )
+  @migration("`collect` has changed. The previous behavior can be reproduced with `toSeq`.", "2.8.0")
   def collect[B](pf: PartialFunction[A, B]): Iterator[B] = {
     val self = buffered
-    new Iterator[B] {
+    new AbstractIterator[B] {
       private def skip() = while (self.hasNext && !pf.isDefinedAt(self.head)) self.next()
       def hasNext = { skip(); self.hasNext }
       def next() = { skip(); pf(self.next()) }
     }
   }
 
-  def scanLeft[B](z: B)(op: (B, A) => B): Iterator[B] = new Iterator[B] {
+  /** Produces a collection containing cummulative results of applying the
+   *  operator going left to right.
+   *
+   *  $willNotTerminateInf
+   *  $orderDependent
+   *
+   *  @tparam B      the type of the elements in the resulting collection
+   *  @param z       the initial value
+   *  @param op      the binary operator applied to the intermediate result and the element
+   *  @return        iterator with intermediate results
+   *  @note          Reuse: $consumesAndProducesIterator
+   */
+  def scanLeft[B](z: B)(op: (B, A) => B): Iterator[B] = new AbstractIterator[B] {
     var hasNext = true
     var elem = z
     def next() = if (hasNext) {
@@ -449,15 +443,32 @@ trait Iterator[+A] extends TraversableOnce[A] {
     } else Iterator.empty.next()
   }
 
+  /** Produces a collection containing cummulative results of applying the operator going right to left.
+   *  The head of the collection is the last cummulative result.
+   *
+   *  $willNotTerminateInf
+   *  $orderDependent
+   *
+   *  @tparam B      the type of the elements in the resulting collection
+   *  @param z       the initial value
+   *  @param op      the binary operator applied to the intermediate result and the element
+   *  @return        iterator with intermediate results
+   *  @example       {{{
+   *    Iterator(1, 2, 3, 4).scanRight(0)(_ + _).toList == List(10, 9, 7, 4, 0)
+   *  }}}
+   *  @note          Reuse: $consumesAndProducesIterator
+   */
   def scanRight[B](z: B)(op: (A, B) => B): Iterator[B] = toBuffer.scanRight(z)(op).iterator
 
   /** Takes longest prefix of values produced by this iterator that satisfy a predicate.
+   *
    *  @param   p  The predicate used to test elements.
    *  @return  An iterator returning the values produced by this iterator, until
    *           this iterator produces a value that does not satisfy
    *           the predicate `p`.
+   *  @note    Reuse: $consumesAndProducesIterator
    */
-  def takeWhile(p: A => Boolean): Iterator[A] = new Iterator[A] {
+  def takeWhile(p: A => Boolean): Iterator[A] = new AbstractIterator[A] {
     private var hd: A = _
     private var hdDefined: Boolean = false
     private var tail: Iterator[A] = self
@@ -478,10 +489,11 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *           `p` and the iterator that does not.
    *           The relative order of the elements in the resulting iterators
    *           is the same as in the original iterator.
+   *  @note    Reuse: $consumesOneAndProducesTwoIterators
    */
   def partition(p: A => Boolean): (Iterator[A], Iterator[A]) = {
     val self = buffered
-    class PartitionIterator(p: A => Boolean) extends Iterator[A] {
+    class PartitionIterator(p: A => Boolean) extends AbstractIterator[A] {
       var other: PartitionIterator = _
       val lookahead = new mutable.Queue[A]
       def skip() =
@@ -504,10 +516,18 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  @param p the test predicate
    *  @return  a pair of Iterators consisting of the longest prefix of this
    *           whose elements all satisfy `p`, and the rest of the Iterator.
+   *  @note    Reuse: $consumesOneAndProducesTwoIterators
    */
   def span(p: A => Boolean): (Iterator[A], Iterator[A]) = {
     val self = buffered
-    val leading = new Iterator[A] {
+
+    /**
+     * Giving a name to following iterator (as opposed to trailing) because
+     * anonymous class is represented as a structural type that trailing
+     * iterator is referring (the finish() method) and thus triggering
+     * handling of structural calls. It's not what's intended here.
+     */
+    class Leading extends AbstractIterator[A] {
       private var isDone = false
       val lookahead = new mutable.Queue[A]
       def advance() = {
@@ -528,7 +548,8 @@ trait Iterator[+A] extends TraversableOnce[A] {
         lookahead.dequeue()
       }
     }
-    val trailing = new Iterator[A] {
+    val leading = new Leading
+    val trailing = new AbstractIterator[A] {
       private lazy val it = {
         leading.finish()
         self
@@ -546,10 +567,11 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *
    *  @param p the predicate used to skip elements.
    *  @return  an iterator consisting of the remaining elements
+   *  @note    Reuse: $consumesAndProducesIterator
    */
   def dropWhile(p: A => Boolean): Iterator[A] = {
     val self = buffered
-    new Iterator[A] {
+    new AbstractIterator[A] {
       var dropped = false
       private def skip() =
         if (!dropped) {
@@ -565,27 +587,31 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  by combining corresponding values in pairs.
    *  If one of the two iterators is longer than the other, its remaining
    *  elements are ignored.
+   *
    *  @param   that  The iterator providing the second half of each result pair
    *  @return        a new iterator containing pairs consisting of
    *                 corresponding elements of this iterator and `that`. The number
    *                 of elements returned by the new iterator is the
    *                 minimum of the number of elements returned by this
    *                 iterator and `that`.
+   *  @note          Reuse: $consumesTwoAndProducesOneIterator
    */
-  def zip[B](that: Iterator[B]) = new Iterator[(A, B)] {
+  def zip[B](that: Iterator[B]): Iterator[(A, B)] = new AbstractIterator[(A, B)] {
     def hasNext = self.hasNext && that.hasNext
     def next = (self.next, that.next)
   }
 
   /** Appends an element value to this iterator until a given target length is reached.
+   *
    *  @param   len   the target length
    *  @param   elem  the padding value
    *  @return a new iterator consisting of producing all values of this iterator,
    *          followed by the minimal number of occurrences of `elem` so
    *          that the number of produced values is at least `len`.
+   *  @note    Reuse: $consumesAndProducesIterator
    *  @usecase def padTo(len: Int, elem: A): Iterator[A]
    */
-  def padTo[A1 >: A](len: Int, elem: A1) = new Iterator[A1] {
+  def padTo[A1 >: A](len: Int, elem: A1): Iterator[A1] = new AbstractIterator[A1] {
     private var count = 0
     def hasNext = self.hasNext || count < len
     def next = {
@@ -598,8 +624,12 @@ trait Iterator[+A] extends TraversableOnce[A] {
 
   /** Creates an iterator that pairs each element produced by this iterator
    *  with its index, counting from 0.
+   *
+   *  @return        a new iterator containing pairs consisting of
+   *                 corresponding elements of this iterator and their indices.
+   *  @note          Reuse: $consumesAndProducesIterator
    */
-  def zipWithIndex = new Iterator[(A, Int)] {
+  def zipWithIndex: Iterator[(A, Int)] = new AbstractIterator[(A, Int)] {
     var idx = 0
     def hasNext = self.hasNext
     def next = {
@@ -627,9 +657,10 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *                  of the returned iterator is the maximum of the lengths of this iterator and `that`.
    *                  If this iterator is shorter than `that`, `thisElem` values are used to pad the result.
    *                  If `that` is shorter than this iterator, `thatElem` values are used to pad the result.
+   *  @note           Reuse: $consumesTwoAndProducesOneIterator
    *  @usecase def zipAll[B](that: Iterator[B], thisElem: A, thatElem: B): Iterator[(A, B)]
    */
-  def zipAll[B, A1 >: A, B1 >: B](that: Iterator[B], thisElem: A1, thatElem: B1) = new Iterator[(A1, B1)] {
+  def zipAll[B, A1 >: A, B1 >: B](that: Iterator[B], thisElem: A1, thatElem: B1): Iterator[(A1, B1)] = new AbstractIterator[(A1, B1)] {
     def hasNext = self.hasNext || that.hasNext
     def next(): (A1, B1) =
       if (self.hasNext) {
@@ -650,6 +681,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *              This result will always be ignored. Typically `U` is `Unit`,
    *              but this is not necessary.
    *
+   *  @note    Reuse: $consumesIterator
    *  @usecase def foreach(f: A => Unit): Unit
    */
   def foreach[U](f: A =>  U) { while (hasNext) f(next()) }
@@ -660,6 +692,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  @param   p     the predicate used to test elements.
    *  @return        `true` if the given predicate `p` holds for all values
    *                 produced by this iterator, otherwise `false`.
+   *  @note          Reuse: $consumesIterator
    */
   def forall(p: A => Boolean): Boolean = {
     var res = true
@@ -673,6 +706,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  @param   p     the predicate used to test elements.
    *  @return        `true` if the given predicate `p` holds for some of the values
    *                 produced by this iterator, otherwise `false`.
+   *  @note          Reuse: $consumesIterator
    */
   def exists(p: A => Boolean): Boolean = {
     var res = false
@@ -686,6 +720,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  @param elem  the element to test.
    *  @return     `true` if this iterator produces some value that is
    *               is equal (wrt `==`) to `elem`, `false` otherwise.
+   *  @note        Reuse: $consumesIterator
    */
   def contains(elem: Any): Boolean = exists(_ == elem)
 
@@ -696,6 +731,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  @param p the predicate used to test values.
    *  @return  an option value containing the first value produced by the iterator that satisfies
    *           predicate `p`, or `None` if none exists.
+   *  @note    Reuse: $consumesIterator
    */
   def find(p: A => Boolean): Option[A] = {
     var res: Option[A] = None
@@ -708,9 +744,11 @@ trait Iterator[+A] extends TraversableOnce[A] {
 
   /** Returns the index of the first produced value satisfying a predicate, or -1.
    *  $mayNotTerminateInf
+   *
    *  @param  p the predicate to test values
    *  @return   the index of the first produced value satisfying `p`,
    *           or -1 if such an element does not exist until the end of the iterator is reached.
+   *  @note    Reuse: $consumesIterator
    */
   def indexWhere(p: A => Boolean): Int = {
     var i = 0
@@ -732,6 +770,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  @param  elem  element to search for.
    *  @return the index of the first occurrence of `elem` in the values produced by this iterator,
    *          or -1 if such an element does not exist until the end of the iterator is reached.
+   *  @note   Reuse: $consumesIterator
    */
   def indexOf[B >: A](elem: B): Int = {
     var i = 0
@@ -747,10 +786,12 @@ trait Iterator[+A] extends TraversableOnce[A] {
   }
 
   /** Creates a buffered iterator from this iterator.
+   *
    *  @see BufferedIterator
    *  @return  a buffered iterator producing the same values as this iterator.
+   *  @note    Reuse: $consumesAndProducesIterator
    */
-  def buffered = new BufferedIterator[A] {
+  def buffered: BufferedIterator[A] = new AbstractIterator[A] with BufferedIterator[A] {
     private var hd: A = _
     private var hdDefined: Boolean = false
 
@@ -776,9 +817,12 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  Iterator[Seq[A]], with configurable sequence size, step, and
    *  strategy for dealing with elements which don't fit evenly.
    *
-   *  Typical uses can be achieved via methods `grouped' and `sliding'.
+   *  Typical uses can be achieved via methods `grouped` and `sliding`.
    */
-  class GroupedIterator[B >: A](self: Iterator[A], size: Int, step: Int) extends Iterator[Seq[B]] {
+  class GroupedIterator[B >: A](self: Iterator[A], size: Int, step: Int)
+  extends AbstractIterator[Seq[B]]
+     with Iterator[Seq[B]] {
+
     require(size >= 1 && step >= 1, "size=%d and step=%d, but both must be positive".format(size, step))
 
     private[this] var buffer: ArrayBuffer[B] = ArrayBuffer()  // the buffer
@@ -786,11 +830,31 @@ trait Iterator[+A] extends TraversableOnce[A] {
     private[this] var _partial = true                         // whether we deliver short sequences
     private[this] var pad: Option[() => B] = None             // what to pad short sequences with
 
-    /** Public functions which can be used to configure the iterator before use. */
+    /** Public functions which can be used to configure the iterator before use.
+	 *
+	 *  Pads the last segment if necessary so that all segments will
+	 *  have the same size.
+	 *
+	 *  @param x The element that will be appended to the last segment, if necessary.
+	 *  @return  The same iterator, and ''not'' a new iterator.
+	 *  @note    This method mutates the iterator it is called on, which can be safely used afterwards.
+	 *  @note    This method is mutually exclusive with `withPartial(true)`.
+ 	 */
     def withPadding(x: => B): this.type = {
       pad = Some(() => x)
       this
     }
+	/** Public functions which can be used to configure the iterator before use.
+  	 *
+	 *  Select whether the last segment may be returned with less than `size`
+	 *  elements. If not, some elements of the original iterator may not be
+	 *  returned at all.
+	 *
+	 *  @param x `true` if partial segments may be returned, `false` otherwise.
+	 *  @return  The same iterator, and ''not'' a new iterator.
+	 *  @note    This method mutates the iterator it is called on, which can be safely used afterwards.
+	 *  @note    This method is mutually exclusive with `withPadding`.
+	 */
     def withPartial(x: Boolean): this.type = {
       _partial = x
       if (_partial == true) // reset pad since otherwise it will take precedence
@@ -879,8 +943,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
 
   /** Returns an iterator which groups this iterator into fixed size
    *  blocks.  Example usages:
-   *
-   *  <pre>
+   *  {{{
    *    // Returns List(List(1, 2, 3), List(4, 5, 6), List(7)))
    *    (1 to 7).iterator grouped 3 toList
    *    // Returns List(List(1, 2, 3), List(4, 5, 6))
@@ -889,7 +952,9 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *    // Illustrating that withPadding's argument is by-name.
    *    val it2 = Iterator.iterate(20)(_ + 5)
    *    (1 to 7).iterator grouped 3 withPadding it2.next toList
-   *  </pre>
+   *  }}}
+   *
+   *  @note Reuse: $consumesAndProducesIterator
    */
   def grouped[B >: A](size: Int): GroupedIterator[B] =
     new GroupedIterator[B](self, size, size)
@@ -897,9 +962,8 @@ trait Iterator[+A] extends TraversableOnce[A] {
   /** Returns an iterator which presents a "sliding window" view of
    *  another iterator.  The first argument is the window size, and
    *  the second is how far to advance the window on each iteration;
-   *  defaults to 1.  Example usages:
-   *
-   *  <pre>
+   *  defaults to `1`.  Example usages:
+   *  {{{
    *    // Returns List(List(1, 2, 3), List(2, 3, 4), List(3, 4, 5))
    *    (1 to 5).iterator.sliding(3).toList
    *    // Returns List(List(1, 2, 3, 4), List(4, 5))
@@ -910,7 +974,9 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *    // Illustrating that withPadding's argument is by-name.
    *    val it2 = Iterator.iterate(20)(_ + 5)
    *    (1 to 5).iterator.sliding(4, 3).withPadding(it2.next).toList
-   *  </pre>
+   *  }}}
+   *
+   *  @note Reuse: $consumesAndProducesIterator
    */
   def sliding[B >: A](size: Int, step: Int = 1): GroupedIterator[B] =
     new GroupedIterator[B](self, size, step)
@@ -918,7 +984,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
   /** Returns the number of elements in this iterator.
    *  $willNotTerminateInf
    *
-   *  Note: The iterator is at its end after this method returns.
+   *  @note Reuse: $consumesIterator
    */
   def length: Int = this.size
 
@@ -926,12 +992,19 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  as this iterator (in the same order).  The duplicate iterators are
    *  considered equal if they are positioned at the same element.
    *
+   *  Given that most methods on iterators will make the original iterator
+   *  unfit for further use, this methods provides a reliable way of calling
+   *  multiple such methods on an iterator.
+   *
    *  @return a pair of iterators
+   *  @note   The implementation may allocate temporary storage for elements
+   *          iterated by one iterator but not yet by the other.
+   *  @note   Reuse: $consumesOneAndProducesTwoIterators
    */
   def duplicate: (Iterator[A], Iterator[A]) = {
     val gap = new scala.collection.mutable.Queue[A]
     var ahead: Iterator[A] = null
-    class Partner extends Iterator[A] {
+    class Partner extends AbstractIterator[A] {
       def hasNext: Boolean = self.synchronized {
         (this ne ahead) && !gap.isEmpty || self.hasNext
       }
@@ -956,11 +1029,13 @@ trait Iterator[+A] extends TraversableOnce[A] {
   }
 
   /** Returns this iterator with patched values.
-   *  @param from     The start index from which to patch
-   *  @param ps       The iterator of patch values
-   *  @param replaced The number of values in the original iterator that are replaced by the patch.
+   *
+   *  @param from       The start index from which to patch
+   *  @param patchElems The iterator of patch values
+   *  @param replaced   The number of values in the original iterator that are replaced by the patch.
+   *  @note           Reuse: $consumesTwoAndProducesOneIterator
    */
-  def patch[B >: A](from: Int, patchElems: Iterator[B], replaced: Int) = new Iterator[B] {
+  def patch[B >: A](from: Int, patchElems: Iterator[B], replaced: Int): Iterator[B] = new AbstractIterator[B] {
     private var origElems = self
     private var i = 0
     def hasNext: Boolean =
@@ -989,6 +1064,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
    *  @param  len    the maximal number of elements to copy.
    *  @tparam B      the type of the elements of the array.
    *
+   *  @note    Reuse: $consumesIterator
    *  @usecase def copyToArray(xs: Array[A], start: Int, len: Int): Unit
    */
   def copyToArray[B >: A](xs: Array[B], start: Int, len: Int): Unit = {
@@ -1001,9 +1077,13 @@ trait Iterator[+A] extends TraversableOnce[A] {
   }
 
   /** Tests if another iterator produces the same values as this one.
+   *
    *  $willNotTerminateInf
+   *
    *  @param that  the other iterator
-   *  @return `true`, if both iterators produce the same elements in the same order, `false` otherwise.
+   *  @return      `true`, if both iterators produce the same elements in the same order, `false` otherwise.
+   *
+   *  @note        Reuse: $consumesTwoIterators
    */
   def sameElements(that: Iterator[_]): Boolean = {
     while (hasNext && that.hasNext)
@@ -1020,55 +1100,13 @@ trait Iterator[+A] extends TraversableOnce[A] {
     else Stream.empty[A]
 
   /** Converts this iterator to a string.
-   *  @return `"empty iterator"` or `"non-empty iterator"`, depending on whether or not the iterator is empty.
+   *
+   *  @return `"empty iterator"` or `"non-empty iterator"`, depending on
+   *           whether or not the iterator is empty.
+   *  @note    Reuse: $preservesIterator
    */
   override def toString = (if (hasNext) "non-empty" else "empty")+" iterator"
-
-  /** Returns a new iterator that first yields the elements of this
-   *  iterator followed by the elements provided by iterator `that`.
-   */
-  @deprecated("use `++`", "2.3.2")
-  def append[B >: A](that: Iterator[B]) = self ++ that
-
-  /** Returns index of the first element satisfying a predicate, or -1. */
-  @deprecated("use `indexWhere` instead", "2.8.0")
-  def findIndexOf(p: A => Boolean): Int = indexWhere(p)
-
-  /** Returns a counted iterator from this iterator.
-   */
-  @deprecated("use `zipWithIndex` in `Iterator`", "2.8.0")
-  def counted = new CountedIterator[A] {
-    private var cnt = 0
-    def count = cnt
-    def hasNext: Boolean = self.hasNext
-    def next(): A = { cnt += 1; self.next }
-  }
-
-  /** Fills the given array `xs` with the elements of
-   *  this sequence starting at position `start`.  Like `copyToArray`,
-   *  but designed to accomodate IO stream operations.
-   *
-   *  '''Note:'''   the array must be large enough to hold `sz` elements.
-   *  @param  xs    the array to fill.
-   *  @param  start the starting index.
-   *  @param  sz    the maximum number of elements to be read.
-   */
-  @deprecated("use `copyToArray` instead", "2.8.0")
-  def readInto[B >: A](xs: Array[B], start: Int, sz: Int) {
-    var i = start
-    while (hasNext && i - start < sz) {
-      xs(i) = next
-      i += 1
-    }
-  }
-
-  @deprecated("use `copyToArray` instead", "2.8.0")
-  def readInto[B >: A](xs: Array[B], start: Int) {
-    readInto(xs, start, xs.length - start)
-  }
-
-  @deprecated("use copyToArray instead", "2.8.0")
-  def readInto[B >: A](xs: Array[B]) {
-    readInto(xs, 0, xs.length)
-  }
 }
+
+/** Explicit instantiation of the `Iterator` trait to reduce class file size in subclasses. */
+private[scala] abstract class AbstractIterator[+A] extends Iterator[A]

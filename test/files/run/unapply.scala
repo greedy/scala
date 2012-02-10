@@ -22,7 +22,7 @@ object Faa {
   def unapply(x: Any): Option[String] = if(x.isInstanceOf[Bar]) Some(x.asInstanceOf[Bar].name) else None
 }
 object FaaPrecise {
-  def unapply(x: Bar): Option[String] = Some(x.name)
+  def unapply(x: Bar): Option[String] = Some(x.name) 
 }
 object FaaPreciseSome {
   def unapply(x: Bar) = Some(x.name)  // return type Some[String]
@@ -33,7 +33,7 @@ object VarFoo {
 
 object Foo {
   def unapply(x: Any): Option[Product2[Int, String]] = x match {
-    case y: Bar => Some(Tuple(y.size, y.name))
+    case y: Bar => Some(y.size, y.name)
     case _ => None
   }
   def doMatch1(b:Bar) = b match {
@@ -69,7 +69,7 @@ object Foo {
 object Mas {
   object Gaz {
     def unapply(x: Any): Option[Product2[Int, String]] = x match {
-      case y: Baz => Some(Tuple(y.size, y.name))
+      case y: Baz => Some(y.size, y.name)
       case _ => None
     }
   }
@@ -108,14 +108,14 @@ object Test1256 {
   class Sync {
     def unapply(scrut: Any): Boolean = false
   }
-
+  
   class Buffer {
     val Get = new Sync
     val jp: PartialFunction[Any, Any] = {
       case Get() =>
     }
   }
-
+  
   def run() {
     assert(!(new Buffer).jp.isDefinedAt(42))
   }

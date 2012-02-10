@@ -7,10 +7,11 @@ package scala.tools.nsc
 package ast.parser
 
 import scala.collection.mutable
-import mutable.{ Buffer, ArrayBuffer, ListBuffer, HashMap }
+import mutable.{ Buffer, ArrayBuffer, ListBuffer }
 import scala.util.control.ControlThrowable
 import scala.tools.nsc.util.{SourceFile,CharArrayReader}
 import scala.xml.{ Text, TextBuffer }
+import scala.xml.parsing.MarkupParserCommon
 import scala.xml.Utility.{ isNameStart, isNameChar, isSpace }
 import scala.reflect.internal.Chars.{ SU, LF }
 
@@ -47,7 +48,7 @@ trait MarkupParsers {
 
   import global._
 
-  class MarkupParser(parser: SourceFileParser, final val preserveWS: Boolean) extends scala.xml.parsing.MarkupParserCommon {
+  class MarkupParser(parser: SourceFileParser, final val preserveWS: Boolean) extends MarkupParserCommon {
 
     import Tokens.{ EMPTY, LBRACE, RBRACE }
 
@@ -77,9 +78,12 @@ trait MarkupParsers {
     def ch = input.ch
     /** this method assign the next character to ch and advances in input */
     def nextch() { input.nextChar() }
-    def ch_returning_nextch = { val result = ch; input.nextChar(); result }
 
-    def mkProcInstr(position: Position, name: String, text: String): Tree =
+    protected def ch_returning_nextch: Char = {
+      val result = ch; input.nextChar(); result
+    }
+
+    def mkProcInstr(position: Position, name: String, text: String): ElementType =
       parser.symbXMLBuilder.procInstr(position, name, text)
 
     var xEmbeddedBlock = false
@@ -113,7 +117,7 @@ trait MarkupParsers {
      *                      | `{` scalablock `}`
      */
     def xAttributes = {
-      val aMap = new HashMap[String, Tree]()
+      val aMap = mutable.LinkedHashMap[String, Tree]()
 
       while (isNameStart(ch)) {
         val start = curOffset
@@ -285,7 +289,7 @@ trait MarkupParsers {
     /** parse character data.
      *  precondition: xEmbeddedBlock == false (we are not in a scala block)
      */
-    def xText: String = {
+    private def xText: String = {
       assert(!xEmbeddedBlock, "internal error: encountered embedded block")
       val buf = new StringBuilder
       def done = buf.toString
@@ -396,11 +400,9 @@ trait MarkupParsers {
     def xScalaPatterns: List[Tree] = escapeToScala(parser.seqPatterns(), "pattern")
 
     def reportSyntaxError(pos: Int, str: String) = parser.syntaxError(pos, str)
-    def reportSyntaxError(str: String) = {
+    def reportSyntaxError(str: String) {
       reportSyntaxError(curOffset, "in XML literal: " + str)
-      val result = ch
-      nextch
-      result
+      nextch()
     }
 
     /** '<' xPattern  ::= Name [S] { xmlPattern | '{' pattern3 '}' } ETag

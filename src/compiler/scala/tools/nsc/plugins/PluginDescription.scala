@@ -6,8 +6,6 @@
 package scala.tools.nsc
 package plugins
 
-import java.io.File
-
 import scala.xml.{Node,NodeSeq}
 
 /** A description of a compiler plugin, suitable for serialization
@@ -29,7 +27,7 @@ abstract class PluginDescription {
 
   /** An XML representation of this description.  It can be
    *  read back using <code>PluginDescription.fromXML</code>.
-   *  It should be stored inside the jar.
+   *  It should be stored inside the jar archive file.
    */
   def toXML: Node = {
     <plugin>
@@ -39,21 +37,20 @@ abstract class PluginDescription {
   }
 }
 
-
 /** Utilities for the PluginDescription class.
  *
  *  @author Lex Spoon
  *  @version 1.0, 2007-5-21
  */
 object PluginDescription {
+
   def fromXML(xml: Node): Option[PluginDescription] = {
     // check the top-level tag
     xml match {
       case <plugin>{_*}</plugin>  => ()
       case _ => return None
     }
-
-    /** Extract one field */
+    // extract one field
     def getField(field: String): Option[String] = {
       val text = (xml \\ field).text.trim
       if (text == "") None else Some(text)
@@ -74,4 +71,5 @@ object PluginDescription {
       val classname = classname1
     })
   }
+
 }

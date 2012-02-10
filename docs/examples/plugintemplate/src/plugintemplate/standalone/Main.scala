@@ -5,7 +5,7 @@ import scala.tools.nsc.CompilerCommand
 import scala.tools.nsc.Settings
 
 /** An object for running the plugin as standalone application.
- *
+ * 
  *  @todo: print, parse and apply plugin options !!!
  *  ideally re-use the TemplatePlugin (-> runsAfter, optionsHelp,
  *  processOptions, components, annotationChecker) instead of
@@ -16,7 +16,7 @@ object Main {
     val settings = new Settings
 
     val command = new CompilerCommand(args.toList, settings) {
-      /** The command name that will be printed in in the usage message.
+      /** The command name that will be printed in the usage message.
        *  This is automatically set to the value of 'plugin.commandname' in the
        *  file build.properties.
        */

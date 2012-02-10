@@ -10,11 +10,16 @@
 package scala.util
 
 import java.io.{ IOException, PrintWriter }
+import java.util.jar.Attributes.{ Name => AttributeName }
 
 /** Loads `library.properties` from the jar. */
 object Properties extends PropertiesTrait {
   protected def propCategory    = "library"
   protected def pickJarBasedOn  = classOf[ScalaObject]
+
+  /** Scala manifest attributes.
+   */
+  val ScalaCompilerVersion = new AttributeName("Scala-Compiler-Version")
 }
 
 private[scala] trait PropertiesTrait {
@@ -90,6 +95,11 @@ private[scala] trait PropertiesTrait {
       Some(s)
   }
 
+  /** Either the development or release version if known, otherwise
+   *  the empty string.
+   */
+  def versionNumberString = scalaPropOrEmpty("version.number")
+
   /** The version number of the jar this was loaded from plus "version " prefix,
    *  or "version (unknown)" if it cannot be determined.
    */
@@ -132,6 +142,11 @@ private[scala] trait PropertiesTrait {
    */
   def isWin                 = osName startsWith "Windows"
   def isMac                 = javaVendor startsWith "Apple"
+  
+  // This is looking for javac, tools.jar, etc.
+  // Tries JDK_HOME first, then the more common but likely jre JAVA_HOME,
+  // and finally the system property based javaHome.
+  def jdkHome              = envOrElse("JDK_HOME", envOrElse("JAVA_HOME", javaHome))
 
   def versionMsg            = "Scala %s %s -- %s".format(propCategory, versionString, copyrightString)
   def scalaCmd              = if (isWin) "scala.bat" else "scala"

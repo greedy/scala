@@ -13,6 +13,7 @@ import io.{ File, Directory, Path, Jar, AbstractFile, ClassAndJarInfo }
 import scala.tools.util.StringOps.splitWhere
 import Jar.isJarOrZip
 import File.pathSeparator
+import java.net.MalformedURLException
 
 /** <p>
  *    This module provides star expansion of '-classpath' option arguments, behaves the same as
@@ -25,6 +26,8 @@ object ClassPath {
   def scalaLibrary  = locate[ScalaObject]
   def scalaCompiler = locate[Global]
 
+  def infoFor[T](value: T)        = info(value.getClass)
+  def info[T](clazz: Class[T])    = new ClassAndJarInfo()(ClassManifest fromClass clazz)
   def info[T: ClassManifest]      = new ClassAndJarInfo[T]
   def locate[T: ClassManifest]    = info[T] rootClasspath
   def locateJar[T: ClassManifest] = info[T].rootPossibles find (x => isJarOrZip(x)) map (x => File(x))
@@ -108,11 +111,22 @@ object ClassPath {
       case dir  => dir filter (_.isClassContainer) map (x => new java.io.File(dir.file, x.name) getPath) toList
     }
   }
+  /** Expand manifest jar classpath entries: these are either urls, or paths
+   *  relative to the location of the jar.
+   */
+  def expandManifestPath(jarPath: String): List[URL] = {
+    val file = File(jarPath)
+    if (!file.isFile) return Nil
+
+    val baseDir = file.parent
+    new Jar(file).classPathElements map (elem =>
+      specToURL(elem) getOrElse (baseDir / elem).toURL
+    )
+  }
 
   /** A useful name filter. */
   def isTraitImplementation(name: String) = name endsWith "$class.class"
 
-  import java.net.MalformedURLException
   def specToURL(spec: String): Option[URL] =
     try Some(new URL(spec))
     catch { case _: MalformedURLException => None }
@@ -247,7 +261,7 @@ abstract class ClassPath[T] {
   // }
 
   /**
-   * Represents classes which can be loaded with a ClassfileLoader/MSILTypeLoader
+   * Represents classes which can be loaded with a ClassfileLoader/MsilFileLoader
    * and / or a SourcefileLoader.
    */
   case class ClassRep(binary: Option[T], source: Option[AbstractFile]) {
@@ -462,5 +476,16 @@ extends ClassPath[T] {
 class JavaClassPath(
   containers: IndexedSeq[ClassPath[AbstractFile]],
   context: JavaContext)
-extends MergedClassPath[AbstractFile](containers, context) {
+extends MergedClassPath[AbstractFile](containers, context) { }
+
+object JavaClassPath {
+  def fromURLs(urls: Seq[URL], context: JavaContext): JavaClassPath = {
+    val containers = {
+      for (url <- urls ; f = AbstractFile getURL url ; if f != null) yield
+        new DirectoryClassPath(f, context)
+    }
+    new JavaClassPath(containers.toIndexedSeq, context)
+  }
+  def fromURLs(urls: Seq[URL]): JavaClassPath =
+    fromURLs(urls, ClassPath.DefaultJavaContext)
 }

@@ -136,6 +136,9 @@ trait HasFlags {
   /** Whether this entity has NONE of the flags in the given mask.
    */
   def hasNoFlags(mask: Long): Boolean = !hasFlag(mask)
+  
+  protected def isSetting(f: Long, mask: Long)  = !hasFlag(f) && ((mask & f) != 0L)
+  protected def isClearing(f: Long, mask: Long) =  hasFlag(f) && ((mask & f) != 0L)
 
   // Tests which come through cleanly: both Symbol and Modifiers use these
   // identically, testing for a single flag.
@@ -151,8 +154,8 @@ trait HasFlags {
   def isInterface = hasFlag(INTERFACE)
 
   // Newly introduced based on having a reasonably obvious clean translation.
-  def isPrivateLocal   = hasAllFlags(PRIVATE | LOCAL)
-  def isProtectedLocal = hasAllFlags(PROTECTED | LOCAL)
+  def isPrivateLocal   = hasAllFlags(PrivateLocal)
+  def isProtectedLocal = hasAllFlags(ProtectedLocal)
   def isParamAccessor  = hasFlag(PARAMACCESSOR)
   def isCaseAccessor   = hasFlag(CASEACCESSOR)
   def isSuperAccessor  = hasFlag(SUPERACCESSOR)
@@ -174,7 +177,7 @@ trait HasFlags {
 
   // Dropped isTerm condition because flag isn't overloaded.
   def isAbstractOverride = hasFlag(ABSOVERRIDE)
-
+  def isAnyOverride = hasFlag(OVERRIDE | ABSOVERRIDE)
   def isDefaultInit = hasFlag(DEFAULTINIT)
 
   // Disambiguating: DEFAULTPARAM, TRAIT

@@ -7,7 +7,6 @@ package scala.tools.nsc
 package matching
 
 import symtab.Flags
-import scala.reflect.NameTransformer.decode
 import PartialFunction._
 
 /** Patterns are wrappers for Trees with enhanced semantics.
@@ -36,6 +35,9 @@ trait Patterns extends ast.TreeDSL {
   //   case UnApply(t, _)  => treeInfo.methPart(t).symbol
   //   case _              => NoSymbol
   // }
+
+  private lazy val dummyMethod =
+    NoSymbol.newTermSymbol(newTermName("matching$dummy"))
 
   // Fresh patterns
   def emptyPatterns(i: Int): List[Pattern] = List.fill(i)(NoPattern)
@@ -84,7 +86,7 @@ trait Patterns extends ast.TreeDSL {
     def isSwitchable = cond(const.tag) { case ByteTag | ShortTag | IntTag | CharTag => true }
     def intValue = const.intValue
     override def description = {
-      val s = if (value == null) "null" else value.toString()
+      val s = if (value == null) "null" else value.toString
       "Lit(%s)".format(s)
     }
   }
@@ -192,9 +194,9 @@ trait Patterns extends ast.TreeDSL {
     // As yet I can't testify this is doing any good relative to using
     // tpt.tpe, but it doesn't seem to hurt either.
     private lazy val packedType = global.typer.computeType(tpt, tpt.tpe)
-    private lazy val consRef    = typeRef(NoPrefix, ConsClass, List(packedType))
-    private lazy val listRef    = typeRef(NoPrefix, ListClass, List(packedType))
-    private lazy val seqRef     = typeRef(NoPrefix, SeqClass, List(packedType))
+    private lazy val consRef    = appliedType(ConsClass.typeConstructor, List(packedType))
+    private lazy val listRef    = appliedType(ListClass.typeConstructor, List(packedType))
+    private lazy val seqRef     = appliedType(SeqClass.typeConstructor, List(packedType))
 
     private def thisSeqRef = {
       val tc = (tree.tpe baseType SeqClass).typeConstructor
@@ -206,7 +208,6 @@ trait Patterns extends ast.TreeDSL {
     private def listFolder(hd: Tree, tl: Tree): Tree = unbind(hd) match {
       case t @ Star(_) => moveBindings(hd, WILD(t.tpe))
       case _           =>
-        val dummyMethod = new TermSymbol(NoSymbol, NoPosition, "matching$dummy")
         val consType    = MethodType(dummyMethod newSyntheticValueParams List(packedType, listRef), consRef)
 
         Apply(TypeTree(consType), List(hd, tl)) setType consRef
@@ -271,8 +272,7 @@ trait Patterns extends ast.TreeDSL {
 
   object Pattern {
     // a small tree -> pattern cache
-    private val cache = new collection.mutable.HashMap[Tree, Pattern]
-    def clear() = cache.clear()
+    private val cache = perRunCaches.newMap[Tree, Pattern]()
 
     def apply(tree: Tree): Pattern = {
       if (cache contains tree)
@@ -317,7 +317,7 @@ trait Patterns extends ast.TreeDSL {
         case UnApply(
         Apply(TypeApply(Select(qual, nme.unapplySeq), List(tpt)), _),
         List(ArrayValue(_, elems))) =>
-          Some(qual.symbol, tpt, elems)
+          Some((qual.symbol, tpt, elems))
         case _ =>
           None
        }
@@ -388,7 +388,7 @@ trait Patterns extends ast.TreeDSL {
     def name: Name
     override def sufficientType = tpe.narrow
     override def simplify(pv: PatternVar) = this.rebindToEqualsCheck()
-    override def description = name.toString()
+    override def description = name.toString
   }
 
   sealed trait UnapplyPattern extends Pattern {
@@ -470,9 +470,9 @@ trait Patterns extends ast.TreeDSL {
       case _          => super.equals(other)
     }
     override def hashCode() = boundTree.hashCode()
-    def description = super.toString()
+    def description = super.toString
 
-    final override def toString() = description
+    final override def toString = description
 
     def toTypeString() = "%s <: x <: %s".format(necessaryType, sufficientType)
   }

@@ -20,8 +20,10 @@ trait Analyzer extends AnyRef
             with EtaExpansion
             with SyntheticMethods
             with Unapplies
+            with Macros
             with NamesDefaults
             with TypeDiagnostics
+            with ContextErrors
 {
   val global : Global
   import global._
@@ -55,7 +57,7 @@ trait Analyzer extends AnyRef
         override def traverse(tree: Tree): Unit = tree match {
           case ModuleDef(_, _, _) =>
             if (tree.symbol.name == nme.PACKAGEkw) {
-              loaders.openPackageModule(tree.symbol)()
+              openPackageModule(tree.symbol, tree.symbol.owner)
             }
           case ClassDef(_, _, _, _) => () // make it fast
           case _ => super.traverse(tree)

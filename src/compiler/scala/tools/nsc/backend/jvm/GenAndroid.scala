@@ -23,25 +23,21 @@ trait GenAndroid {
    *  `Parcelable` interface must also have a static field called `CREATOR`,
    *  which is an object implementing the `Parcelable.Creator` interface.
    */
-  private val fieldName = "CREATOR"
+  private val fieldName = newTermName("CREATOR")
 
-  private lazy val AndroidParcelableInterface =
-    try definitions.getClass("android.os.Parcelable")
-    catch { case _: FatalError => NoSymbol }
-
-  private lazy val AndroidCreatorClass =
-    if (AndroidParcelableInterface == NoSymbol) NoSymbol
-    else definitions.getClass("android.os.Parcelable$Creator")
+  private lazy val AndroidParcelableInterface = definitions.getClassIfDefined("android.os.Parcelable")
+  private lazy val AndroidCreatorClass        = definitions.getClassIfDefined("android.os.Parcelable$Creator")
 
   def isAndroidParcelableClass(sym: Symbol) =
     (AndroidParcelableInterface != NoSymbol) &&
-    (sym.info.parents contains AndroidParcelableInterface.tpe)
+    (sym.parentSymbols contains AndroidParcelableInterface)
 
   def addCreatorCode(codegen: BytecodeGenerator, block: BasicBlock) {
     import codegen._
-    val fieldSymbol = clasz.symbol.newValue(NoPosition, newTermName(fieldName))
-                        .setFlag(Flags.STATIC | Flags.FINAL)
-                        .setInfo(AndroidCreatorClass.tpe)
+    val fieldSymbol = (
+      clasz.symbol.newValue(newTermName(fieldName), NoPosition, Flags.STATIC | Flags.FINAL)
+        setInfo AndroidCreatorClass.tpe
+    )
     val methodSymbol = definitions.getMember(clasz.symbol.companionModule, fieldName)
     clasz addField new IField(fieldSymbol)
     block emit CALL_METHOD(methodSymbol, Static(false))

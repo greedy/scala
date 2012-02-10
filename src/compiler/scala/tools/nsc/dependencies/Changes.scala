@@ -18,8 +18,8 @@ abstract class Changes {
 
   abstract class Change
 
-  private lazy val annotationsChecked =
-      List(definitions.getClass("scala.specialized")) // Any others that should be checked?
+  private lazy val annotationsChecked = 
+    List(definitions.SpecializedClass) // Any others that should be checked?
 
   private val flagsToCheck = IMPLICIT | FINAL | PRIVATE | PROTECTED | SEALED |
                              OVERRIDE | CASE | ABSTRACT | DEFERRED | METHOD |
@@ -52,7 +52,7 @@ abstract class Changes {
   private val changedTypeParams = new mutable.HashSet[String]
 
   private def sameParameterSymbolNames(sym1: Symbol, sym2: Symbol): Boolean =
-  	sameSymbol(sym1, sym2, true) || sym2.encodedName.startsWith(sym1.encodedName + "$") // see #3140
+  	sameSymbol(sym1, sym2, true) || sym2.encodedName.startsWith(sym1.encodedName + nme.NAME_JOIN_STRING) // see #3140
   private def sameSymbol(sym1: Symbol, sym2: Symbol, simple: Boolean = false): Boolean =
     if (simple) sym1.encodedName == sym2.encodedName else sym1.fullName == sym2.fullName
   private def sameFlags(sym1: Symbol, sym2: Symbol): Boolean =

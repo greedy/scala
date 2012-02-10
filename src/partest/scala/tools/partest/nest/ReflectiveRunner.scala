@@ -53,15 +53,28 @@ class ReflectiveRunner {
       Array(latestCompFile, latestLibFile, latestPartestFile, latestFjbgFile, latestScalapFile) map (x => io.File(x))
 
     val sepUrls   = files map (_.toURL)
-    val sepLoader = new URLClassLoader(sepUrls, null)
+    var sepLoader = new URLClassLoader(sepUrls, null)
+
+    // this is a workaround for https://issues.scala-lang.org/browse/SI-5433
+    // when that bug is fixed, this paragraph of code can be safely removed
+    // we hack into the classloader that will become parent classloader for scalac
+    // this way we ensure that reflective macro lookup will pick correct Code.lift
+    sepLoader = new URLClassLoader((PathSettings.srcCodeLib +: files) map (_.toURL), null)
 
     if (isPartestDebug)
       println("Loading classes from:\n" + sepUrls.mkString("\n"))
 
-    val paths = classPath match {
-      case Some(cp) => Nil
-      case _        => files.toList map (_.path)
-    }
+    // @partest maintainer: it seems to me that commented lines are incorrect
+    // if classPath is not empty, then it has been provided by the --classpath option
+    // which points to the root of Scala home (see ConsoleFileManager's testClasses and the true flag in the ctor for more information)
+    // this doesn't mean that we had custom Java classpath set, so we don't have to override latestXXXFiles from the file manager
+    //
+    //val paths = classPath match {
+    //  case Some(cp) => Nil
+    //  case _        => files.toList map (_.path)
+    //}
+    val paths = files.toList map (_.path)
+
     val newClasspath = ClassPath.join(paths: _*)
 
     setProp("java.class.path", newClasspath)

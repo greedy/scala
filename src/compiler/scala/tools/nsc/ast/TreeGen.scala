@@ -30,9 +30,53 @@ abstract class TreeGen extends reflect.internal.TreeGen {
     else
       tree
   }
+  
+  /** Builds a fully attributed wildcard import node.
+   */
+  def mkWildcardImport(pkg: Symbol): Import = {
+    assert(pkg ne null, this)
+    val qual = gen.mkAttributedStableRef(pkg)
+    val importSym = (
+      NoSymbol
+        newImport NoPosition
+          setFlag SYNTHETIC
+          setInfo analyzer.ImportType(qual)
+    )
+    val importTree = (
+      Import(qual, List(ImportSelector(nme.WILDCARD, -1, null, -1)))
+        setSymbol importSym
+          setType NoType
+    )
+    importTree
+  }
 
   // wrap the given expression in a SoftReference so it can be gc-ed
-  def mkSoftRef(expr: Tree): Tree = New(TypeTree(SoftReferenceClass.tpe), List(List(expr)))
+  def mkSoftRef(expr: Tree): Tree = atPos(expr.pos) {
+    New(SoftReferenceClass, expr)
+  }
+  // annotate the expression with @unchecked
+  def mkUnchecked(expr: Tree): Tree = atPos(expr.pos) {
+    // This can't be "Annotated(New(UncheckedClass), expr)" because annotations
+    // are very pick about things and it crashes the compiler with "unexpected new".
+    Annotated(New(scalaDot(UncheckedClass.name), List(Nil)), expr)
+  }
+  // if it's a Match, mark the selector unchecked; otherwise nothing.
+  def mkUncheckedMatch(tree: Tree) = tree match {
+    case Match(selector, cases) => atPos(tree.pos)(Match(mkUnchecked(selector), cases))
+    case _                      => tree
+  }
+
+  def withDefaultCase(matchExpr: Tree, defaultAction: Tree/*scrutinee*/ => Tree): Tree = matchExpr match {
+    case Match(scrutinee, cases) =>
+      if (cases exists treeInfo.isDefaultCase) matchExpr
+      else {
+        val defaultCase = CaseDef(Ident(nme.WILDCARD), EmptyTree, defaultAction(scrutinee))
+        Match(scrutinee, cases :+ defaultCase)
+      }
+    case _ =>
+      matchExpr
+    // [Martin] Adriaan: please fill in virtpatmat transformation here
+  }
 
   def mkCached(cvar: Symbol, expr: Tree): Tree = {
     val cvarRef = mkUnattributedRef(cvar)
@@ -52,17 +96,17 @@ abstract class TreeGen extends reflect.internal.TreeGen {
   }
 
   def mkModuleVarDef(accessor: Symbol) = {
+    val inClass    = accessor.owner.isClass
+    val extraFlags = if (inClass) PrivateLocal | SYNTHETIC else 0
+    
     val mval = (
-      accessor.owner.newVariable(accessor.pos.focus, nme.moduleVarName(accessor.name))
-      setInfo accessor.tpe.finalResultType
-      setFlag (MODULEVAR)
+      accessor.owner.newVariable(nme.moduleVarName(accessor.name), accessor.pos.focus, MODULEVAR | extraFlags)
+        setInfo accessor.tpe.finalResultType
+        addAnnotation VolatileAttr
     )
+    if (inClass)
+      mval.owner.info.decls enter mval
 
-    mval.addAnnotation(AnnotationInfo(VolatileAttr.tpe, Nil, Nil))
-    if (mval.owner.isClass) {
-      mval setFlag (PRIVATE | LOCAL | SYNTHETIC)
-      mval.owner.info.decls.enter(mval)
-    }
     ValDef(mval)
   }
 
@@ -90,7 +134,7 @@ abstract class TreeGen extends reflect.internal.TreeGen {
     mkMethodCall(ScalaRunTimeModule, meth, targs, args)
 
   def mkSysErrorCall(message: String): Tree =
-    mkMethodCall(Sys_error, List(Literal(message)))
+    mkMethodCall(Sys_error, List(Literal(Constant(message))))
 
   /** A creator for a call to a scala.reflect.Manifest or ClassManifest factory method.
    *
@@ -103,7 +147,7 @@ abstract class TreeGen extends reflect.internal.TreeGen {
   def mkManifestFactoryCall(full: Boolean, constructor: String, tparg: Type, args: List[Tree]): Tree =
     mkMethodCall(
       if (full) FullManifestModule else PartialManifestModule,
-      constructor,
+      newTermName(constructor),
       List(tparg),
       args
     )
@@ -136,16 +180,10 @@ abstract class TreeGen extends reflect.internal.TreeGen {
    *  apply the element type directly.
    */
   def mkWrapArray(tree: Tree, elemtp: Type) = {
-    val sym = elemtp.typeSymbol
-    val meth: Name =
-      if (isValueClass(sym)) "wrap"+sym.name+"Array"
-      else if ((elemtp <:< AnyRefClass.tpe) && !isPhantomClass(sym)) "wrapRefArray"
-      else "genericWrapArray"
-
     mkMethodCall(
       PredefModule,
-      meth,
-      if (isValueClass(sym)) Nil else List(elemtp),
+      wrapArrayMethodName(elemtp),
+      if (isScalaValueType(elemtp)) Nil else List(elemtp),
       List(tree)
     )
   }
@@ -154,8 +192,8 @@ abstract class TreeGen extends reflect.internal.TreeGen {
    *  elem type elemtp to expected type pt.
    */
   def mkCastArray(tree: Tree, elemtp: Type, pt: Type) =
-    if (elemtp.typeSymbol == AnyClass && isValueClass(tree.tpe.typeArgs.head.typeSymbol))
-      mkCast(mkRuntimeCall("toObjectArray", List(tree)), pt)
+    if (elemtp.typeSymbol == AnyClass && isScalaValueType(tree.tpe.typeArgs.head))
+      mkCast(mkRuntimeCall(nme.toObjectArray, List(tree)), pt)
     else
       mkCast(tree, pt)
 
@@ -174,18 +212,29 @@ abstract class TreeGen extends reflect.internal.TreeGen {
     case _            => EmptyTree
   }
 
+  /** Create a ValDef initialized to the given expression, setting the
+   *  symbol to its packed type, and an function for creating Idents
+   *  which refer to it.
+   */
+  private def mkPackedValDef(expr: Tree, owner: Symbol, name: Name): (ValDef, () => Ident) = {
+    val packedType = typer.packedType(expr, owner)
+    val sym = owner.newValue(name, expr.pos.makeTransparent, SYNTHETIC) setInfo packedType
+
+    (ValDef(sym, expr), () => Ident(sym) setPos sym.pos.focus setType expr.tpe)
+  }
+
   /** Used in situations where you need to access value of an expression several times
    */
   def evalOnce(expr: Tree, owner: Symbol, unit: CompilationUnit)(within: (() => Tree) => Tree): Tree = {
     var used = false
-    if (treeInfo.isPureExpr(expr)) {
+    if (treeInfo.isExprSafeToInline(expr)) {
       within(() => if (used) expr.duplicate else { used = true; expr })
-    } else {
-      val temp = owner.newValue(expr.pos.makeTransparent, unit.freshTermName("ev$"))
-        .setFlag(SYNTHETIC).setInfo(expr.tpe)
-      val containing = within(() => Ident(temp) setPos temp.pos.focus setType expr.tpe)
+    }
+    else {
+      val (valDef, identFn) = mkPackedValDef(expr, owner, unit.freshTermName("ev$"))
+      val containing = within(identFn)
       ensureNonOverlapping(containing, List(expr))
-      Block(List(ValDef(temp, expr)), containing) setPos (containing.pos union expr.pos)
+      Block(List(valDef), containing) setPos (containing.pos union expr.pos)
     }
   }
 
@@ -195,16 +244,16 @@ abstract class TreeGen extends reflect.internal.TreeGen {
     val used = new Array[Boolean](exprs.length)
     var i = 0
     for (expr <- exprs) {
-      if (treeInfo.isPureExpr(expr)) {
+      if (treeInfo.isExprSafeToInline(expr)) {
         exprs1 += {
           val idx = i
           () => if (used(idx)) expr.duplicate else { used(idx) = true; expr }
         }
-      } else {
-        val temp = owner.newValue(expr.pos.makeTransparent, unit.freshTermName("ev$"))
-          .setFlag(SYNTHETIC).setInfo(expr.tpe)
-        vdefs += ValDef(temp, expr)
-        exprs1 += (() => Ident(temp) setPos temp.pos.focus setType expr.tpe)
+      }
+      else {
+        val (valDef, identFn) = mkPackedValDef(expr, owner, unit.freshTermName("ev$"))
+        vdefs += valDef
+        exprs1 += identFn
       }
       i += 1
     }

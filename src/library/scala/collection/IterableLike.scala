@@ -85,6 +85,8 @@ self =>
     iterator.reduceRight(op)
   override /*TraversableLike*/ def toIterable: Iterable[A] =
     thisCollection
+  override /*TraversableLike*/ def toIterator: Iterator[A] =
+    iterator
   override /*TraversableLike*/ def head: A =
     iterator.next
 
@@ -170,8 +172,8 @@ self =>
    *          last and the only element will be truncated if there are
    *          fewer elements than size.
    */
-  def sliding[B >: A](size: Int): Iterator[Repr] = sliding(size, 1)
-  def sliding[B >: A](size: Int, step: Int): Iterator[Repr] =
+  def sliding(size: Int): Iterator[Repr] = sliding(size, 1)
+  def sliding(size: Int, step: Int): Iterator[Repr] =
     for (xs <- iterator.sliding(size, step)) yield {
       val b = newBuilder
       b ++= xs
@@ -296,23 +298,4 @@ self =>
   }
 
   override /*TraversableLike*/ def view(from: Int, until: Int) = view.slice(from, until)
-
-  @deprecated("use `iterator` instead", "2.8.0")
-  def elements = iterator
-
-  @deprecated("use `head` instead", "2.8.0")
-  def first: A = head
-
-  /** `None` if iterable is empty.
-   */
-  @deprecated("use `headOption` instead", "2.8.0")
-  def firstOption: Option[A] = headOption
-
-  /**
-   * returns a projection that can be used to call non-strict `filter`,
-   * `map`, and `flatMap` methods that build projections
-   * of the collection.
-   */
-  @deprecated("use `view` instead", "2.8.0")
-  def projection = view
 }

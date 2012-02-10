@@ -33,27 +33,25 @@ abstract class Liveness {
 
   final class LivenessAnalysis extends DataFlowAnalysis[livenessLattice.type] {
     type P = BasicBlock
-    val lattice = livenessLattice
-
-    var method: IMethod = _
-
-    val gen: mutable.Map[BasicBlock, Set[Local]] = new mutable.HashMap()
-    val kill: mutable.Map[BasicBlock, Set[Local]] = new mutable.HashMap()
+    val lattice                                   = livenessLattice
+    var method: IMethod                           = _
+    val gen: mutable.Map[BasicBlock, Set[Local]]  = perRunCaches.newMap()
+    val kill: mutable.Map[BasicBlock, Set[Local]] = perRunCaches.newMap()
 
     def init(m: IMethod) {
       this.method = m
-      gen.clear
-      kill.clear
+      gen.clear()
+      kill.clear()
 
-      for (b <- m.code.blocks;
-           (g, k) = genAndKill(b)) {
+      m foreachBlock { b =>
+        val (g, k) = genAndKill(b)
         gen  += (b -> g)
         kill += (b -> k)
       }
 
       init {
-        worklist ++= m.code.blocks.toList
-        m.code.blocks.foreach { b =>
+        m foreachBlock { b =>
+          worklist += b
           in(b)  = lattice.bottom
           out(b) = lattice.bottom
         }
@@ -77,7 +75,7 @@ abstract class Liveness {
     override def run() {
       backwardAnalysis(blockTransfer)
       if (settings.debug.value) {
-        linearizer.linearize(method).foreach(b => if (b != method.code.startBlock)
+        linearizer.linearize(method).foreach(b => if (b != method.startBlock)
           assert(lattice.bottom != in(b),
             "Block " + b + " in " + this.method + " has input equal to bottom -- not visited?"));
       }
@@ -91,29 +89,14 @@ abstract class Liveness {
      *  liveness *before* the given instruction `i`.
      */
     def interpret(out: lattice.Elem, i: Instruction): lattice.Elem = {
-      var in = out
-
-      if (settings.debug.value) {
-        log("- " + i)
-        log("out: " + out)
-        log("\n")
-      }
-
+      debuglog("- " + i + "\nout: " + out + "\n")
       i match {
-        case LOAD_LOCAL(l) => in += l
-        case STORE_LOCAL(l) => in -= l
-        case _ =>
-          ()
+        case LOAD_LOCAL(l)  => out + l
+        case STORE_LOCAL(l) => out - l
+        case _              => out
       }
-      in
-    } /* def interpret */
-
-    override def toString(): String = {
-      val buf = new StringBuilder()
-      for (b <- method.code.blocks.toList) {
-        buf.append("\nlive-in(" + b + ")=" + in(b) + "\nlive-out(" + b + ")=" + out(b));
-      }
-      buf.toString()
     }
+    override def toString() =
+      method.blocks map (b => "\nlive-in(%s)=%s\nlive-out(%s)=%s".format(b, in(b), b, out(b))) mkString
   } /* Liveness analysis */
 }

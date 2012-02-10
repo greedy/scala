@@ -30,7 +30,8 @@ import collection.parallel.immutable.ParHashSet
  *  @define coll immutable hash set
  */
 @SerialVersionUID(2L)
-class HashSet[A] extends Set[A]
+class HashSet[A] extends AbstractSet[A]
+                    with Set[A]
                     with GenericSetTemplate[A, HashSet]
                     with SetLike[A, HashSet[A]]
                     with CustomParallelizable[A, ParHashSet[A]]
@@ -104,7 +105,7 @@ object HashSet extends ImmutableSetFactory[HashSet] {
 
   // TODO: add HashSet2, HashSet3, ...
 
-  class HashSet1[A](private[HashSet] var key: A, private[HashSet] var hash: Int) extends HashSet[A] {
+  class HashSet1[A](private[HashSet] val key: A, private[HashSet] val hash: Int) extends HashSet[A] {
     override def size = 1
 
     override def get0(key: A, hash: Int, level: Int): Boolean =
@@ -130,7 +131,7 @@ object HashSet extends ImmutableSetFactory[HashSet] {
     override def foreach[U](f: A => U): Unit = f(key)
   }
 
-  private[immutable] class HashSetCollision1[A](private[HashSet] var hash: Int, var ks: ListSet[A])
+  private[immutable] class HashSetCollision1[A](private[HashSet] val hash: Int, val ks: ListSet[A])
             extends HashSet[A] {
 
     override def size = ks.size
@@ -177,7 +178,7 @@ object HashSet extends ImmutableSetFactory[HashSet] {
 
   }
 
-  class HashTrieSet[A](private var bitmap: Int, private[collection] var elems: Array[HashSet[A]], private var size0: Int)
+  class HashTrieSet[A](private val bitmap: Int, private[collection] val elems: Array[HashSet[A]], private val size0: Int)
         extends HashSet[A] {
 
     override def size = size0
@@ -200,13 +201,16 @@ object HashSet extends ImmutableSetFactory[HashSet] {
       val mask = (1 << index)
       val offset = Integer.bitCount(bitmap & (mask-1))
       if ((bitmap & mask) != 0) {
-        val elemsNew = new Array[HashSet[A]](elems.length)
-        Array.copy(elems, 0, elemsNew, 0, elems.length)
-        val sub = elems(offset)
         // TODO: might be worth checking if sub is HashTrieSet (-> monomorphic call site)
+        val sub = elems(offset)
         val subNew = sub.updated0(key, hash, level + 5)
-        elemsNew(offset) = subNew
-        new HashTrieSet(bitmap, elemsNew, size + (subNew.size - sub.size))
+        if (sub eq subNew) this
+        else {
+          val elemsNew = new Array[HashSet[A]](elems.length)
+          Array.copy(elems, 0, elemsNew, 0, elems.length)
+          elemsNew(offset) = subNew
+          new HashTrieSet(bitmap, elemsNew, size + (subNew.size - sub.size))
+        }
       } else {
         val elemsNew = new Array[HashSet[A]](elems.length + 1)
         Array.copy(elems, 0, elemsNew, 0, offset)
@@ -225,7 +229,8 @@ object HashSet extends ImmutableSetFactory[HashSet] {
         val sub = elems(offset)
         // TODO: might be worth checking if sub is HashTrieMap (-> monomorphic call site)
         val subNew = sub.removed0(key, hash, level + 5)
-        if (subNew.isEmpty) {
+        if (sub eq subNew) this
+        else if (subNew.isEmpty) {
           val bitmapNew = bitmap ^ mask
           if (bitmapNew != 0) {
             val elemsNew = new Array[HashSet[A]](elems.length - 1)

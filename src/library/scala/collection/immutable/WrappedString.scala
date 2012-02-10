@@ -13,7 +13,6 @@ package immutable
 
 import generic._
 import mutable.{Builder, StringBuilder}
-import scala.util.matching.Regex
 
 /**
  *  This class serves as a wrapper augmenting `String`s with all the operations
@@ -29,7 +28,7 @@ import scala.util.matching.Regex
  *  @define Coll WrappedString
  *  @define coll wrapped string
  */
-class WrappedString(val self: String) extends IndexedSeq[Char] with StringLike[WrappedString] {
+class WrappedString(val self: String) extends AbstractSeq[Char] with IndexedSeq[Char] with StringLike[WrappedString] {
 
   override protected[this] def thisCollection: WrappedString = this
   override protected[this] def toCollection(repr: WrappedString): WrappedString = repr

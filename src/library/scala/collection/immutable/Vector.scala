@@ -6,35 +6,57 @@
 **                          |/                                          **
 \*                                                                      */
 
-
 package scala.collection
 package immutable
 
 import scala.annotation.unchecked.uncheckedVariance
 import compat.Platform
-
 import scala.collection.generic._
 import scala.collection.mutable.Builder
 import scala.collection.parallel.immutable.ParVector
 
-
+/** Companion object to the Vector class
+ */
 object Vector extends SeqFactory[Vector] {
-  private[immutable] val BF = new GenericCanBuildFrom[Nothing] {
-    override def apply() = newBuilder[Nothing]
-  }
   @inline implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, Vector[A]] =
-    BF.asInstanceOf[CanBuildFrom[Coll, A, Vector[A]]]
+    ReusableCBF.asInstanceOf[CanBuildFrom[Coll, A, Vector[A]]]
   def newBuilder[A]: Builder[A, Vector[A]] = new VectorBuilder[A]
   private[immutable] val NIL = new Vector[Nothing](0, 0, 0)
   @inline override def empty[A]: Vector[A] = NIL
 }
 
-
 // in principle, most members should be private. however, access privileges must
 // be carefully chosen to not prevent method inlining
 
+/** Vector is a general-purpose, immutable data structure.  It provides random access and updates
+ *  in effectively constant time, as well as very fast append and prepend.  Because vectors strike
+ *  a good balance between fast random selections and fast random functional updates, they are
+ *  currently the default implementation of immutable indexed sequences.  It is backed by a little
+ *  endian bit-mapped vector trie with a branching factor of 32.  Locality is very good, but not
+ *  contiguous, which is good for very large sequences.
+ *
+ *  @see [[http://docs.scala-lang.org/overviews/collections/concrete-immutable-collection-classes.html#vectors "Scala's Collection Library overview"]]
+ *  section on `Vectors` for more information.
+ *
+ *  @tparam A the element type
+ *
+ *  @define Coll Vector
+ *  @define coll vector
+ *  @define thatinfo the class of the returned collection. In the standard library configuration,
+ *    `That` is always `Vector[B]` because an implicit of type `CanBuildFrom[Vector, B, That]`
+ *    is defined in object `Vector`.
+ *  @define bfinfo an implicit value of class `CanBuildFrom` which determines the
+ *    result class `That` from the current representation type `Repr`
+ *    and the new element type `B`. This is usually the `canBuildFrom` value
+ *    defined in object `Vector`.
+ *  @define orderDependent
+ *  @define orderDependentFold
+ *  @define mayNotTerminateInf
+ *  @define willNotTerminateInf
+ */
 final class Vector[+A](private[collection] val startIndex: Int, private[collection] val endIndex: Int, focus: Int)
-extends IndexedSeq[A]
+extends AbstractSeq[A]
+   with IndexedSeq[A]
    with GenericTraversableTemplate[A, Vector]
    with IndexedSeqLike[A, Vector[A]]
    with VectorPointer[A @uncheckedVariance]
@@ -72,10 +94,10 @@ override def companion: GenericCompanion[Vector] = Vector
 
   // can still be improved
   override /*SeqLike*/
-  def reverseIterator: Iterator[A] = new Iterator[A] {
+  def reverseIterator: Iterator[A] = new AbstractIterator[A] {
     private var i = self.length
     def hasNext: Boolean = 0 < i
-    def next: A =
+    def next(): A =
       if (0 < i) {
         i -= 1
         self(i)
@@ -618,7 +640,10 @@ override def companion: GenericCompanion[Vector] = Vector
 }
 
 
-class VectorIterator[+A](_startIndex: Int, _endIndex: Int) extends Iterator[A] with VectorPointer[A @uncheckedVariance] {
+class VectorIterator[+A](_startIndex: Int, _endIndex: Int)
+extends AbstractIterator[A]
+   with Iterator[A]
+   with VectorPointer[A @uncheckedVariance] {
 
   private var blockIndex: Int = _startIndex & ~31
   private var lo: Int = _startIndex & 31

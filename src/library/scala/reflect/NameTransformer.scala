@@ -12,6 +12,12 @@ package scala.reflect
  *  @author  Martin Odersky
  */
 object NameTransformer {
+  // XXX Short term: providing a way to alter these without having to recompile
+  // the compiler before recompiling the compiler.
+  val MODULE_SUFFIX_STRING = sys.props.getOrElse("SCALA_MODULE_SUFFIX_STRING", "$")
+  val NAME_JOIN_STRING     = sys.props.getOrElse("SCALA_NAME_JOIN_STRING", "$")
+  val MODULE_INSTANCE_NAME = "MODULE$"
+
   private val nops = 128
   private val ncodes = 26 * 26
 
@@ -130,10 +136,10 @@ object NameTransformer {
               unicode = true
             } catch {
               case _:NumberFormatException =>
-                /* <code>hex</code> did not decode to a hexadecimal number, so
+                /* `hex` did not decode to a hexadecimal number, so
                  * do nothing. */
             }
-                       }
+          }
         }
       }
       /* If we didn't see an opcode or encoded Unicode glyph, and the

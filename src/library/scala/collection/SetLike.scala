@@ -89,7 +89,7 @@ self =>
   // note: this is only overridden here to add the migration annotation,
   // which I hope to turn into an Xlint style warning as the migration aspect
   // is not central to its importance.
-  @migration(2, 8, "Set.map now returns a Set, so it will discard duplicate values.")
+  @migration("Set.map now returns a Set, so it will discard duplicate values.", "2.8.0")
   override def map[B, That](f: A => B)(implicit bf: CanBuildFrom[This, B, That]): That = super.map(f)(bf)
 
   /** Tests if some element is contained in this set.
@@ -144,15 +144,6 @@ self =>
    */
   override def isEmpty: Boolean = size == 0
 
-  /**  This method is an alias for `intersect`.
-   *  It computes an intersection with set `that`.
-   *  It removes all the elements that are not present in `that`.
-   *
-   *  @param that the set to intersect with
-   */
-  @deprecated("use & instead", "2.8.0")
-  def ** (that: Set[A]): This = &(that)
-
   /** Computes the union between of set and another set.
    *
    *  @param   that  the set to form the union with.
@@ -190,7 +181,7 @@ self =>
    *
    *  @return     the iterator.
    */
-  def subsets: Iterator[This] = new Iterator[This] {
+  def subsets: Iterator[This] = new AbstractIterator[This] {
     private val elms = self.toIndexedSeq
     private var len = 0
     private var itr: Iterator[This] = Iterator.empty
@@ -216,13 +207,13 @@ self =>
    *  @author Eastsun
    *  @date 2010.12.6
    */
-  private class SubsetsItr(elms: IndexedSeq[A], len: Int) extends Iterator[This] {
+  private class SubsetsItr(elms: IndexedSeq[A], len: Int) extends AbstractIterator[This] {
     private val idxs = Array.range(0, len+1)
     private var _hasNext = true
     idxs(len) = elms.size
 
     def hasNext = _hasNext
-    def next: This = {
+    def next(): This = {
       if (!hasNext) Iterator.empty.next
 
       val buf = self.newBuilder

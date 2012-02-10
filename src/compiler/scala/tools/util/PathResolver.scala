@@ -7,7 +7,7 @@ package scala.tools
 package util
 
 import java.net.{ URL, MalformedURLException }
-import scala.util.Properties._
+import scala.tools.reflect.WrappedProperties.AccessControl
 import nsc.{ Settings, GenericRunnerSettings }
 import nsc.util.{ ClassPath, JavaClassPath, ScalaClassLoader }
 import nsc.io.{ File, Directory, Path, AbstractFile }
@@ -18,6 +18,10 @@ import PartialFunction.condOpt
 // https://wiki.scala-lang.org/display/SW/Classpath
 
 object PathResolver {
+  // Imports property/environment functions which suppress
+  // security exceptions.
+  import AccessControl._
+
   def firstNonEmpty(xs: String*)            = xs find (_ != "") getOrElse ""
 
   /** Map all classpath elements to absolute paths and reconstruct the classpath.
@@ -34,10 +38,9 @@ object PathResolver {
   /** Values found solely by inspecting environment or property variables.
    */
   object Environment {
-    private def searchForBootClasspath = {
-      import scala.collection.JavaConversions._
-      System.getProperties find (_._1 endsWith ".boot.class.path") map (_._2) getOrElse ""
-    }
+    private def searchForBootClasspath = (
+      systemProperties find (_._1 endsWith ".boot.class.path") map (_._2) getOrElse ""
+    )
 
     /** Environment variables which java pays attention to so it
      *  seems we do as well.
@@ -74,13 +77,7 @@ object PathResolver {
    *  to the path resolution specification.
    */
   object Defaults {
-    /* Against my better judgment, giving in to martin here and allowing
-     * CLASSPATH as the default if no -cp is given.  Only if there is no
-     * command line option or environment variable is "." used.
-     */
-    def scalaUserClassPath  = firstNonEmpty(Environment.classPathEnv, ".")
-    def scalaSourcePath     = Environment.sourcePathEnv
-
+    def scalaSourcePath   = Environment.sourcePathEnv
     def javaBootClassPath = Environment.javaBootClassPath
     def javaUserClassPath = Environment.javaUserClassPath
     def javaExtDirs       = Environment.javaExtDirs
@@ -195,8 +192,21 @@ class PathResolver(settings: Settings, context: JavaContext) {
     def javaUserClassPath   = if (useJavaClassPath) Defaults.javaUserClassPath else ""
     def scalaBootClassPath  = cmdLineOrElse("bootclasspath", Defaults.scalaBootClassPath)
     def scalaExtDirs        = cmdLineOrElse("extdirs", Defaults.scalaExtDirs)
-    def userClassPath       = cmdLineOrElse("classpath", Defaults.scalaUserClassPath)
     def sourcePath          = cmdLineOrElse("sourcepath", Defaults.scalaSourcePath)
+
+    /** Against my better judgment, giving in to martin here and allowing
+     *  CLASSPATH to be used automatically.  So for the user-specified part
+     *  of the classpath:
+     *
+     *  - If -classpath or -cp is given, it is that
+     *  - Otherwise, if CLASSPATH is set, it is that
+     *  - If neither of those, then "." is used.
+     */
+    def userClassPath = (
+      if (!settings.classpath.isDefault)
+        settings.classpath.value
+      else sys.env.getOrElse("CLASSPATH", ".")
+    )
 
     import context._
 

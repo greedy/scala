@@ -3,12 +3,10 @@
  * @author  Iulian Dragos
  */
 
-
 package scala.tools.nsc
 package backend.jvm
 
 import scala.collection.{ mutable, immutable }
-
 import ch.epfl.lamp.fjbg._
 
 trait GenJVMUtil {
@@ -34,16 +32,13 @@ trait GenJVMUtil {
     DOUBLE -> new JObjectType("java.lang.Double")
   )
 
-  private val javaNameCache = {
-    val map = new mutable.WeakHashMap[Symbol, String]()
-    map ++= List(
-      NothingClass        -> RuntimeNothingClass.fullName('/'),
-      RuntimeNothingClass -> RuntimeNothingClass.fullName('/'),
-      NullClass           -> RuntimeNullClass.fullName('/'),
-      RuntimeNullClass    -> RuntimeNullClass.fullName('/')
-    )
-    map
-  }
+  // Don't put this in per run caches.
+  private val javaNameCache = new mutable.WeakHashMap[Symbol, Name]() ++= List(
+    NothingClass        -> binarynme.RuntimeNothing,
+    RuntimeNothingClass -> binarynme.RuntimeNothing,
+    NullClass           -> binarynme.RuntimeNull,
+    RuntimeNullClass    -> binarynme.RuntimeNull
+  )
 
   /** This trait may be used by tools who need access to
    *  utility methods like javaName and javaType. (for instance,
@@ -75,7 +70,6 @@ trait GenJVMUtil {
     def mkArray(xs: Traversable[JType]): Array[JType] = { val a = new Array[JType](xs.size); xs.copyToArray(a); a }
     def mkArray(xs: Traversable[String]): Array[String] = { val a = new Array[String](xs.size); xs.copyToArray(a); a }
 
-
     /** Return the a name of this symbol that can be used on the Java
      *  platform.  It removes spaces from names.
      *
@@ -91,11 +85,13 @@ trait GenJVMUtil {
      */
     def javaName(sym: Symbol): String =
       javaNameCache.getOrElseUpdate(sym, {
-        if (sym.isClass || (sym.isModule && !sym.isMethod))
-          sym.fullName('/') + moduleSuffix(sym)
-        else
-          sym.simpleName.toString.trim() + moduleSuffix(sym)
-      })
+        sym.name.newName(
+          if (sym.isClass || (sym.isModule && !sym.isMethod))
+            sym.javaBinaryName
+          else
+            sym.javaSimpleName
+        )
+      }).toString
 
     def javaType(t: TypeKind): JType = (t: @unchecked) match {
       case UNIT            => JType.VOID

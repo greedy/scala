@@ -20,6 +20,8 @@ import generic._
  *  @author  Martin Odersky
  *  @version 2.8
  *  @since   1
+ *  @see [[http://docs.scala-lang.org/overviews/collections/concrete-mutable-collection-classes.html#mutable_queues "Scala's Collection Library overview"]]
+ *  section on `Queues` for more information.
  *
  *  @define Coll mutable.Queue
  *  @define coll mutable queue
@@ -168,7 +170,7 @@ extends MutableList[A]
 
 
 object Queue extends SeqFactory[Queue] {
-  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, Queue[A]] = new GenericCanBuildFrom[A]
+  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, Queue[A]] = ReusableCBF.asInstanceOf[GenericCanBuildFrom[A]]
 
   def newBuilder[A]: Builder[A, Queue[A]] = new MutableList[A] mapResult { _.toQueue }
 }

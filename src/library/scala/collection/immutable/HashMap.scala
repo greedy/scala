@@ -25,13 +25,16 @@ import parallel.immutable.ParHashMap
  *  @author  Tiark Rompf
  *  @version 2.8
  *  @since   2.3
+ *  @see [[http://docs.scala-lang.org/overviews/collections/concrete-immutable-collection-classes.html#hash_tries "Scala's Collection Library overview"]]
+ *  section on `Hash Tries` for more information.
  *  @define Coll immutable.HashMap
  *  @define coll immutable hash map
  *  @define mayNotTerminateInf
  *  @define willNotTerminateInf
  */
 @SerialVersionUID(2L)
-class HashMap[A, +B] extends Map[A,B]
+class HashMap[A, +B] extends AbstractMap[A, B]
+                        with Map[A, B]
                         with MapLike[A, B, HashMap[A, B]]
                         with Serializable
                         with CustomParallelizable[(A, B), ParHashMap[A, B]]
@@ -108,7 +111,7 @@ object HashMap extends ImmutableMapFactory[HashMap] with BitOperations.Int {
 
   // TODO: add HashMap2, HashMap3, ...
 
-  class HashMap1[A,+B](private[HashMap] var key: A, private[HashMap] var hash: Int, private[collection] var value: (B @uV), private[collection] var kv: (A,B @uV)) extends HashMap[A,B] {
+  class HashMap1[A,+B](private[collection] val key: A, private[collection] val hash: Int, private[collection] val value: (B @uV), private[collection] var kv: (A,B @uV)) extends HashMap[A,B] {
     override def size = 1
 
     private[collection] def getKey = key
@@ -135,8 +138,10 @@ object HashMap extends ImmutableMapFactory[HashMap] with BitOperations.Int {
 
     override def updated0[B1 >: B](key: A, hash: Int, level: Int, value: B1, kv: (A, B1), merger: Merger[B1]): HashMap[A, B1] =
       if (hash == this.hash && key == this.key ) {
-        if (merger eq null) new HashMap1(key, hash, value, kv)
-        else new HashMap1(key, hash, value, merger(this.kv, kv))
+        if (merger eq null) {
+          if(this.value.asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) this
+          else new HashMap1(key, hash, value, kv)
+        } else new HashMap1(key, hash, value, merger(this.kv, kv))
       } else {
         var thatindex = (hash >>> level) & 0x1f
         var thisindex = (this.hash >>> level) & 0x1f
@@ -173,13 +178,14 @@ object HashMap extends ImmutableMapFactory[HashMap] with BitOperations.Int {
 
     override def iterator: Iterator[(A,B)] = Iterator(ensurePair)
     override def foreach[U](f: ((A, B)) => U): Unit = f(ensurePair)
+    // this method may be called multiple times in a multithreaded environment, but that's ok
     private[HashMap] def ensurePair: (A,B) = if (kv ne null) kv else { kv = (key, value); kv }
     protected override def merge0[B1 >: B](that: HashMap[A, B1], level: Int, merger: Merger[B1]): HashMap[A, B1] = {
       that.updated0(key, hash, level, value, kv, merger)
     }
   }
 
-  private[collection] class HashMapCollision1[A, +B](private[HashMap] var hash: Int, var kvs: ListMap[A, B @uV])
+  private[collection] class HashMapCollision1[A, +B](private[collection] val hash: Int, val kvs: ListMap[A, B @uV])
           extends HashMap[A, B @uV] {
 
     override def size = kvs.size
@@ -224,9 +230,9 @@ object HashMap extends ImmutableMapFactory[HashMap] with BitOperations.Int {
   }
 
   class HashTrieMap[A, +B](
-    private[HashMap] var bitmap: Int,
-    private[collection] var elems: Array[HashMap[A, B @uV]],
-    private[HashMap] var size0: Int
+    private[collection] val bitmap: Int,
+    private[collection] val elems: Array[HashMap[A, B @uV]],
+    private[collection] val size0: Int
   ) extends HashMap[A, B @uV] {
 
 /*
@@ -267,13 +273,15 @@ object HashMap extends ImmutableMapFactory[HashMap] with BitOperations.Int {
       val mask = (1 << index)
       val offset = Integer.bitCount(bitmap & (mask-1))
       if ((bitmap & mask) != 0) {
-        val elemsNew = new Array[HashMap[A,B1]](elems.length)
-        Array.copy(elems, 0, elemsNew, 0, elems.length)
         val sub = elems(offset)
         // TODO: might be worth checking if sub is HashTrieMap (-> monomorphic call site)
         val subNew = sub.updated0(key, hash, level + 5, value, kv, merger)
-        elemsNew(offset) = subNew
-        new HashTrieMap(bitmap, elemsNew, size + (subNew.size - sub.size))
+        if(subNew eq sub) this else {
+          val elemsNew = new Array[HashMap[A,B1]](elems.length)
+          Array.copy(elems, 0, elemsNew, 0, elems.length)
+          elemsNew(offset) = subNew
+          new HashTrieMap(bitmap, elemsNew, size + (subNew.size - sub.size))
+        }
       } else {
         val elemsNew = new Array[HashMap[A,B1]](elems.length + 1)
         Array.copy(elems, 0, elemsNew, 0, offset)
@@ -291,7 +299,8 @@ object HashMap extends ImmutableMapFactory[HashMap] with BitOperations.Int {
         val sub = elems(offset)
         // TODO: might be worth checking if sub is HashTrieMap (-> monomorphic call site)
         val subNew = sub.removed0(key, hash, level + 5)
-        if (subNew.isEmpty) {
+        if (subNew eq sub) this
+        else if (subNew.isEmpty) {
           val bitmapNew = bitmap ^ mask
           if (bitmapNew != 0) {
             val elemsNew = new Array[HashMap[A,B]](elems.length - 1)

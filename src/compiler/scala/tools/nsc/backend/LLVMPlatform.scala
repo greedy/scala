@@ -20,6 +20,8 @@ trait LLVMPlatform extends JavaPlatform {
 
   override def platformPhases = List(genLLVM)
 
-  override lazy val externalEquals          = getMember(BoxesRunTimeClass, "equalsExternal")
+  lazy val equalsExternal = global.newTermNameCached("equalsExternal")
+
+  override lazy val externalEquals          = getMember(BoxesRunTimeClass, equalsExternal)
 
 }

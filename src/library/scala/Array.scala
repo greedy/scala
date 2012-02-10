@@ -21,11 +21,11 @@ import scala.runtime.ScalaRunTime.{ array_apply, array_update }
 class FallbackArrayBuilding {
 
   /** A builder factory that generates a generic array.
-   *  Called instead of Array.newBuilder if the element type of an array
+   *  Called instead of `Array.newBuilder` if the element type of an array
    *  does not have a class manifest. Note that fallbackBuilder factory
-   *  needs an implicit parameter (otherwise it would not be dominated in implicit search
-   *  by Array.canBuildFrom). We make sure that that implicit search is always
-   *  successful.
+   *  needs an implicit parameter (otherwise it would not be dominated in
+   *  implicit search by `Array.canBuildFrom`). We make sure that
+   *  implicit search is always successful.
    */
   implicit def fallbackCanBuildFrom[T](implicit m: DummyImplicit): CanBuildFrom[Array[_], T, ArraySeq[T]] =
     new CanBuildFrom[Array[_], T, ArraySeq[T]] {
@@ -35,6 +35,14 @@ class FallbackArrayBuilding {
 }
 
 /** Utility methods for operating on arrays.
+ *  For example:
+ *  {{{
+ *  val a = Array(1, 2)
+ *  val b = Array.ofDim[Int](2)
+ *  val c = Array.concat(a, b)
+ *  }}}
+ *  where the array objects `a`, `b` and `c` have respectively the values
+ *  `Array(1, 2)`, `Array(0, 0)` and `Array(1, 2, 0, 0)`.
  *
  *  @author Martin Odersky
  *  @version 1.0
@@ -222,7 +230,7 @@ object Array extends FallbackArrayBuilding {
    *
    *  Note that this means that `elem` is computed a total of n times:
    *  {{{
-   * scala> Array.fill(3){ java.lang.Math.random }
+   * scala> Array.fill(3){ math.random }
    * res3: Array[Double] = Array(0.365461167592537, 1.550395944913685E-4, 0.7907242137333306)
    *  }}}
    *
@@ -306,8 +314,8 @@ object Array extends FallbackArrayBuilding {
     b.result
   }
 
-  /** Returns a two-dimensional array containing values of a given function over
-   *  ranges of integer values starting from 0.
+  /** Returns a two-dimensional array containing values of a given function
+   *  over ranges of integer values starting from `0`.
    *
    *  @param   n1  the number of elements in the 1st dimension
    *  @param   n2  the number of elements in the 2nd dimension
@@ -316,35 +324,35 @@ object Array extends FallbackArrayBuilding {
   def tabulate[T: ClassManifest](n1: Int, n2: Int)(f: (Int, Int) => T): Array[Array[T]] =
     tabulate(n1)(i1 => tabulate(n2)(f(i1, _)))
 
-  /** Returns a three-dimensional array containing values of a given function over
-   *  ranges of integer values starting from 0.
+  /** Returns a three-dimensional array containing values of a given function
+   *  over ranges of integer values starting from `0`.
    *
    *  @param   n1  the number of elements in the 1st dimension
    *  @param   n2  the number of elements in the 2nd dimension
-   *  @param   n3  the number of elements in the 3nd dimension
+   *  @param   n3  the number of elements in the 3rd dimension
    *  @param   f   The function computing element values
    */
   def tabulate[T: ClassManifest](n1: Int, n2: Int, n3: Int)(f: (Int, Int, Int) => T): Array[Array[Array[T]]] =
     tabulate(n1)(i1 => tabulate(n2, n3)(f(i1, _, _)))
 
-  /** Returns a four-dimensional array containing values of a given function over
-   *  ranges of integer values starting from 0.
+  /** Returns a four-dimensional array containing values of a given function
+   *  over ranges of integer values starting from `0`.
    *
    *  @param   n1  the number of elements in the 1st dimension
    *  @param   n2  the number of elements in the 2nd dimension
-   *  @param   n3  the number of elements in the 3nd dimension
+   *  @param   n3  the number of elements in the 3rd dimension
    *  @param   n4  the number of elements in the 4th dimension
    *  @param   f   The function computing element values
    */
   def tabulate[T: ClassManifest](n1: Int, n2: Int, n3: Int, n4: Int)(f: (Int, Int, Int, Int) => T): Array[Array[Array[Array[T]]]] =
     tabulate(n1)(i1 => tabulate(n2, n3, n4)(f(i1, _, _, _)))
 
-  /** Returns a five-dimensional array containing values of a given function over
-   *  ranges of integer values starting from 0.
+  /** Returns a five-dimensional array containing values of a given function
+   *  over ranges of integer values starting from `0`.
    *
    *  @param   n1  the number of elements in the 1st dimension
    *  @param   n2  the number of elements in the 2nd dimension
-   *  @param   n3  the number of elements in the 3nd dimension
+   *  @param   n3  the number of elements in the 3rd dimension
    *  @param   n4  the number of elements in the 4th dimension
    *  @param   n5  the number of elements in the 5th dimension
    *  @param   f   The function computing element values
@@ -409,136 +417,58 @@ object Array extends FallbackArrayBuilding {
   /** Called in a pattern match like `{ case Array(x,y,z) => println('3 elements')}`.
    *
    *  @param x the selector value
-   *  @return  sequence wrapped in a [[scala.Some]], if x is a Seq, otherwise `None`
+   *  @return  sequence wrapped in a [[scala.Some]], if `x` is a Seq, otherwise `None`
    */
   def unapplySeq[T](x: Array[T]): Option[IndexedSeq[T]] =
     if (x == null) None else Some(x.toIndexedSeq)
     // !!! the null check should to be necessary, but without it 2241 fails. Seems to be a bug
     // in pattern matcher.  @PP: I noted in #4364 I think the behavior is correct.
-
-  /** Creates an array containing several copies of an element.
-   *
-   *  @param n    the length of the resulting array
-   *  @param elem the element composing the resulting array
-   *  @return     an array composed of n elements all equal to elem
-   */
-  @deprecated("use `Array.fill` instead", "2.8.0")
-  def make[T: ClassManifest](n: Int, elem: T): Array[T] = {
-    val a = new Array[T](n)
-    var i = 0
-    while (i < n) {
-      a(i) = elem
-      i += 1
-    }
-    a
-  }
-
-  /** Creates an array containing the values of a given function `f`
-   *  over given range `[0..n)`
-   */
-  @deprecated("use `Array.tabulate` instead", "2.8.0")
-  def fromFunction[T: ClassManifest](f: Int => T)(n: Int): Array[T] = {
-    val a = new Array[T](n)
-    var i = 0
-    while (i < n) {
-      a(i) = f(i)
-      i += 1
-    }
-    a
-  }
-
-  /** Creates an array containing the values of a given function `f`
-   *  over given range `[0..n1, 0..n2)`
-   */
-  @deprecated("use `Array.tabulate` instead", "2.8.0")
-  def fromFunction[T: ClassManifest](f: (Int, Int) => T)(n1: Int, n2: Int): Array[Array[T]] =
-    fromFunction(i => fromFunction(f(i, _))(n2))(n1)
-
-  /** Creates an array containing the values of a given function `f`
-   *  over given range `[0..n1, 0..n2, 0..n3)`
-   */
-  @deprecated("use `Array.tabulate` instead", "2.8.0")
-  def fromFunction[T: ClassManifest](f: (Int, Int, Int) => T)(n1: Int, n2: Int, n3: Int): Array[Array[Array[T]]] =
-    fromFunction(i => fromFunction(f(i, _, _))(n2, n3))(n1)
-
-  /** Creates an array containing the values of a given function `f`
-   *  over given range `[0..n1, 0..n2, 0..n3, 0..n4)`
-   */
-  @deprecated("use `Array.tabulate` instead", "2.8.0")
-  def fromFunction[T: ClassManifest](f: (Int, Int, Int, Int) => T)(n1: Int, n2: Int, n3: Int, n4: Int): Array[Array[Array[Array[T]]]] =
-    fromFunction(i => fromFunction(f(i, _, _, _))(n2, n3, n4))(n1)
-
-  /** Creates an array containing the values of a given function `f`
-   *  over given range `[0..n1, 0..n2, 0..n3, 0..n4, 0..n5)`
-   */
-  @deprecated("use `Array.tabulate` instead", "2.8.0")
-  def fromFunction[T: ClassManifest](f: (Int, Int, Int, Int, Int) => T)(n1: Int, n2: Int, n3: Int, n4: Int, n5: Int): Array[Array[Array[Array[Array[T]]]]] =
-    fromFunction(i => fromFunction(f(i, _, _, _, _))(n2, n3, n4, n5))(n1)
 }
 
-/** Represents polymorphic arrays. `Array[T]` is Scala's representation
+/** Arrays are mutable, indexed collections of values. `Array[T]` is Scala's representation
  *  for Java's `T[]`.
+ *
+ *  {{{
+ *  val numbers = Array(1, 2, 3, 4)
+ *  val first = numbers(0) // read the first element
+ *  numbers(3) = 100 // replace the 4th array element with 100
+ *  val biggerNumbers = numbers.map(_ * 2) // multiply all numbers by two
+ *  }}}
+ *
+ *  Arrays make use of two common pieces of Scala syntactic sugar, shown on lines 2 and 3 of the above
+ *  example code.
+ *  Line 2 is translated into a call to `apply(Int)`, while line 3 is translated into a call to
+ *  `update(Int, T)`. For more information on these transformations, see the
+ *  [[http://www.scala-lang.org/docu/files/ScalaReference.pdf Scala Language Specification v2.8]], Sections
+ *  6.6 and 6.15 respectively.
+ *
+ *  Two implicit conversions exist in [[scala.Predef]] that are frequently applied to arrays: a conversion
+ *  to [[scala.collection.mutable.ArrayOps]] (shown on line 4 of the example above) and a conversion
+ *  to [[scala.collection.mutable.WrappedArray]] (a subtype of [[scala.collections.Seq]]).
+ *  Both types make available many of the standard operations found in the Scala collections API.
+ *  The conversion to `ArrayOps` is temporary, as all operations defined on `ArrayOps` return an `Array`,
+ *  while the conversion to `WrappedArray` is permanent as all operations return a `WrappedArray`.
+ *
+ *  The conversion to `ArrayOps` takes priority over the conversion to `WrappedArray`. For instance,
+ *  consider the following code:
+ *
+ *  {{{
+ *  val arr = Array(1, 2, 3)
+ *  val arrReversed = arr.reverse
+ *  val seqReversed : Seq[Int] = arr.reverse
+ *  }}}
+ *
+ *  Value `arrReversed` will be of type `Array[Int]`, with an implicit conversion to `ArrayOps` occurring
+ *  to perform the `reverse` operation. The value of `seqReversed`, on the other hand, will be computed
+ *  by converting to `WrappedArray` first and invoking the variant of `reverse` that returns another
+ *  `WrappedArray`.
  *
  *  @author Martin Odersky
  *  @version 1.0
+ *  @see [[http://www.scala-lang.org/docu/files/collections-api/collections_38.html#anchor "The Scala 2.8 Collections' API"]]
+ *  section on `Array` by Martin Odersky for more information.
  */
 final class Array[T](_length: Int) extends java.io.Serializable with java.lang.Cloneable {
-
-   /** Multidimensional array creation */
-   @deprecated("use `Array.ofDim` instead", "2.8.0")
-   def this(dim1: Int, dim2: Int) = {
-     this(dim1)
-     throw new Error()
-   }
-
-   /** Multidimensional array creation */
-   @deprecated("use `Array.ofDim` instead", "2.8.0")
-   def this(dim1: Int, dim2: Int, dim3: Int) = {
-     this(dim1)
-     throw new Error()
-   }
-
-   /** Multidimensional array creation */
-   @deprecated("use `Array.ofDim` instead", "2.8.0")
-   def this(dim1: Int, dim2: Int, dim3: Int, dim4: Int) = {
-     this(dim1)
-     throw new Error()
-   }
-
-   /** Multidimensional array creation */
-   @deprecated("use `Array.ofDim` instead", "2.8.0")
-   def this(dim1: Int, dim2: Int, dim3: Int, dim4: Int, dim5: Int) = {
-     this(dim1);
-     throw new Error()
-   }
-
-   /** Multidimensional array creation */
-   @deprecated("use `Array.ofDim` instead", "2.8.0")
-   def this(dim1: Int, dim2: Int, dim3: Int, dim4: Int, dim5: Int, dim6: Int) = {
-     this(dim1)
-     throw new Error()
-   }
-
-   /** Multidimensional array creation */
-   @deprecated("use `Array.ofDim` instead", "2.8.0")
-   def this(dim1: Int, dim2: Int, dim3: Int, dim4: Int, dim5: Int, dim6: Int, dim7: Int) = {
-     this(dim1)
-     throw new Error()
-   }
-
-   /** Multidimensional array creation */
-   @deprecated("use `Array.ofDim` instead", "2.8.0")
-   def this(dim1: Int, dim2: Int, dim3: Int, dim4: Int, dim5: Int, dim6: Int, dim7: Int, dim8: Int) = {
-     this(dim1)
-     throw new Error()
-   }
-
-   /** Multidimensional array creation */
-   @deprecated("use `Array.ofDim` instead", "2.8.0")
-   def this(dim1: Int, dim2: Int, dim3: Int, dim4: Int, dim5: Int, dim6: Int, dim7: Int, dim8: Int, dim9: Int) = {
-     this(dim1)
-     throw new Error()
-   }
 
   /** The length of the array */
   def length: Int = throw new Error()
@@ -556,8 +486,8 @@ final class Array[T](_length: Int) extends java.io.Serializable with java.lang.C
 
   /** Update the element at given index.
    *
-   *  Indices start at `0`; `xs.apply(0)` is the first element of array `xs`.
-   *  Note the indexing syntax `xs(i)` is a shorthand for `xs.apply(i)`.
+   *  Indices start at `0`; `xs.update(i, x)` replaces the i^th^ element in the array.
+   *  Note the syntax `xs(i) = x` is a shorthand for `xs.update(i, x)`.
    *
    *  @param    i   the index
    *  @param    x   the value to be written at index `i`

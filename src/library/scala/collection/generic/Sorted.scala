@@ -6,7 +6,6 @@
 **                          |/                                          **
 \*                                                                      */
 
-
 package scala.collection
 package generic
 
@@ -31,17 +30,19 @@ trait Sorted[K, +This <: Sorted[K, This]] {
   def lastKey: K
 
   /** Comparison function that orders keys. */
-  def compare(k0: K, k1: K): Int = ordering.compare(k0, k1);
+  def compare(k0: K, k1: K): Int = ordering.compare(k0, k1)
 
   /** Creates a ranged projection of this collection. Any mutations in the
-   *  ranged projection will update this collection and vice versa.  Note: keys
-   *  are not garuanteed to be consistent between this collection and the projection.
-   *  This is the case for buffers where indexing is relative to the projection.
+   *  ranged projection will update this collection and vice versa.
+   *
+   *  Note: keys are not garuanteed to be consistent between this collection
+   *  and the projection. This is the case for buffers where indexing is
+   *  relative to the projection.
    *
    *  @param from  The lower-bound (inclusive) of the ranged projection.
-   *               <code>None</code> if there is no lower bound.
+   *               `None` if there is no lower bound.
    *  @param until The upper-bound (exclusive) of the ranged projection.
-   *               <code>None</code> if there is no upper bound.
+   *               `None` if there is no upper bound.
    */
   def rangeImpl(from: Option[K], until: Option[K]): This
 
@@ -70,11 +71,10 @@ trait Sorted[K, +This <: Sorted[K, This]] {
    *  @param to The upper-bound (inclusive) of the ranged projection.
    */
   def to(to: K): This = {
-    // tough!
     val i = keySet.from(to).iterator
     if (i.isEmpty) return repr
     val next = i.next
-    if (next == to)
+    if (compare(next, to) == 0)
       if (i.isEmpty) repr
       else until(i.next)
     else

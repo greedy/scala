@@ -3,12 +3,12 @@ import scala.collection.immutable.TreeMap
 
 object Test extends App {
   /* This method converts parsed JSON back into real JSON notation with objects in
-   * sorted-key order. Not required by the spec, but it allows us to to a stable
+   * sorted-key order. Not required by the spec, but it allows us to do a stable
    * toString comparison. */
   def jsonToString(in : Any) : String = in match {
     case l : List[_] => "[" + l.map(jsonToString).mkString(", ") + "]"
-    case m : Map[String,_] => "{" + m.elements.toList
-         .sort({ (x,y) => x._1 < y._1 })
+    case m : Map[String,_] => "{" + m.iterator.toList
+         .sortWith({ (x,y) => x._1 < y._1 })
          .map({ case (k,v) => "\"" + k + "\": " + jsonToString(v) })
          .mkString(", ") + "}"
     case s : String => "\"" + s + "\""
@@ -20,7 +20,7 @@ object Test extends App {
    */
   def sortJSON(in : Any) : Any = in match {
     case l : List[_] => l.map(sortJSON)
-    case m : Map[String,_] => TreeMap(m.mapElements(sortJSON).elements.toSeq : _*)
+    case m : Map[String,_] => TreeMap(m.mapValues(sortJSON).iterator.toSeq : _*)
     // For the object versions, sort their contents, ugly casts and all...
     case JSONObject(data) => JSONObject(sortJSON(data).asInstanceOf[Map[String,Any]])
     case JSONArray(data) => JSONArray(sortJSON(data).asInstanceOf[List[Any]])
@@ -34,7 +34,7 @@ object Test extends App {
       case Some(parsed) => println("Passed parse  : " + sortJSON(parsed))
     }
   }
-
+   
   // For this usage, do a raw parse (to JSONObject/JSONArray)
   def printJSON(given : String, expected : JSONType) {
     printJSON(given, JSON.parseRaw, expected)
@@ -62,7 +62,7 @@ object Test extends App {
   def stringDiff (expected : String, actual : String) {
     if (expected != actual) {
       // Figure out where the Strings differ and generate a marker
-        val mismatchPosition = expected.toList.zip(actual.toList).findIndexOf({case (x,y) => x != y}) match {
+        val mismatchPosition = expected.toList.zip(actual.toList).indexWhere({case (x,y) => x != y}) match {
           case -1 => Math.min(expected.length, actual.length)
           case x => x
         }
@@ -89,11 +89,11 @@ object Test extends App {
 
   // The library should recurse into arrays to find objects (ticket #2207)
   printJSON("[{\"a\" : \"team\"},{\"b\" : 52}]", JSONArray(List(JSONObject(Map("a" -> "team")), JSONObject(Map("b" -> 52.0)))))
-
+  
   // The library should differentiate between empty maps and lists (ticket #3284)
-  printJSONFull("{}", Map())
+  printJSONFull("{}", Map()) 
   printJSONFull("[]", List())
-
+  
   // Lists should be returned in the same order as specified
   printJSON("[4,1,3,2,6,5,8,7]", JSONArray(List[Double](4,1,3,2,6,5,8,7)))
 
@@ -152,7 +152,7 @@ object Test extends App {
     )
   )
 
-
+  
   printJSONFull(sample1, sample1Obj)
   println
 
@@ -188,7 +188,7 @@ object Test extends App {
   // from http://json.org/example.html
   val sample3 = """
 {"web-app": {
-  "servlet": [
+  "servlet": [   
     {
       "servlet-name": "cofaxCDS",
       "servlet-class": "org.cofax.cds.CDSServlet",
@@ -244,7 +244,7 @@ object Test extends App {
     {
       "servlet-name": "cofaxAdmin",
       "servlet-class": "org.cofax.cds.AdminServlet"},
-
+ 
     {
       "servlet-name": "fileServlet",
       "servlet-class": "org.cofax.cds.FileServlet"},
@@ -271,7 +271,7 @@ object Test extends App {
     "cofaxAdmin": "/admin/*",
     "fileServlet": "/static/*",
     "cofaxTools": "/tools/*"},
-
+ 
   "taglib": {
     "taglib-uri": "cofax.tld",
     "taglib-location": "/WEB-INF/tlds/cofax.tld"}

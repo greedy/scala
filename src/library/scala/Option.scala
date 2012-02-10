@@ -35,18 +35,18 @@ object Option {
  *  `foreach`:
  *
  *  {{{
- *  val name:Option[String] = request.getParameter("name")
+ *  val name: Option[String] = request getParameter "name"
  *  val upper = name map { _.trim } filter { _.length != 0 } map { _.toUpperCase }
- *  println(upper.getOrElse(""))
+ *  println(upper getOrElse "")
  *  }}}
  *
  *  Note that this is equivalent to {{{
  *  val upper = for {
- *    name <- request.getParameter("name")
+ *    name <- request getParameter "name"
  *    trimmed <- Some(name.trim)
  *    upper <- Some(trimmed.toUpperCase) if trimmed.length != 0
  *  } yield upper
- *  println(upper.getOrElse(""))
+ *  println(upper getOrElse "")
  *  }}}
  *
  *  Because of how for comprehension works, if $none is returned
@@ -57,14 +57,12 @@ object Option {
  *  having to check for the existence of a value.
  *
  *  A less-idiomatic way to use $option values is via pattern matching: {{{
- *  val nameMaybe = request.getParameter("name")
+ *  val nameMaybe = request getParameter "name"
  *  nameMaybe match {
- *    case Some(name) => {
+ *    case Some(name) =>
  *      println(name.trim.toUppercase)
- *    }
- *    case None => {
+ *    case None =>
  *      println("No name value")
- *    }
  *  }
  *  }}}
  *
@@ -164,6 +162,11 @@ sealed abstract class Option[+A] extends Product with Serializable {
   @inline final def filterNot(p: A => Boolean): Option[A] =
     if (isEmpty || !p(this.get)) this else None
 
+  /** Returns false if the option is $none, true otherwise.
+   *  @note   Implemented here to avoid the implicit conversion to Iterable.
+   */
+  final def nonEmpty = isDefined
+
   /** Necessary to keep $option from being implicitly converted to
    *  [[scala.collection.Iterable]] in `for` comprehensions.
    */
@@ -188,6 +191,13 @@ sealed abstract class Option[+A] extends Product with Serializable {
    */
   @inline final def exists(p: A => Boolean): Boolean =
     !isEmpty && p(this.get)
+
+  /** Returns true if this option is empty '''or''' the predicate
+   * $p returns true when applied to this $option's value.
+   *
+   *  @param  p   the predicate to test
+   */
+  @inline final def forall(p: A => Boolean): Boolean = isEmpty || p(this.get)
 
   /** Apply the given procedure $f to the option's value,
    *  if it is nonempty. Otherwise, do nothing.

@@ -1,7 +1,7 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
 **    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
-**  __\ \/ /__/ __ |/ /__/ __ |                                         **
+**  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
 \*                                                                      */
@@ -16,9 +16,8 @@ package scala
  *  @version 1.0, 29/11/2006
  */
 object Function {
-  /** Given a sequence of functions <code>f<sub>1</sub></code>, ...,
-   *  <code>f<sub>n</sub></code>, return the function <code>f<sub>1</sub>
-   *  andThen ... andThen f<sub>n</sub></code>.
+  /** Given a sequence of functions `f,,1,,`, ..., `f,,n,,`, return the
+   *  function `f,,1,, andThen ... andThen f,,n,,`.
    *
    *  @param fs The given sequence of functions
    *  @return   ...
@@ -28,55 +27,22 @@ object Function {
   /** The constant function */
   def const[T, U](x: T)(y: U): T = x
 
-  /** Turns a function `A => Option[B]` into a `PartialFunction[A, B]`.  Important note:
-   *  this transformation implies the original function will be called 2 or more
-   *  times on each logical invocation, because the only way to supply an implementation
-   *  of isDefinedAt is to call the function and examine the return value.
+  /** Turns a function `A => Option[B]` into a `PartialFunction[A, B]`.
    *
-   *  @param   f    a function T => Option[R]
+   *  '''Important note''': this transformation implies the original function
+   *  will be called 2 or more times on each logical invocation, because the
+   *  only way to supply an implementation of `isDefinedAt` is to call the
+   *  function and examine the return value.
+   *
+   *  @param   f    a function `T => Option[R]`
    *  @return       a partial function defined for those inputs where
-   *                f returns Some(_) and undefined where f returns None.
-   *  @see PartialFunction#lift
+   *                f returns `Some(_)` and undefined where `f` returns `None`.
+   *  @see [[scala.PartialFunction#lift]]
    */
-  def unlift[T, R](f: T => Option[R]): PartialFunction[T, R] = new PartialFunction[T, R] {
+  def unlift[T, R](f: T => Option[R]): PartialFunction[T, R] = new runtime.AbstractPartialFunction[T, R] {
     def apply(x: T): R = f(x).get
-    def isDefinedAt(x: T): Boolean = f(x).isDefined
+    def _isDefinedAt(x: T): Boolean = f(x).isDefined
     override def lift: T => Option[R] = f
-  }
-
-  /** Currying for functions of arity 2. This transforms a function
-   *  of arity 2 into a a unary function returning another unary function.
-   *
-   *  @param f  ...
-   *  @return   ...
-   */
-  @deprecated("Use `f.curried` instead", "2.8.0")
-  def curried[a1, a2, b](f: (a1, a2) => b): a1 => a2 => b = {
-    x1 => x2 => f(x1, x2)
-  }
-
-  /** Currying for functions of arity 3.
-   *
-   *  @param f  ...
-   *  @return   ...
-   */
-  @deprecated("Use `f.curried` instead", "2.8.0")
-  def curried[a1, a2, a3, b](f: (a1, a2, a3) => b): a1 => a2 => a3 => b = {
-    x1 => x2 => x3 => f(x1, x2, x3)
-  }
-
-  /** Currying for functions of arity 4.
-   */
-  @deprecated("Use `f.curried` instead", "2.8.0")
-  def curried[a1, a2, a3, a4, b](f: (a1, a2, a3, a4) => b): a1 => a2 => a3 => a4 => b = {
-    x1 => x2 => x3 => x4 => f(x1, x2, x3, x4)
-  }
-
-  /** Currying for functions of arity 5.
-   */
-  @deprecated("Use `f.curried` instead", "2.8.0")
-  def curried[a1, a2, a3, a4, a5, b](f: (a1, a2, a3, a4, a5) => b): a1 => a2 => a3 => a4 => a5 => b = {
-    x1 => x2 => x3 => x4 => x5 => f(x1, x2, x3, x4, x5)
   }
 
   /** Uncurrying for functions of arity 2. This transforms a unary function

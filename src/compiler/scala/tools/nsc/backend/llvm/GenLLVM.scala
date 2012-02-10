@@ -60,17 +60,17 @@ abstract class GenLLVM extends SubComponent {
 
     type InstBuffer = mutable.ListBuffer[LMInstruction]
 
-    val LlvmimplAnnotSym = definitions.getClass("scala.llvmimpl")
-    val LlvmdefsAnnotSym = definitions.getClass("scala.llvmdefs")
-    val ForeignAnnotSym = definitions.getClass("scala.ffi.foreign")
-    val ForeignValueAnnotSym = definitions.getClass("scala.ffi.foreignValue")
-    val ForeignExportAnnotSym = definitions.getClass("scala.ffi.foreignExport")
+    val LlvmimplAnnotSym = definitions.getRequiredClass("scala.llvmimpl")
+    val LlvmdefsAnnotSym = definitions.getRequiredClass("scala.llvmdefs")
+    val ForeignAnnotSym = definitions.getRequiredClass("scala.ffi.foreign")
+    val ForeignValueAnnotSym = definitions.getRequiredClass("scala.ffi.foreignValue")
+    val ForeignExportAnnotSym = definitions.getRequiredClass("scala.ffi.foreignExport")
     val CodegenAnnotations = Set(LlvmimplAnnotSym, ForeignAnnotSym, ForeignValueAnnotSym)
-    val PtrSym = definitions.getClass("scala.ffi.Ptr")
+    val PtrSym = definitions.getRequiredClass("scala.ffi.Ptr")
     val PtrObjSym = PtrSym.companionModule
-    val Ptr_wrap = PtrObjSym.info.member("wrap")
-    val Ptr_unwrap = PtrObjSym.info.member("unwrap")
-    val Ptr_address = PtrSym.info.member("address")
+    val Ptr_wrap = PtrObjSym.info.member(newTermNameCached("wrap"))
+    val Ptr_unwrap = PtrObjSym.info.member(newTermNameCached("unwrap"))
+    val Ptr_address = PtrSym.info.member(newTermNameCached("address"))
     val MarshalledTypes = Set(BOOL,BYTE,SHORT,CHAR,INT,LONG,FLOAT,DOUBLE,REFERENCE(PtrSym))
     val MarshalledResultTypes = MarshalledTypes ++ Set(UNIT)
 
@@ -809,7 +809,7 @@ abstract class GenLLVM extends SubComponent {
             LMBlock(Some(Label("not_started")), Seq(
               new store(LMConstant.boolconst(true), new CGlobalAddress(initStarted)),
               new call_void(rtInitobj, Seq(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), externClassP(c.symbol))),
-              new call_void(externFun(c.lookupMethod("<init>").get.symbol), Seq(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), new Cgetelementptr(classVtableGlobal, Seq[CInt](0,0), rtVtable))),
+              new call_void(externFun(c.lookupMethod(nme.CONSTRUCTOR).get.symbol), Seq(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), new Cgetelementptr(classVtableGlobal, Seq[CInt](0,0), rtVtable))),
               new store(LMConstant.boolconst(true), new CGlobalAddress(initFinished)),
               retvoid
             ))))
@@ -1225,7 +1225,7 @@ abstract class GenLLVM extends SubComponent {
           insns.append(new icomment("blockinfo: " + bb.fullString))
           insns.append(new icomment("direct successors: " + bb.directSuccessors.map(_.fullString).mkString("; ")))
           insns.append(new icomment("exception successors: " + bb.exceptionSuccessors.map(_.fullString).mkString("; ")))
-          insns.append(new icomment("indirect exception successors: " + bb.indirectExceptionSuccessors.map(_.fullString).mkString("; ")))
+          // insns.append(new icomment("indirect exception successors: " + bb.indirectExceptionSuccessors.map(_.fullString).mkString("; ")))
           val predcasts = new InstBuffer
           //println("Entering " + blockName(bb))
           //println("My consumed types are:\n"+consumedTypes.zipWithIndex.map(x => x._2 + " => " + x._1).mkString("\n"))
@@ -1245,14 +1245,14 @@ abstract class GenLLVM extends SubComponent {
               if (tpe.isValueType || tpe == ConcatClass) {
                 val reg = new LocalVariable(blockName(bb)+".in."+n.toString,lt)
                 val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
-                val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).findIndexOf(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
+                val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
                 val sources = dirsources ++ excsources
                 insns.append(new phi(reg, sources))
                 stack.push((reg, tpe))
               } else {
                 val asobj = nextvar(rtReference)
                 val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
-                val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).findIndexOf(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
+                val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
                 val sources = dirsources ++ excsources
                 insns.append(new phi(asobj, sources))
                 stack.push((cast(asobj, ObjectReference, tpe)(predcasts), tpe))

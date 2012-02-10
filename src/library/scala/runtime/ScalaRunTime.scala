@@ -8,13 +8,13 @@
 
 package scala.runtime
 
-import scala.reflect.ClassManifest
-import scala.collection.{ Seq, IndexedSeq, TraversableView }
+import scala.collection.{ Seq, IndexedSeq, TraversableView, AbstractIterator }
 import scala.collection.mutable.WrappedArray
 import scala.collection.immutable.{ StringLike, NumericRange, List, Stream, Nil, :: }
 import scala.collection.generic.{ Sorted }
-import scala.xml.{ Node, MetaData }
 import scala.util.control.ControlThrowable
+import scala.xml.{ Node, MetaData }
+
 import java.lang.Double.doubleToLongBits
 import java.lang.reflect.{ Modifier, Method => JMethod }
 
@@ -25,12 +25,18 @@ import java.lang.reflect.{ Modifier, Method => JMethod }
 object ScalaRunTime {
   def isArray(x: AnyRef): Boolean = isArray(x, 1)
   def isArray(x: Any, atLevel: Int): Boolean =
-    x != null && isArrayClass(x.asInstanceOf[AnyRef].getClass, atLevel)
+    x != null && isArrayClass(x.getClass, atLevel)
 
   private def isArrayClass(clazz: Class[_], atLevel: Int): Boolean =
     clazz.isArray && (atLevel == 1 || isArrayClass(clazz.getComponentType, atLevel - 1))
 
   def isValueClass(clazz: Class[_]) = clazz.isPrimitive()
+  def isTuple(x: Any) = tupleNames(x.getClass.getName)
+  def isAnyVal(x: Any) = x match {
+    case _: Byte | _: Short | _: Char | _: Int | _: Long | _: Float | _: Double | _: Boolean | _: Unit => true
+    case _                                                                                             => false
+  }
+  private val tupleNames = 1 to 22 map ("scala.Tuple" + _) toSet
 
   /** Return the class object representing an unboxed value type,
    *  e.g. classOf[int], not classOf[java.lang.Integer].  The compiler
@@ -174,28 +180,19 @@ object ScalaRunTime {
   def _toString(x: Product): String =
     x.productIterator.mkString(x.productPrefix + "(", ",", ")")
 
-  def _hashCode(x: Product): Int = {
-    import scala.util.MurmurHash._
-    val arr =  x.productArity
-    // Case objects have the hashCode inlined directly into the
-    // synthetic hashCode method, but this method should still give
-    // a correct result if passed a case object.
-    if (arr == 0) {
-      x.productPrefix.hashCode
-    }
-    else {
-      var h = startHash(arr)
-      var c = startMagicA
-      var k = startMagicB
-      var i = 0
-      while (i < arr) {
-        val elem = x.productElement(i)
-        h = extendHash(h, elem.##, c, k)
-        c = nextMagicA(c)
-        k = nextMagicB(k)
-        i += 1
+  def _hashCode(x: Product): Int = scala.util.MurmurHash3.productHash(x)
+
+  /** A helper for case classes. */
+  def typedProductIterator[T](x: Product): Iterator[T] = {
+    new AbstractIterator[T] {
+      private var c: Int = 0
+      private val cmax = x.productArity
+      def hasNext = c < cmax
+      def next() = {
+        val result = x.productElement(c)
+        c += 1
+        result.asInstanceOf[T]
       }
-      finalizeHash(h)
     }
   }
 
@@ -282,9 +279,6 @@ object ScalaRunTime {
     def isScalaClass(x: AnyRef) =
       Option(x.getClass.getPackage) exists (_.getName startsWith "scala.")
 
-    def isTuple(x: AnyRef) =
-      x.getClass.getName matches """^scala\.Tuple(\d+).*"""
-
     // When doing our own iteration is dangerous
     def useOwnToString(x: Any) = x match {
       // Node extends NodeSeq extends Seq[Node] and MetaData extends Iterable[MetaData]
@@ -343,11 +337,26 @@ object ScalaRunTime {
       case _: StackOverflowError | _: UnsupportedOperationException | _: AssertionError => "" + arg
     }
   }
+
   /** stringOf formatted for use in a repl result. */
   def replStringOf(arg: Any, maxElements: Int): String = {
     val s  = stringOf(arg, maxElements)
     val nl = if (s contains "\n") "\n" else ""
 
     nl + s + "\n"
+  }
+  private[scala] def checkZip(what: String, coll1: TraversableOnce[_], coll2: TraversableOnce[_]) {
+    if (sys.props contains "scala.debug.zip") {
+      val xs = coll1.toIndexedSeq
+      val ys = coll2.toIndexedSeq
+      if (xs.length != ys.length) {
+        Console.err.println(
+          "Mismatched zip in " + what + ":\n" +
+          "  this: " + xs.mkString(", ") + "\n" +
+          "  that: " + ys.mkString(", ")
+        )
+        (new Exception).getStackTrace.drop(2).take(10).foreach(println)
+      }
+    }
   }
 }

@@ -20,8 +20,7 @@ package scala
  */
 object Responder {
 
-  /** Creates a responder that answer continuations with the constant
-   *  <code>a</code>.
+  /** Creates a responder that answer continuations with the constant `a`.
    *
    *  @param x ...
    *  @return ...
@@ -30,15 +29,15 @@ object Responder {
     def respond(k: A => Unit) = k(x)
   }
 
-  /** Executes <code>x</code> and returns <code>true</code>, useful
-   *  as syntactic convenience in for comprehensions.
+  /** Executes `x` and returns `'''true'''`, useful as syntactic
+   *  convenience in for comprehensions.
    *
    *  @param x ...
    *  @return ...
    */
   def exec[A](x: => Unit): Boolean = { x; true }
 
-  /** runs a responder, returning an optional result
+  /** Runs a responder, returning an optional result.
   */
   def run[A](r: Responder[A]): Option[A] = {
     var result: Option[A] = None
@@ -47,12 +46,11 @@ object Responder {
   }
 
   def loop[A](r: Responder[Unit]): Responder[Nothing] =
-    for (_ <- r; val y <- loop(r)) yield y
+    for (_ <- r; y <- loop(r)) yield y
 
   def loopWhile[A](cond: => Boolean)(r: Responder[Unit]): Responder[Unit] =
-    if (cond) for (_ <- r; val y <- loopWhile(cond)(r)) yield y
+    if (cond) for (_ <- r; y <- loopWhile(cond)(r)) yield y
     else constant(())
-
 }
 
 /** Instances of responder are the building blocks of small programs
@@ -92,4 +90,3 @@ abstract class Responder[+A] extends Serializable {
 
   override def toString = "Responder"
 }
-

@@ -37,9 +37,6 @@ trait Map[A, +B] extends Iterable[(A, B)] with GenMap[A, B] with MapLike[A, B, M
  *  @define coll map
  */
 object Map extends MapFactory[Map] {
-
-  private[collection] val hashSeed = "Map".hashCode
-
   def empty[A, B]: immutable.Map[A, B] = immutable.Map.empty
 
   /** $mapCanBuildFromInfo */
@@ -48,10 +45,13 @@ object Map extends MapFactory[Map] {
   /** An abstract shell used by { mutable, immutable }.Map but not by collection.Map
    *  because of variance issues.
    */
-  abstract class WithDefault[A, +B](underlying: Map[A, B], d: A => B) extends Map[A, B] {
+  abstract class WithDefault[A, +B](underlying: Map[A, B], d: A => B) extends AbstractMap[A, B] with Map[A, B] {
     override def size               = underlying.size
     def get(key: A)                 = underlying.get(key) // removed in 2.9: orElse Some(default(key))
     def iterator                    = underlying.iterator
     override def default(key: A): B = d(key)
   }
 }
+
+/** Explicit instantiation of the `Map` trait to reduce class file size in subclasses. */
+private[scala] abstract class AbstractMap[A, +B] extends AbstractIterable[(A, B)] with Map[A, B]

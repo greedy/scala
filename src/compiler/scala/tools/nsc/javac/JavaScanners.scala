@@ -811,7 +811,7 @@ trait JavaScanners extends ast.parser.ScannersCommon {
       val limit: Double =
         if (token == DOUBLELIT) Double.MaxValue else Float.MaxValue
       try {
-        val value: Double = java.lang.Double.valueOf(name.toString()).doubleValue()
+        val value: Double = java.lang.Double.valueOf(name.toString).doubleValue()
         if (value > limit)
           syntaxError("floating point number too large")
         if (negated) -value else value
@@ -919,6 +919,7 @@ trait JavaScanners extends ast.parser.ScannersCommon {
     def warning(pos: Int, msg: String) = unit.warning(pos, msg)
     def error  (pos: Int, msg: String) = unit.  error(pos, msg)
     def incompleteInputError(pos: Int, msg: String) = unit.incompleteInputError(pos, msg)
+    def deprecationWarning(pos: Int, msg: String) = unit.deprecationWarning(pos, msg)
     implicit def p2g(pos: Position): Int = if (pos.isDefined) pos.point else -1
     implicit def g2p(pos: Int): Position = new OffsetPosition(unit.source, pos)
   }

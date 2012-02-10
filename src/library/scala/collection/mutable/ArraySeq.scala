@@ -21,6 +21,8 @@ import parallel.mutable.ParArray
  *  @author Martin Odersky
  *  @version 2.8
  *  @since   2.8
+ *  @see [[http://docs.scala-lang.org/overviews/collections/concrete-mutable-collection-classes.html#array_sequences "Scala's Collection Library overview"]]
+ *  section on `Array Sequences` for more information.
  *
  *  @tparam A      type of the elements contained in this array sequence.
  *  @param length  the length of the underlying array.
@@ -41,7 +43,8 @@ import parallel.mutable.ParArray
  */
 @SerialVersionUID(1530165946227428979L)
 class ArraySeq[A](override val length: Int)
-extends IndexedSeq[A]
+extends AbstractSeq[A]
+   with IndexedSeq[A]
    with GenericTraversableTemplate[A, ArraySeq]
    with IndexedSeqOptimized[A, ArraySeq[A]]
    with CustomParallelizable[A, ParArray[A]]
@@ -94,7 +97,7 @@ extends IndexedSeq[A]
  */
 object ArraySeq extends SeqFactory[ArraySeq] {
   /** $genericCanBuildFromInfo */
-  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, ArraySeq[A]] = new GenericCanBuildFrom[A]
+  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, ArraySeq[A]] = ReusableCBF.asInstanceOf[GenericCanBuildFrom[A]]
   def newBuilder[A]: Builder[A, ArraySeq[A]] =
     new ArrayBuffer[A] mapResult { buf =>
       val result = new ArraySeq[A](buf.length)

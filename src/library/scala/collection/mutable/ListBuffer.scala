@@ -13,6 +13,7 @@ package mutable
 
 import generic._
 import immutable.{List, Nil, ::}
+import java.io._
 
 /** A `Buffer` implementation back up by a list. It provides constant time
  *  prepend and append. Most other operations are linear.
@@ -21,6 +22,8 @@ import immutable.{List, Nil, ::}
  *  @author  Martin Odersky
  *  @version 2.8
  *  @since   1
+ *  @see [[http://docs.scala-lang.org/overviews/collections/concrete-mutable-collection-classes.html#list_buffers "Scala's Collection Library overview"]]
+ *  section on `List Buffers` for more information.
  *
  *  @tparam A    the type of this list buffer's elements.
  *
@@ -38,9 +41,10 @@ import immutable.{List, Nil, ::}
  *  @define mayNotTerminateInf
  *  @define willNotTerminateInf
  */
-@SerialVersionUID(3419063961353022661L)
+@SerialVersionUID(3419063961353022662L)
 final class ListBuffer[A]
-      extends Buffer[A]
+      extends AbstractBuffer[A]
+         with Buffer[A]
          with GenericTraversableTemplate[A, ListBuffer]
          with BufferLike[A, ListBuffer[A]]
          with Builder[A, List[A]]
@@ -50,6 +54,7 @@ final class ListBuffer[A]
   override def companion: GenericCompanion[ListBuffer] = ListBuffer
 
   import scala.collection.Traversable
+  import scala.collection.immutable.ListSerializeEnd
 
   private var start: List[A] = Nil
   private var last0: ::[A] = _
@@ -57,12 +62,57 @@ final class ListBuffer[A]
   private var len = 0
 
   protected def underlying: immutable.Seq[A] = start
-
+  
+  private def writeObject(out: ObjectOutputStream) {
+    // write start
+    var xs: List[A] = start
+    while (!xs.isEmpty) { out.writeObject(xs.head); xs = xs.tail }
+    out.writeObject(ListSerializeEnd)
+    
+    // no need to write last0
+    
+    // write if exported
+    out.writeBoolean(exported)
+    
+    // write the length
+    out.writeInt(len)
+  }
+  
+  private def readObject(in: ObjectInputStream) {
+    // read start, set last0 appropriately
+    var elem: A = in.readObject.asInstanceOf[A]
+    if (elem == ListSerializeEnd) {
+      start = Nil
+      last0 = null
+    } else {
+      var current = new ::(elem, Nil)
+      start = current
+      elem = in.readObject.asInstanceOf[A]
+      while (elem != ListSerializeEnd) {
+        val list = new ::(elem, Nil)
+        current.tl = list
+        current = list
+        elem = in.readObject.asInstanceOf[A]
+      }
+      last0 = current
+      start
+    }
+    
+    // read if exported
+    exported = in.readBoolean()
+    
+    // read the length
+    len = in.readInt()
+  }
+  
   /** The current length of the buffer.
    *
    *  This operation takes constant time.
    */
   override def length = len
+
+  // Don't use the inherited size, which forwards to a List and is O(n).
+  override def size = length
 
   // Implementations of abstract methods in Buffer
 
@@ -313,7 +363,7 @@ final class ListBuffer[A]
     this
   }
 
-  override def iterator: Iterator[A] = new Iterator[A] {
+  override def iterator: Iterator[A] = new AbstractIterator[A] {
     // Have to be careful iterating over mutable structures.
     // This used to have "(cursor ne last0)" as part of its hasNext
     // condition, which means it can return true even when the iterator
@@ -349,7 +399,7 @@ final class ListBuffer[A]
   private def copy() {
     var cursor = start
     val limit = last0.tail
-    clear
+    clear()
     while (cursor ne limit) {
       this += cursor.head
       cursor = cursor.tail
@@ -363,7 +413,7 @@ final class ListBuffer[A]
 
   /** Returns a clone of this buffer.
    *
-   *  @return a <code>ListBuffer</code> with the same elements.
+   *  @return a `ListBuffer` with the same elements.
    */
   override def clone(): ListBuffer[A] = (new ListBuffer[A]) ++= this
 
@@ -379,6 +429,6 @@ final class ListBuffer[A]
  *  @define coll list buffer
  */
 object ListBuffer extends SeqFactory[ListBuffer] {
-  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, ListBuffer[A]] = new GenericCanBuildFrom[A]
+  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, ListBuffer[A]] = ReusableCBF.asInstanceOf[GenericCanBuildFrom[A]]
   def newBuilder[A]: Builder[A, ListBuffer[A]] = new GrowingBuilder(new ListBuffer[A])
 }

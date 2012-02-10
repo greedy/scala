@@ -6,22 +6,18 @@
 **                          |/                                          **
 \*                                                                      */
 
-
-
 package scala.xml
 
-import collection.mutable
-import mutable.{ Set, HashSet }
+import scala.collection.mutable
 import parsing.XhtmlEntities
 
 /**
- * The <code>Utility</code> object provides utility functions for processing
- * instances of bound and not bound XML classes, as well as escaping text nodes.
+ * The `Utility` object provides utility functions for processing instances
+ * of bound and not bound XML classes, as well as escaping text nodes.
  *
  * @author Burak Emir
  */
-object Utility extends AnyRef with parsing.TokenTests
-{
+object Utility extends AnyRef with parsing.TokenTests {
   final val SU = '\u001A'
 
   implicit def implicitSbToString(sb: StringBuilder) = sb.toString()
@@ -35,22 +31,21 @@ object Utility extends AnyRef with parsing.TokenTests
   }
   private[xml] def isAtomAndNotText(x: Node) = x.isAtom && !x.isInstanceOf[Text]
 
-  /** trims an element - call this method, when you know that it is an
+  /** Trims an element - call this method, when you know that it is an
    *  element (and not a text node) so you know that it will not be trimmed
-   *  away. With this assumption, the function can return a <code>Node</code>,
-   *  rather than a <code>Seq[Node]</code>. If you don't know, call
-   *  <code>trimProper</code> and account for the fact that you may get back
-   *  an empty sequence of nodes.
+   *  away. With this assumption, the function can return a `Node`, rather
+   *  than a `Seq[Node]`. If you don't know, call `trimProper` and account
+   *  for the fact that you may get back an empty sequence of nodes.
    *
-   *  precondition: node is not a text node (it might be trimmed)
+   *  Precondition: node is not a text node (it might be trimmed)
    */
   def trim(x: Node): Node = x match {
     case Elem(pre, lab, md, scp, child@_*) =>
       Elem(pre, lab, md, scp, (child flatMap trimProper):_*)
   }
 
-  /** trim a child of an element. <code>Attribute</code> values and
-   *  <code>Atom</code> nodes that are not <code>Text</code> nodes are unaffected.
+  /** trim a child of an element. `Attribute` values and `Atom` nodes that
+   *  are not `Text` nodes are unaffected.
    */
   def trimProper(x:Node): Seq[Node] = x match {
     case Elem(pre,lab,md,scp,child@_*) =>
@@ -60,19 +55,21 @@ object Utility extends AnyRef with parsing.TokenTests
     case _ =>
       x
   }
+
   /** returns a sorted attribute list */
   def sort(md: MetaData): MetaData = if((md eq Null) || (md.next eq Null)) md else {
     val key = md.key
     val smaller = sort(md.filter { m => m.key < key })
     val greater = sort(md.filter { m => m.key > key })
-    smaller.append( Null ).append(md.copy ( greater ))
+    smaller.copy(md.copy ( greater ))
   }
 
-  /** returns the node with its attribute list sorted alphabetically (prefixes are ignored) */
+  /** Return the node with its attribute list sorted alphabetically
+   *  (prefixes are ignored) */
   def sort(n:Node): Node = n match {
-	  case Elem(pre,lab,md,scp,child@_*) =>
-		  Elem(pre,lab,sort(md),scp, (child map sort):_*)
-	  case _ => n
+	case Elem(pre,lab,md,scp,child@_*) =>
+      Elem(pre,lab,sort(md),scp, (child map sort):_*)
+    case _ => n
   }
 
   /**
@@ -101,7 +98,7 @@ object Utility extends AnyRef with parsing.TokenTests
   import Escapes.{ escMap, unescMap }
 
   /**
-   * Appends escaped string to <code>s</code>.
+   * Appends escaped string to `s`.
    *
    * @param text ...
    * @param s    ...
@@ -132,13 +129,12 @@ object Utility extends AnyRef with parsing.TokenTests
   }
 
   /**
-   * Appends unescaped string to <code>s</code>, amp becomes &amp;
-   * lt becomes &lt; etc..
+   * Appends unescaped string to `s`, `amp` becomes `&amp;`,
+   * `lt` becomes `&lt;` etc..
    *
    * @param ref ...
    * @param s   ...
-   * @return    <code>null</code> if <code>ref</code> was not a predefined
-   *            entity.
+   * @return    `'''null'''` if `ref` was not a predefined entity.
    */
   final def unescape(ref: String, s: StringBuilder): StringBuilder =
     (unescMap get ref) map (s append _) orNull
@@ -151,7 +147,7 @@ object Utility extends AnyRef with parsing.TokenTests
    * @return      ...
    */
   def collectNamespaces(nodes: Seq[Node]): mutable.Set[String] =
-    nodes.foldLeft(new HashSet[String]) { (set, x) => collectNamespaces(x, set) ; set }
+    nodes.foldLeft(new mutable.HashSet[String]) { (set, x) => collectNamespaces(x, set) ; set }
 
   /**
    * Adds all namespaces in node to set.
@@ -262,19 +258,13 @@ object Utility extends AnyRef with parsing.TokenTests
    * @param attribHashCode
    * @param children
    */
-  def hashCode(pre: String, label: String, attribHashCode: Int, scpeHash: Int, children: Seq[Node]) = {
-    val h = new util.MurmurHash[Node](pre.##)
-    h.append(label.##)
-    h.append(attribHashCode)
-    h.append(scpeHash)
-    children.foreach(h)
-    h.hash
-  }
+  def hashCode(pre: String, label: String, attribHashCode: Int, scpeHash: Int, children: Seq[Node]) =
+    scala.util.MurmurHash3.orderedHash(label +: attribHashCode +: scpeHash +: children, pre.##)
 
   def appendQuoted(s: String): String = sbToString(appendQuoted(s, _))
 
   /**
-   * Appends &quot;s&quot; if string <code>s</code> does not contain &quot;,
+   * Appends &quot;s&quot; if string `s` does not contain &quot;,
    * &apos;s&apos; otherwise.
    *
    * @param s  ...
@@ -317,7 +307,7 @@ object Utility extends AnyRef with parsing.TokenTests
   }
 
   /**
-   * Returns <code>null</code> if the value is a correct attribute value,
+   * Returns `'''null'''` if the value is a correct attribute value,
    * error message if it isn't.
    *
    * @param value ...
@@ -374,14 +364,14 @@ object Utility extends AnyRef with parsing.TokenTests
             c = it.next
           }
           val ref = rfb.toString()
-          rfb.setLength(0)
+          rfb.clear()
           unescape(ref,sb) match {
             case null =>
-              if (sb.length > 0) {          // flush buffer
+              if (sb.length > 0) {  // flush buffer
                 nb += Text(sb.toString())
-                sb.setLength(0)
+                sb.clear()
               }
-              nb += EntityRef(sb.toString()) // add entityref
+              nb += EntityRef(ref) // add entityref
             case _ =>
           }
         }
@@ -399,13 +389,11 @@ object Utility extends AnyRef with parsing.TokenTests
   }
 
   /**
-   * <pre>
+   * {{{
    *   CharRef ::= "&amp;#" '0'..'9' {'0'..'9'} ";"
    *             | "&amp;#x" '0'..'9'|'A'..'F'|'a'..'f' { hexdigit } ";"
-   * </pre>
-   * <p>
-   *   see [66]
-   * <p>
+   * }}}
+   * See [66]
    *
    * @param ch                ...
    * @param nextch            ...

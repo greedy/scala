@@ -8,6 +8,8 @@ invalidate B.scala because it references changed definition [Changed(Definition(
 compiling Set(B.scala)
 B.scala:2: error: type mismatch;
  found   : a.T
+    (which expands to)  Long
  required: Int
+ possible cause: missing arguments for method or constructor
   def x(a: A): Int = a.x
                        ^

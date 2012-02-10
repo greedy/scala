@@ -122,8 +122,7 @@ trait Matrix extends MatrixAdditions {
     private val _syntheticSyms = mutable.HashSet[Symbol]()
     def clearSyntheticSyms() = {
       _syntheticSyms foreach (_ resetFlag (NO_EXHAUSTIVE|MUTABLE))
-      if (settings.debug.value)
-        log("Cleared NO_EXHAUSTIVE/MUTABLE on " + _syntheticSyms.size + " synthetic symbols.")
+      debuglog("Cleared NO_EXHAUSTIVE/MUTABLE on " + _syntheticSyms.size + " synthetic symbols.")
       _syntheticSyms.clear()
     }
     def recordSyntheticSym(sym: Symbol): Symbol = {
@@ -253,7 +252,8 @@ trait Matrix extends MatrixAdditions {
     {
       val n = if (name == null) cunit.freshTermName("temp") else name
       // careful: pos has special meaning
-      recordSyntheticSym(owner.newVariable(pos, n) setInfo tpe setFlag (SYNTHETIC.toLong /: flags)(_|_))
+      val flagsLong = (SYNTHETIC.toLong /: flags)(_|_)
+      recordSyntheticSym(owner.newVariable(n, pos, flagsLong) setInfo tpe)
     }
   }
 }

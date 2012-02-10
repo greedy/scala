@@ -8,9 +8,8 @@ abstract class ManagedSeqStrict[+A]
         with GenericTraversableTemplate[A, ManagedSeqStrict]
 {
     override def companion: GenericCompanion[ManagedSeqStrict] = null
-
-    override def foreach[U](f: A => U): Unit =
-        null
+   
+    override def foreach[U](f: A => U): Unit = ()
 }
 
 trait ManagedSeq[+A, +Coll]
@@ -18,9 +17,9 @@ trait ManagedSeq[+A, +Coll]
         with TraversableView[A, ManagedSeqStrict[A]]
         with TraversableViewLike[A, ManagedSeqStrict[A], ManagedSeq[A]]
 { self =>
-
+   
     override def underlying = throw new Exception("no underlying")
-
+   
   //trait Transformed[+B] extends ManagedSeq[B] with super.Transformed[B]
   trait Transformed[+B] extends ManagedSeq[B, Coll] with super.Transformed[B]
 

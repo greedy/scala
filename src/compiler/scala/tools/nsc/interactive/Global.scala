@@ -6,10 +6,8 @@ package scala.tools.nsc
 package interactive
 
 import java.io.{ PrintWriter, StringWriter, FileReader, FileWriter }
-import collection.mutable.{ArrayBuffer, ListBuffer, SynchronizedBuffer, HashMap}
-
 import scala.collection.mutable
-import mutable.{LinkedHashMap, SynchronizedMap,LinkedHashSet, SynchronizedSet}
+import mutable.{LinkedHashMap, SynchronizedMap, HashSet, SynchronizedSet}
 import scala.concurrent.SyncVar
 import scala.util.control.ControlThrowable
 import scala.tools.nsc.io.{ AbstractFile, LogReplay, Logger, NullLogger, Replayer }
@@ -24,12 +22,13 @@ import symtab.Flags.{ACCESSOR, PARAMACCESSOR}
 
 /** The main class of the presentation compiler in an interactive environment such as an IDE
  */
-class Global(settings: Settings, reporter: Reporter, projectName: String = "")
-  extends scala.tools.nsc.Global(settings, reporter)
+class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
+  extends scala.tools.nsc.Global(settings, _reporter)
      with CompilerControl
      with RangePositions
      with ContextTrees
      with RichCompilationUnits
+     with ScratchPadMaker
      with Picklers {
 
   import definitions._
@@ -48,7 +47,6 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
     else NullLogger
 
   import log.logreplay
-  debugLog("interactive compiler from 20 Feb")
   debugLog("logger: " + log.getClass + " writing to " + (new java.io.File(logName)).getAbsolutePath)
   debugLog("classpath: "+classPath)
 
@@ -85,10 +83,16 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
     }
   }
 
-  /** A list containing all those files that need to be removed
+  /** A set containing all those files that need to be removed
    *  Units are removed by getUnit, typically once a unit is finished compiled.
    */
-  protected val toBeRemoved = new ArrayBuffer[AbstractFile] with SynchronizedBuffer[AbstractFile]
+  protected val toBeRemoved: mutable.Set[AbstractFile] =
+    new HashSet[AbstractFile] with SynchronizedSet[AbstractFile]
+
+  /** A set containing all those files that need to be removed after a full background compiler run
+   */
+  protected val toBeRemovedAfterRun: mutable.Set[AbstractFile] =
+    new HashSet[AbstractFile] with SynchronizedSet[AbstractFile]
 
   class ResponseMap extends MultiHashMap[SourceFile, Response[Tree]] {
     override def += (binding: (SourceFile, Set[Response[Tree]])) = {
@@ -149,6 +153,7 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
   protected[interactive] def getUnit(s: SourceFile): Option[RichCompilationUnit] = {
     toBeRemoved.synchronized {
       for (f <- toBeRemoved) {
+        informIDE("removed: "+s)
         unitOfFile -= f
         allSources = allSources filter (_.file != f)
       }
@@ -160,6 +165,25 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
   /** A list giving all files to be typechecked in the order they should be checked.
    */
   protected var allSources: List[SourceFile] = List()
+
+  private var lastException: Option[Throwable] = None
+
+  /** A list of files that crashed the compiler. They will be ignored during background
+   *  compilation until they are removed from this list.
+   */
+  private var ignoredFiles: Set[AbstractFile] = Set()
+
+  /** Flush the buffer of sources that are ignored during background compilation. */
+  def clearIgnoredFiles() {
+    ignoredFiles = Set()
+  }
+
+  /** Remove a crashed file from the ignore buffer. Background compilation will take it into account
+   *  and errors will be reported against it. */
+  def enableIgnoredFile(file: AbstractFile) {
+    ignoredFiles -= file
+    debugLog("Removed crashed file %s. Still in the ignored buffer: %s".format(file, ignoredFiles))
+  }
 
   /** The currently active typer run */
   private var currentTyperRun: TyperRun = _
@@ -205,7 +229,7 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
    */
   override def signalDone(context: Context, old: Tree, result: Tree) {
     if (interruptsEnabled && analyzer.lockedCount == 0) {
-      if (context.unit != null &&
+      if (context.unit.exists &&
           result.pos.isOpaqueRange &&
           (result.pos includes context.unit.targetPos)) {
         var located = new TypedLocator(context.unit.targetPos) locateIn result
@@ -320,6 +344,22 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
           newTyperRun()
           minRunId = currentRunId
           demandNewCompilerRun()
+
+        case Some(ShutdownReq) =>
+          scheduler.synchronized { // lock the work queue so no more items are posted while we clean it up
+            val units = scheduler.dequeueAll {
+              case item: WorkItem => Some(item.raiseMissing())
+              case _ => Some(())
+            }
+            debugLog("ShutdownReq: cleaning work queue (%d items)".format(units.size))
+            debugLog("Cleanup up responses (%d loadedType pending, %d parsedEntered pending)"
+                .format(waitLoadedTypeResponses.size, getParsedEnteredResponses.size))
+            checkNoResponsesOutstanding()
+
+            log.flush();
+            throw ShutdownReq
+          }
+
         case Some(ex: Throwable) => log.flush(); throw ex
         case _ =>
       }
@@ -408,7 +448,7 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
 
     // ensure all loaded units are parsed
     for (s <- allSources; unit <- getUnit(s)) {
-      checkForMoreWork(NoPosition)
+      // checkForMoreWork(NoPosition)  // disabled, as any work done here would be in an inconsistent state
       if (!unit.isUpToDate && unit.status != JustParsed) reset(unit) // reparse previously typechecked units.
       parseAndEnter(unit)
       serviceParsedEntered()
@@ -424,13 +464,38 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
     }
 
     // ensure all loaded units are typechecked
-    for (s <- allSources; unit <- getUnit(s)) {
-      if (!unit.isUpToDate) typeCheck(unit)
-      else debugLog("already up to date: "+unit)
-      for (r <- waitLoadedTypeResponses(unit.source))
-        r set unit.body
-      serviceParsedEntered()
+    for (s <- allSources; if !ignoredFiles(s.file); unit <- getUnit(s)) {
+      try {
+        if (!unit.isUpToDate)
+          if (unit.problems.isEmpty || !settings.YpresentationStrict.value)
+            typeCheck(unit)
+          else debugLog("%s has syntax errors. Skipped typechecking".format(unit))
+        else debugLog("already up to date: "+unit)
+        for (r <- waitLoadedTypeResponses(unit.source))
+          r set unit.body
+        serviceParsedEntered()
+      } catch {
+        case ex: FreshRunReq => throw ex           // propagate a new run request
+        case ShutdownReq     => throw ShutdownReq  // propagate a shutdown request
+
+        case ex =>
+          println("[%s]: exception during background compile: ".format(unit.source) + ex)
+          ex.printStackTrace()
+          for (r <- waitLoadedTypeResponses(unit.source)) {
+            r.raise(ex)
+          }
+          serviceParsedEntered()
+
+          lastException = Some(ex)
+          ignoredFiles += unit.source.file
+          println("[%s] marking unit as crashed (crashedFiles: %s)".format(unit, ignoredFiles))
+
+          reporter.error(unit.body.pos, "Presentation compiler crashed while type checking this file: %s".format(ex.toString()))
+      }
     }
+
+    // move units removable after this run to the "to-be-removed" buffer
+    toBeRemoved ++= toBeRemovedAfterRun
 
     // clean out stale waiting responses
     cleanAllResponses()
@@ -558,6 +623,8 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
   private def reloadSource(source: SourceFile) {
     val unit = new RichCompilationUnit(source)
     unitOfFile(source.file) = unit
+    toBeRemoved -= source.file
+    toBeRemovedAfterRun -= source.file
     reset(unit)
     //parseAndEnter(unit)
   }
@@ -589,18 +656,24 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
     }
     sources foreach (removeUnitOf(_))
     minRunId = currentRunId
-    respond(response) ()
+    respond(response)(())
     demandNewCompilerRun()
   }
 
+  /** Arrange for unit to be removed after run, to give a chance to typecheck the unit fully.
+   *  If we do just removeUnit, some problems with default parameters can ensue.
+   *  Calls to this method could probably be replaced by removeUnit once default parameters are handled more robustly.
+   */
+  private def afterRunRemoveUnitOf(source: SourceFile) {
+    toBeRemovedAfterRun += source.file
+  }
 
   /** A fully attributed tree located at position `pos` */
   private def typedTreeAt(pos: Position): Tree = getUnit(pos.source) match {
     case None =>
       reloadSources(List(pos.source))
-      val result = typedTreeAt(pos)
-      removeUnitOf(pos.source)
-      result
+      try typedTreeAt(pos)
+      finally afterRunRemoveUnitOf(pos.source)
     case Some(unit) =>
       informIDE("typedTreeAt " + pos)
       parseAndEnter(unit)
@@ -608,7 +681,7 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
       debugLog("at pos "+pos+" was found: "+tree.getClass+" "+tree.pos.show)
       tree match {
         case Import(expr, _) =>
-          debugLog("import found"+expr.tpe+" "+expr.tpe.members)
+          debugLog("import found"+expr.tpe+(if (expr.tpe == null) "" else " "+expr.tpe.members))
         case _ =>
       }
       if (stabilizedType(tree) ne null) {
@@ -630,7 +703,7 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
   }
 
   /** A fully attributed tree corresponding to the entire compilation unit  */
-  private def typedTree(source: SourceFile, forceReload: Boolean): Tree = {
+  private[interactive] def typedTree(source: SourceFile, forceReload: Boolean): Tree = {
     informIDE("typedTree " + source + " forceReload: " + forceReload)
     val unit = getOrCreateUnitOf(source)
     if (forceReload) reset(unit)
@@ -652,43 +725,52 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
 
   /** Implements CompilerControl.askLinkPos */
   private[interactive] def getLinkPos(sym: Symbol, source: SourceFile, response: Response[Position]) {
-    informIDE("getLinkPos "+sym+" "+source)
-    respond(response) {
-      val preExisting = unitOfFile isDefinedAt source.file
+
+    /** Find position of symbol `sym` in unit `unit`. Pre: `unit is loaded. */
+    def findLinkPos(unit: RichCompilationUnit): Position = {
       val originalTypeParams = sym.owner.typeParams
-      reloadSources(List(source))
-      parseAndEnter(getUnit(source).get)
-      val owner = sym.owner
-      if (owner.isClass) {
-        val pre = adaptToNewRunMap(ThisType(owner))
-        val newsym = pre.decl(sym.name) filter { alt =>
-          sym.isType || {
-            try {
-              val tp1 = pre.memberType(alt) onTypeError NoType
-              val tp2 = adaptToNewRunMap(sym.tpe) substSym (originalTypeParams, owner.typeParams)
-              matchesType(tp1, tp2, false)
-            } catch {
-              case ex: Throwable =>
-                println("error in hyperlinking: "+ex)
-                ex.printStackTrace()
-                false
-            }
+      parseAndEnter(unit)
+      val pre = adaptToNewRunMap(ThisType(sym.owner))
+      val newsym = pre.typeSymbol.info.decl(sym.name) filter { alt =>
+        sym.isType || {
+          try {
+            val tp1 = pre.memberType(alt) onTypeError NoType
+            val tp2 = adaptToNewRunMap(sym.tpe) substSym (originalTypeParams, sym.owner.typeParams)
+            matchesType(tp1, tp2, false)
+          } catch {
+            case ex: Throwable =>
+              println("error in hyperlinking: " + ex)
+              ex.printStackTrace()
+              false
           }
         }
-        if (!preExisting) removeUnitOf(source)
-        if (newsym == NoSymbol) {
-          debugLog("link not found "+sym+" "+source+" "+pre)
-          NoPosition
-        } else if (newsym.isOverloaded) {
-          settings.uniqid.value = true
-          debugLog("link ambiguous "+sym+" "+source+" "+pre+" "+newsym.alternatives)
-          NoPosition
-        } else {
-          debugLog("link found for "+newsym+": "+newsym.pos)
-          newsym.pos
+      }
+      if (newsym == NoSymbol) {
+        debugLog("link not found " + sym + " " + source + " " + pre)
+        NoPosition
+      } else if (newsym.isOverloaded) {
+        settings.uniqid.value = true
+        debugLog("link ambiguous " + sym + " " + source + " " + pre + " " + newsym.alternatives)
+        NoPosition
+      } else {
+        debugLog("link found for " + newsym + ": " + newsym.pos)
+        newsym.pos
+      }
+    }
+
+    informIDE("getLinkPos "+sym+" "+source)
+    respond(response) {
+      if (sym.owner.isClass) {
+        getUnit(source) match {
+          case None =>
+            reloadSources(List(source))
+            try findLinkPos(getUnit(source).get)
+            finally afterRunRemoveUnitOf(source)
+          case Some(unit) =>
+            findLinkPos(unit)
         }
       } else {
-        debugLog("link not in class "+sym+" "+source+" "+owner)
+        debugLog("link not in class "+sym+" "+source+" "+sym.owner)
         NoPosition
       }
     }
@@ -736,7 +818,7 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
     def add(sym: Symbol, pre: Type, implicitlyAdded: Boolean)(toMember: (Symbol, Type) => M) {
       if ((sym.isGetter || sym.isSetter) && sym.accessed != NoSymbol) {
         add(sym.accessed, pre, implicitlyAdded)(toMember)
-      } else if (!sym.name.decode.containsName(Dollar) && !sym.isSynthetic && sym.hasRawInfo) {
+      } else if (!sym.name.decodedName.containsName(Dollar) && !sym.isSynthetic && sym.hasRawInfo) {
         val symtpe = pre.memberType(sym) onTypeError ErrorType
         matching(sym, symtpe, this(sym.name)) match {
           case Some(m) =>
@@ -751,6 +833,11 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
       }
     }
 
+    def addNonShadowed(other: Members[M]) = {
+      for ((name, ms) <- other)
+        if (ms.nonEmpty && this(name).isEmpty) this(name) = ms
+    }
+
     def allMembers: List[M] = values.toList.flatten
   }
 
@@ -759,31 +846,38 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
     typedTreeAt(pos) // to make sure context is entered
     val context = doLocateContext(pos)
     val locals = new Members[ScopeMember]
+    val enclosing = new Members[ScopeMember]
     def addScopeMember(sym: Symbol, pre: Type, viaImport: Tree) =
       locals.add(sym, pre, false) { (s, st) =>
         new ScopeMember(s, st, context.isAccessible(s, pre, false), viaImport)
       }
+    def localsToEnclosing() = {
+      enclosing.addNonShadowed(locals)
+      locals.clear()
+    }
     //print("add scope members")
     var cx = context
     while (cx != NoContext) {
       for (sym <- cx.scope)
         addScopeMember(sym, NoPrefix, EmptyTree)
+      localsToEnclosing()
       if (cx == cx.enclClass) {
         val pre = cx.prefix
         for (sym <- pre.members)
           addScopeMember(sym, pre, EmptyTree)
+        localsToEnclosing()
       }
       cx = cx.outer
     }
     //print("\nadd imported members")
     for (imp <- context.imports) {
       val pre = imp.qual.tpe
-      for (sym <- imp.allImportedSymbols) {
+      for (sym <- imp.allImportedSymbols)
         addScopeMember(sym, pre, imp.qual)
-      }
+      localsToEnclosing()
     }
     // println()
-    val result = locals.allMembers
+    val result = enclosing.allMembers
 //    if (debugIDE) for (m <- result) println(m)
     result
   }
@@ -835,9 +929,11 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
     }
 
     val pre = stabilizedType(tree)
+
     val ownerTpe = tree.tpe match {
       case analyzer.ImportType(expr) => expr.tpe
       case null => pre
+      case MethodType(List(), rtpe) => rtpe
       case _ => tree.tpe
     }
 
@@ -870,6 +966,8 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
         if (unit.isUpToDate) {
           debugLog("already typed");
           response set unit.body
+        } else if (ignoredFiles(source.file)) {
+          response.raise(lastException.getOrElse(CancelException))
         } else if (onSameThread) {
           getTypedTree(source, forceReload = false, response)
         } else {
@@ -909,6 +1007,12 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
         parseAndEnter(unit)
         unit.body
       }
+    }
+  }
+
+  def getInstrumented(source: SourceFile, line: Int, response: Response[(String, Array[Char])]) {
+    respond(response) {
+      instrument(source, line)
     }
   }
 
@@ -956,6 +1060,8 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
 
   implicit def addOnTypeError[T](x: => T): OnTypeError[T] = new OnTypeError(x)
 
+  // OnTypeError should still catch TypeError because of cyclic references,
+  // but DivergentImplicit shouldn't leak anymore here
   class OnTypeError[T](op: => T) {
     def onTypeError(alt: => T) = try {
       op

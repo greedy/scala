@@ -107,6 +107,9 @@ trait TraversableViewLike[+A,
     override def toString = viewToString
   }
 
+  /** Explicit instantiation of the `Transformed` trait to reduce class file size in subclasses. */
+  private[collection] abstract class AbstractTransformed[+B] extends Transformed[B]
+
   trait EmptyView extends Transformed[Nothing] with super.EmptyView
 
   /** A fall back which forces everything into a vector and then applies an operation
@@ -155,14 +158,14 @@ trait TraversableViewLike[+A,
   /** Boilerplate method, to override in each subclass
    *  This method could be eliminated if Scala had virtual classes
    */
-  protected def newForced[B](xs: => GenSeq[B]): Transformed[B] = new { val forced = xs } with Forced[B]
-  protected def newAppended[B >: A](that: GenTraversable[B]): Transformed[B] = new { val rest = that } with Appended[B]
-  protected def newMapped[B](f: A => B): Transformed[B] = new { val mapping = f } with Mapped[B]
-  protected def newFlatMapped[B](f: A => GenTraversableOnce[B]): Transformed[B] = new { val mapping = f } with FlatMapped[B]
-  protected def newFiltered(p: A => Boolean): Transformed[A] = new { val pred = p } with Filtered
-  protected def newSliced(_endpoints: SliceInterval): Transformed[A] = new { val endpoints = _endpoints } with Sliced
-  protected def newDroppedWhile(p: A => Boolean): Transformed[A] = new { val pred = p } with DroppedWhile
-  protected def newTakenWhile(p: A => Boolean): Transformed[A] = new { val pred = p } with TakenWhile
+  protected def newForced[B](xs: => GenSeq[B]): Transformed[B] = new { val forced = xs } with AbstractTransformed[B] with Forced[B]
+  protected def newAppended[B >: A](that: GenTraversable[B]): Transformed[B] = new { val rest = that } with AbstractTransformed[B] with Appended[B]
+  protected def newMapped[B](f: A => B): Transformed[B] = new { val mapping = f } with AbstractTransformed[B] with Mapped[B]
+  protected def newFlatMapped[B](f: A => GenTraversableOnce[B]): Transformed[B] = new { val mapping = f } with AbstractTransformed[B] with FlatMapped[B]
+  protected def newFiltered(p: A => Boolean): Transformed[A] = new { val pred = p } with AbstractTransformed[A] with Filtered
+  protected def newSliced(_endpoints: SliceInterval): Transformed[A] = new { val endpoints = _endpoints } with AbstractTransformed[A] with Sliced
+  protected def newDroppedWhile(p: A => Boolean): Transformed[A] = new { val pred = p } with AbstractTransformed[A] with DroppedWhile
+  protected def newTakenWhile(p: A => Boolean): Transformed[A] = new { val pred = p } with AbstractTransformed[A] with TakenWhile
 
   protected def newTaken(n: Int): Transformed[A] = newSliced(SliceInterval(0, n))
   protected def newDropped(n: Int): Transformed[A] = newSliced(SliceInterval(n, Int.MaxValue))
@@ -182,15 +185,18 @@ trait TraversableViewLike[+A,
   override def scanLeft[B, That](z: B)(op: (B, A) => B)(implicit bf: CanBuildFrom[This, B, That]): That =
     newForced(thisSeq.scanLeft(z)(op)).asInstanceOf[That]
 
-  @migration(2, 9,
-    "This scanRight definition has changed in 2.9.\n" +
-    "The previous behavior can be reproduced with scanRight.reverse."
-  )
+  @migration("The behavior of `scanRight` has changed. The previous behavior can be reproduced with scanRight.reverse.", "2.9.0")
   override def scanRight[B, That](z: B)(op: (A, B) => B)(implicit bf: CanBuildFrom[This, B, That]): That =
     newForced(thisSeq.scanRight(z)(op)).asInstanceOf[That]
 
   override def groupBy[K](f: A => K): immutable.Map[K, This] =
     thisSeq groupBy f mapValues (xs => newForced(xs))
+
+  override def unzip[A1, A2](implicit asPair: A => (A1, A2)) =
+    (newMapped(x => asPair(x)._1), newMapped(x => asPair(x)._2))  // TODO - Performance improvements.
+
+  override def unzip3[A1, A2, A3](implicit asTriple: A => (A1, A2, A3)) =
+    (newMapped(x => asTriple(x)._1), newMapped(x => asTriple(x)._2), newMapped(x => asTriple(x)._3))  // TODO - Performance improvements.
 
   override def toString = viewToString
 }

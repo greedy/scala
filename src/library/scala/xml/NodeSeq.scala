@@ -6,11 +6,9 @@
 **                          |/                                          **
 \*                                                                      */
 
-
-
 package scala.xml
 
-import collection.{ mutable, immutable, generic, SeqLike }
+import collection.{ mutable, immutable, generic, SeqLike, AbstractSeq }
 import mutable.{ Builder, ListBuffer }
 import generic.{ CanBuildFrom }
 
@@ -34,13 +32,13 @@ object NodeSeq {
   implicit def seqToNodeSeq(s: Seq[Node]): NodeSeq = fromSeq(s)
 }
 
-/** This class implements a wrapper around <code>Seq[Node]</code> that
- *  adds XPath and comprehension methods.
+/** This class implements a wrapper around `Seq[Node]` that adds XPath
+ *  and comprehension methods.
  *
  *  @author  Burak Emir
  *  @version 1.0
  */
-abstract class NodeSeq extends immutable.Seq[Node] with SeqLike[Node, NodeSeq] with Equality {
+abstract class NodeSeq extends AbstractSeq[Node] with immutable.Seq[Node] with SeqLike[Node, NodeSeq] with Equality {
   import NodeSeq.seqToNodeSeq // import view magic for NodeSeq wrappers
 
   /** Creates a list buffer as builder for this class */
@@ -62,25 +60,29 @@ abstract class NodeSeq extends immutable.Seq[Node] with SeqLike[Node, NodeSeq] w
 
     !these.hasNext && !those.hasNext
   }
-  def basisForHashCode: Seq[Any] = theSeq
+
+  protected def basisForHashCode: Seq[Any] = theSeq
+
   override def canEqual(other: Any) = other match {
     case _: NodeSeq   => true
     case _            => false
   }
+
   override def strict_==(other: Equality) = other match {
     case x: NodeSeq => (length == x.length) && (theSeq sameElements x.theSeq)
     case _          => false
   }
 
-  /** Projection function, which returns  elements of `this` sequence based on the string `that`. Use:
+  /** Projection function, which returns  elements of `this` sequence based
+   *  on the string `that`. Use:
    *   - `this \ "foo"` to get a list of all elements that are labelled with `"foo"`;
    *   - `\ "_"` to get a list of all elements (wildcard);
    *   - `ns \ "@foo"` to get the unprefixed attribute `"foo"`;
-   *   - `ns \ "@{uri}foo"` to get the prefixed attribute `"pre:foo"` whose prefix `"pre"` is resolved to the
-   *     namespace `"uri"`.
+   *   - `ns \ "@{uri}foo"` to get the prefixed attribute `"pre:foo"` whose
+   *     prefix `"pre"` is resolved to the namespace `"uri"`.
    *
-   *  For attribute projections, the resulting [[scala.xml.NodeSeq]] attribute values are wrapped in a
-   *  [[scala.xml.Group]].
+   *  For attribute projections, the resulting [[scala.xml.NodeSeq]] attribute
+   *  values are wrapped in a [[scala.xml.Group]].
    *
    *  There is no support for searching a prefixed attribute by its literal prefix.
    *
@@ -121,16 +123,16 @@ abstract class NodeSeq extends immutable.Seq[Node] with SeqLike[Node, NodeSeq] w
     }
   }
 
-  /** Projection function, which returns elements of `this` sequence and of all its subsequences, based on
-   *  the string `that`. Use:
+  /** Projection function, which returns elements of `this` sequence and of
+   *  all its subsequences, based on the string `that`. Use:
    *   - `this \\ 'foo` to get a list of all elements that are labelled with `"foo"`;
    *   - `\\ "_"` to get a list of all elements (wildcard);
    *   - `ns \\ "@foo"` to get the unprefixed attribute `"foo"`;
-   *   - `ns \\ "@{uri}foo"` to get each prefixed attribute `"pre:foo"` whose prefix `"pre"` is resolved to the
-   *     namespace `"uri"`.
+   *   - `ns \\ "@{uri}foo"` to get each prefixed attribute `"pre:foo"` whose
+   *     prefix `"pre"` is resolved to the namespace `"uri"`.
    *
-   *  For attribute projections, the resulting [[scala.xml.NodeSeq]] attribute values are wrapped in a
-   *  [[scala.xml.Group]].
+   *  For attribute projections, the resulting [[scala.xml.NodeSeq]] attribute
+   *  values are wrapped in a [[scala.xml.Group]].
    *
    *  There is no support for searching a prefixed attribute by its literal prefix.
    *
@@ -149,5 +151,6 @@ abstract class NodeSeq extends immutable.Seq[Node] with SeqLike[Node, NodeSeq] w
   }
 
   override def toString(): String = theSeq.mkString
-  def text: String                = this map (_.text) mkString
+
+  def text: String = this map (_.text) mkString
 }

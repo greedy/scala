@@ -6,7 +6,7 @@
 package scala.reflect
 package internal
 
-trait Scopes { self: SymbolTable =>
+trait Scopes extends api.Scopes { self: SymbolTable =>
 
   class ScopeEntry(val sym: Symbol, val owner: Scope) {
     /** the next entry in the hash bucket
@@ -33,9 +33,22 @@ trait Scopes { self: SymbolTable =>
     e
   }
 
-  class Scope(initElems: ScopeEntry) extends Iterable[Symbol] {
+  object Scope {
+    def unapplySeq(decls: Scope): Some[Seq[Symbol]] = Some(decls.toList)
+  }
 
-    var elems: ScopeEntry = initElems
+  /** Note: constructor is protected to force everyone to use the factory methods newScope or newNestedScope instead.
+   *  This is necessary because when run from reflection every scope needs to have a 
+   *  SynchronizedScope as mixin. 
+   */
+  class Scope protected[Scopes] (initElems: ScopeEntry = null) extends Iterable[Symbol] {
+    
+    protected[Scopes] def this(base: Scope) = {
+      this(base.elems)
+      nestinglevel = base.nestinglevel + 1
+    }
+
+    private[scala] var elems: ScopeEntry = initElems
 
     /** The number of times this scope is nested in another
      */
@@ -61,24 +74,8 @@ trait Scopes { self: SymbolTable =>
 
     if (size >= MIN_HASH) createHash()
 
-    def this() = this(null: ScopeEntry)
-
-    def this(base: Scope) = {
-      this(base.elems)
-      nestinglevel = base.nestinglevel + 1
-    }
-
-    def this(decls: List[Symbol]) = {
-      this()
-      decls foreach enter
-    }
-
     /** Returns a new scope with the same content as this one. */
-    def cloneScope: Scope = {
-      val clone = new Scope()
-      this.toList foreach (clone enter _)
-      clone
-    }
+    def cloneScope: Scope = newScopeWith(this.toList: _*)
 
     /** is the scope empty? */
     override def isEmpty: Boolean = elems eq null
@@ -98,15 +95,18 @@ trait Scopes { self: SymbolTable =>
      *
      *  @param e ...
      */
-    def enter(e: ScopeEntry) {
+    protected def enter(e: ScopeEntry) {
       elemsCache = null
-      if (hashtable ne null) {
-        val i = e.sym.name.start & HASHMASK
-        elems.tail = hashtable(i)
-        hashtable(i) = elems
-      } else if (size >= MIN_HASH) {
+      if (hashtable ne null)
+        enterInHash(e)
+      else if (size >= MIN_HASH)
         createHash()
-      }
+    }
+
+    private def enterInHash(e: ScopeEntry): Unit = {
+      val i = e.sym.name.start & HASHMASK
+      e.tail = hashtable(i)
+      hashtable(i) = e
     }
 
     /** enter a symbol
@@ -126,15 +126,23 @@ trait Scopes { self: SymbolTable =>
 
     private def createHash() {
       hashtable = new Array[ScopeEntry](HASHSIZE)
-      enterInHash(elems)
+      enterAllInHash(elems)
     }
 
-    private def enterInHash(e: ScopeEntry) {
+    private def enterAllInHash(e: ScopeEntry, n: Int = 0) {
       if (e ne null) {
-        enterInHash(e.next)
-        val i = e.sym.name.start & HASHMASK
-        e.tail = hashtable(i)
-        hashtable(i) = e
+        if (n < maxRecursions) {
+          enterAllInHash(e.next, n + 1)
+          enterInHash(e)
+        } else {
+          var entries: List[ScopeEntry] = List()
+          var ee = e
+          while (ee ne null) {
+            entries = ee :: entries
+            ee = ee.next
+          }
+          entries foreach enterInHash
+        }
       }
     }
 
@@ -212,7 +220,7 @@ trait Scopes { self: SymbolTable =>
     def lookupAll(name: Name): Iterator[Symbol] = new Iterator[Symbol] {
       var e = lookupEntry(name)
       def hasNext: Boolean = e ne null
-      def next: Symbol = { val r = e.sym; e = lookupNextEntry(e); r }
+      def next(): Symbol = { val r = e.sym; e = lookupNextEntry(e); r }
     }
 
     /** lookup a symbol entry matching given name.
@@ -300,7 +308,7 @@ trait Scopes { self: SymbolTable =>
     override def foreach[U](p: Symbol => U): Unit = toList foreach p
 
     override def filter(p: Symbol => Boolean): Scope =
-      if (!(toList forall p)) new Scope(toList filter p) else this
+      if (!(toList forall p)) newScopeWith(toList filter p: _*) else this
 
     override def mkString(start: String, sep: String, end: String) =
       toList.map(_.defString).mkString(start, sep, end)
@@ -309,7 +317,27 @@ trait Scopes { self: SymbolTable =>
 
   }
 
-  def newScope: Scope = new Scope
+  /** Create a new scope */
+  def newScope: Scope = new Scope()
+  
+  /** Create a new scope nested in another one with which it shares its elements */
+  def newNestedScope(outer: Scope): Scope = new Scope(outer)
+
+  /** Create a new scope with given initial elements */
+  def newScopeWith(elems: Symbol*): Scope = {
+    val scope = newScope
+    elems foreach scope.enter
+    scope
+  }
+
+  /** Create new scope for the members of package `pkg` */
+  def newPackageScope(pkgClass: Symbol): Scope = newScope
+
+  /** Transform scope of members of `owner` using operation `op`
+   *  This is overridden by the reflective compiler to avoid creating new scopes for packages
+   */
+  def scopeTransform(owner: Symbol)(op: => Scope): Scope = op
+
 
   /** The empty scope (immutable).
    */
@@ -321,6 +349,9 @@ trait Scopes { self: SymbolTable =>
 
   /** The error scope.
    */
-  class ErrorScope(owner: Symbol) extends Scope(null: ScopeEntry)
+  class ErrorScope(owner: Symbol) extends Scope
+
+  private final val maxRecursions = 1000
+
 }
 

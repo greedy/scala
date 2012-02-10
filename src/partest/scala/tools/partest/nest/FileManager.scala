@@ -13,10 +13,10 @@ import java.io.{File, FilenameFilter, IOException, StringWriter,
                 FileReader, PrintWriter, FileWriter}
 import java.net.URI
 import scala.tools.nsc.io.{ Path, Directory, File => SFile }
-import scala.collection.mutable.HashMap
 import sys.process._
+import scala.collection.mutable
 
-trait FileManager {
+trait FileUtil {
   /**
    * Compares two files using a Java implementation of the GNU diff
    * available at http://www.bmsi.com/java/#diff.
@@ -33,6 +33,24 @@ trait FileManager {
     val res = diffWriter.toString
     if (res startsWith "No") "" else res
   }
+  def compareContents(lines1: Seq[String], lines2: Seq[String]): String = {
+    val xs1 = lines1.toArray[AnyRef]
+    val xs2 = lines2.toArray[AnyRef]
+
+    val diff   = new Diff(xs1, xs2)
+    val change = diff.diff_2(false)
+    val writer = new StringWriter
+    val p      = new DiffPrint.NormalPrint(xs1, xs2, writer)
+
+    p.print_script(change)
+    val res = writer.toString
+    if (res startsWith "No ") ""
+    else res
+  }
+}
+object FileUtil extends FileUtil { }
+
+trait FileManager extends FileUtil {
 
   def testRootDir: Directory
   def testRootPath: String
@@ -42,13 +60,15 @@ trait FileManager {
 
   var CLASSPATH: String
   var LATEST_LIB: String
+  var LATEST_COMP: String
+  var LATEST_PARTEST: String
 
   var showDiff = false
   var updateCheck = false
   var showLog = false
   var failed = false
 
-  var SCALAC_OPTS = PartestDefaults.scalacOpts
+  var SCALAC_OPTS = PartestDefaults.scalacOpts.split(' ').toSeq
   var JAVA_OPTS   = PartestDefaults.javaOpts
   var timeout     = PartestDefaults.timeout
   // how can 15 minutes not be enough? What are you doing, run/lisp.scala?
@@ -56,7 +76,7 @@ trait FileManager {
   var oneTestTimeout = 60 * 60 * 1000
 
   /** Only when --debug is given. */
-  lazy val testTimings = new HashMap[String, Long]
+  lazy val testTimings = new mutable.HashMap[String, Long]
   def recordTestTiming(name: String, milliseconds: Long) =
     synchronized { testTimings(name) = milliseconds }
   def showTestTimings() {

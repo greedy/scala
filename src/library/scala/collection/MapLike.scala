@@ -159,51 +159,52 @@ self =>
 
   /** The implementation class of the set returned by `keySet`.
    */
-  protected class DefaultKeySet extends Set[A] {
+  protected class DefaultKeySet extends AbstractSet[A] with Set[A] {
     def contains(key : A) = self.contains(key)
     def iterator = keysIterator
     def + (elem: A): Set[A] = (Set[A]() ++ this + elem).asInstanceOf[Set[A]] // !!! concrete overrides abstract problem
     def - (elem: A): Set[A] = (Set[A]() ++ this - elem).asInstanceOf[Set[A]] // !!! concrete overrides abstract problem
     override def size = self.size
-    override def foreach[C](f: A => C) = for ((k, v) <- self) f(k)
+    override def foreach[C](f: A => C) = self.keysIterator foreach f
   }
 
   /** Creates an iterator for all keys.
    *
    *  @return an iterator over all keys.
    */
-  def keysIterator: Iterator[A] = new Iterator[A] {
+  def keysIterator: Iterator[A] = new AbstractIterator[A] {
     val iter = self.iterator
     def hasNext = iter.hasNext
     def next() = iter.next._1
   }
 
-  /** Creates an iterator for all keys.
+  /** Collects all keys of this map in an iterable collection.
    *
-   *  @return an iterator over all keys.
+   *  @return the keys of this map as an iterable.
    */
-  @migration(2, 8, "As of 2.8, keys returns Iterable[A] rather than Iterator[A].")
+  @migration("`keys` returns `Iterable[A]` rather than `Iterator[A]`.", "2.8.0")
   def keys: Iterable[A] = keySet
 
   /** Collects all values of this map in an iterable collection.
-   * @return the values of this map as an iterable.
+   *
+   *  @return the values of this map as an iterable.
    */
-  @migration(2, 8, "As of 2.8, values returns Iterable[B] rather than Iterator[B].")
+  @migration("`values` returns `Iterable[B]` rather than `Iterator[B]`.", "2.8.0")
   def values: Iterable[B] = new DefaultValuesIterable
 
   /** The implementation class of the iterable returned by `values`.
    */
-  protected class DefaultValuesIterable extends Iterable[B] {
+  protected class DefaultValuesIterable extends AbstractIterable[B] with Iterable[B] {
     def iterator = valuesIterator
     override def size = self.size
-    override def foreach[C](f: B => C) = for ((k, v) <- self) f(v)
+    override def foreach[C](f: B => C) = self.valuesIterator foreach f
   }
 
   /** Creates an iterator for all values in this map.
    *
    *  @return an iterator over all values that are associated with some key in this map.
    */
-  def valuesIterator: Iterator[B] = new Iterator[B] {
+  def valuesIterator: Iterator[B] = new AbstractIterator[B] {
     val iter = self.iterator
     def hasNext = iter.hasNext
     def next() = iter.next._2
@@ -225,7 +226,7 @@ self =>
    *  @return an immutable map consisting only of those key value pairs of this map where the key satisfies
    *          the predicate `p`. The resulting map wraps the original map without copying any elements.
    */
-  def filterKeys(p: A => Boolean): Map[A, B] = new DefaultMap[A, B] {
+  def filterKeys(p: A => Boolean): Map[A, B] = new AbstractMap[A, B] with DefaultMap[A, B] {
     override def foreach[C](f: ((A, B)) => C): Unit = for (kv <- self) if (p(kv._1)) f(kv)
     def iterator = self.iterator.filter(kv => p(kv._1))
     override def contains(key: A) = self.contains(key) && p(key)
@@ -237,16 +238,13 @@ self =>
    *  @return a map view which maps every key of this map
    *          to `f(this(key))`. The resulting map wraps the original map without copying any elements.
    */
-  def mapValues[C](f: B => C): Map[A, C] = new DefaultMap[A, C] {
+  def mapValues[C](f: B => C): Map[A, C] = new AbstractMap[A, C] with DefaultMap[A, C] {
     override def foreach[D](g: ((A, C)) => D): Unit = for ((k, v) <- self) g((k, f(v)))
     def iterator = for ((k, v) <- self.iterator) yield (k, f(v))
     override def size = self.size
     override def contains(key: A) = self.contains(key)
     def get(key: A) = self.get(key).map(f)
   }
-
-  @deprecated("use `mapValues` instead", "2.8.0")
-  def mapElements[C](f: B => C) = mapValues(f)
 
   // The following 5 operations (updated, two times +, two times ++) should really be
   // generic, returning This[B]. We need better covariance support to express that though.

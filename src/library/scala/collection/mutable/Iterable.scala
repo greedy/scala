@@ -32,7 +32,9 @@ trait Iterable[A] extends Traversable[A]
  *  @define Coll mutable.Iterable
  */
 object Iterable extends TraversableFactory[Iterable] {
-  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, Iterable[A]] = new GenericCanBuildFrom[A]
+  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, Iterable[A]] = ReusableCBF.asInstanceOf[GenericCanBuildFrom[A]]
   def newBuilder[A]: Builder[A, Iterable[A]] = new ArrayBuffer
 }
 
+/** Explicit instantiation of the `Iterable` trait to reduce class file size in subclasses. */
+private[scala] abstract class AbstractIterable[A] extends scala.collection.AbstractIterable[A] with Iterable[A]

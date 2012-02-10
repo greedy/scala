@@ -8,10 +8,8 @@
 package scala.tools.partest
 package nest
 
-import java.io.{ File }
-import java.util.StringTokenizer
-import scala.util.Properties.{ setProp }
-import scala.tools.util.Signallable
+import java.io.File
+import scala.util.Properties.setProp
 import scala.tools.nsc.util.ScalaClassLoader
 import scala.tools.nsc.io.Path
 import scala.collection.{ mutable, immutable }
@@ -26,7 +24,7 @@ trait DirectRunner {
 
   import PartestDefaults.numActors
 
-  def denotesTestFile(arg: String) = Path(arg).hasExtension("scala", "res")
+  def denotesTestFile(arg: String) = Path(arg).hasExtension("scala", "res", "xml")
   def denotesTestDir(arg: String)  = Path(arg).ifDirectory(_.files.nonEmpty) exists (x => x)
   def denotesTestPath(arg: String) = denotesTestDir(arg) || denotesTestFile(arg)
 
@@ -46,7 +44,7 @@ trait DirectRunner {
 
     if (PartestDefaults.poolSize.isEmpty) {
       scala.actors.Debug.info("actors.corePoolSize not defined")
-      setProp("actors.corePoolSize", "16")
+      setProp("actors.corePoolSize", "12")
     }
   }
 
@@ -54,8 +52,15 @@ trait DirectRunner {
     val kindFiles = onlyValidTestPaths(_kindFiles)
     val groupSize = (kindFiles.length / numActors) + 1
 
-    val consFM = new ConsoleFileManager
-    import consFM.{ latestCompFile, latestLibFile, latestPartestFile }
+    // @partest maintainer: we cannot create a fresh file manager here
+    // since the FM must respect --buildpath and --classpath from the command line
+    // for example, see how it's done in ReflectiveRunner
+    //val consFM = new ConsoleFileManager
+    //import consFM.{ latestCompFile, latestLibFile, latestPartestFile }
+    val latestCompFile = new File(fileManager.LATEST_COMP);
+    val latestLibFile = new File(fileManager.LATEST_LIB);
+    val latestPartestFile = new File(fileManager.LATEST_PARTEST);
+
     val scalacheckURL = PathSettings.scalaCheck.toURL
     val scalaCheckParentClassLoader = ScalaClassLoader.fromURLs(
       List(scalacheckURL, latestCompFile.toURI.toURL, latestLibFile.toURI.toURL, latestPartestFile.toURI.toURL)

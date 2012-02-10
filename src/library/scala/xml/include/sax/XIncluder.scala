@@ -11,19 +11,15 @@ package scala.xml
 package include.sax
 
 import scala.xml.include._
-import collection.mutable.Stack
-
+import scala.collection.mutable
 import org.xml.sax.{ ContentHandler, XMLReader, Locator, Attributes }
 import org.xml.sax.ext.LexicalHandler
 import java.io.{ File, OutputStream, OutputStreamWriter, Writer, IOException }
 
-/** XIncluder is a SAX <code>ContentHandler</code>
- * that writes its XML document onto an output stream after resolving
- * all <code>xinclude:include</code> elements.
+/** XIncluder is a SAX `ContentHandler` that writes its XML document onto
+ * an output stream after resolving all `xinclude:include` elements.
  *
- * <p>
- *   based on Eliotte Rusty Harold's SAXXIncluder
- * </p>
+ * Based on Eliotte Rusty Harold's SAXXIncluder.
  */
 class XIncluder(outs: OutputStream, encoding: String) extends ContentHandler with LexicalHandler {
 
@@ -101,7 +97,7 @@ class XIncluder(outs: OutputStream, encoding: String) extends ContentHandler wit
         // (The end CDATA section delimiter)
         else if (c == '>') out.write("&gt;");
         else out.write(c);
-        i = i+1;
+        i += 1
       }
     }
     catch {
@@ -137,7 +133,7 @@ class XIncluder(outs: OutputStream, encoding: String) extends ContentHandler wit
 
   // LexicalHandler methods
   private var inDTD: Boolean = false
-  private val entities = new Stack[String]()
+  private val entities = new mutable.Stack[String]()
 
   def startDTD(name: String, publicID: String, systemID: String) {
     inDTD = true

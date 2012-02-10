@@ -13,6 +13,7 @@ import generic._
 import mutable.ListBuffer
 import immutable.List
 import scala.util.control.Breaks._
+import annotation.tailrec
 
 /** A template trait for linear sequences of type `LinearSeq[A]`.
  *
@@ -41,16 +42,21 @@ import scala.util.control.Breaks._
  *  @tparam A    the element type of the $coll
  *  @tparam Repr the type of the actual $coll containing the elements.
  */
-trait LinearSeqLike[+A, +Repr <: LinearSeqLike[A, Repr]] extends SeqLike[A, Repr] { self: Repr =>
+trait LinearSeqLike[+A, +Repr <: LinearSeqLike[A, Repr]] extends SeqLike[A, Repr] {
+  self: Repr =>
 
   override protected[this] def thisCollection: LinearSeq[A] = this.asInstanceOf[LinearSeq[A]]
   override protected[this] def toCollection(repr: Repr): LinearSeq[A] = repr.asInstanceOf[LinearSeq[A]]
 
+  def seq: LinearSeq[A]
+
+  override def hashCode() = util.MurmurHash3.seqHash(seq) // TODO - can we get faster via "linearSeqHash" ?
+
   override /*IterableLike*/
-  def iterator: Iterator[A] = new Iterator[A] {
+  def iterator: Iterator[A] = new AbstractIterator[A] {
     var these = self
     def hasNext: Boolean = !these.isEmpty
-    def next: A =
+    def next(): A =
       if (hasNext) {
         val result = these.head; these = these.tail; result
       } else Iterator.empty.next
@@ -63,5 +69,10 @@ trait LinearSeqLike[+A, +Repr <: LinearSeqLike[A, Repr]] extends SeqLike[A, Repr
       these = newBuilder.result
       xs
     }
+  }
+
+  @tailrec override final def corresponds[B](that: GenSeq[B])(p: (A,B) => Boolean): Boolean = {
+    if (this.isEmpty) that.isEmpty
+    else that.nonEmpty && p(head, that.head) && (tail corresponds that.tail)(p)
   }
 }
