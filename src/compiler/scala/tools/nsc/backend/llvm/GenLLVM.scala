@@ -1999,7 +1999,7 @@ abstract class GenLLVM extends SubComponent {
       val concreteMethods = c.methods.filter(!_.symbol.isDeferred)
       val methods = concreteMethods.filter(m => !CodegenAnnotations.exists(a => m.symbol.hasAnnotation(a)))
       val llvmmethods = concreteMethods.filter(_.symbol.hasAnnotation(LlvmimplAnnotSym))
-      val methodFuns = methods.filter(_.code != null).map(m => try { genFun(m) } catch { case e => println(e); m.dump; throw e } )
+      val methodFuns = methods.filter(_.code != NoCode).map(m => try { genFun(m) } catch { case e => println(e); m.dump; throw e } )
       val llvmmethodFuns = llvmmethods.map(genNativeFun)
       val foreignFuns = c.methods.filter(_.symbol.hasAnnotation(ForeignAnnotSym)).flatMap(genForeignFun)
       val foreignVals = c.methods.filter(_.symbol.hasAnnotation(ForeignValueAnnotSym)).flatMap(genForeignVal)
