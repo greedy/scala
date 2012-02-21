@@ -236,6 +236,16 @@ INITIALISATION
     </touch>
   </target>
 
+  <target name="check.llvm">
+    <available property="llvm.jar.available" file="${lib.dir}/llvm.jar"/>
+  </target>
+
+  <target name="strap.llvm" depends="libs.llvm.starr" unless="llvm.jar.available">
+    <copy todir="${lib.dir}" file="${build-libs.dir}/llvm.jar"/>
+  </target>
+
+  <target name="init.llvm" depends="check.llvm,strap.llvm"/>
+
   <target name="init" depends="init.jars">
   <!-- scalac.args.optimise is selectively overridden in certain antcall tasks. -->
     <property name="scalac.args.optimise" value=""/>
@@ -318,7 +328,7 @@ INITIALISATION
 LOCAL REFERENCE BUILD (LOCKER)
 ============================================================================ -->
 
-  <target name="locker.start" depends="init">
+  <target name="locker.start" depends="init,init.llvm">
     <condition property="locker.available">
       <available file="${build-locker.dir}/all.complete"/>
     </condition>
