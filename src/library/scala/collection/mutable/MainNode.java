@@ -20,6 +20,8 @@ abstract class MainNode<K, V> extends BasicNode {
     
     public volatile MainNode<K, V> prev = null;
     
+    public abstract int cachedSize(Object ct);
+    
     public boolean CAS_PREV(MainNode<K, V> oldval, MainNode<K, V> nval) {
 	return updater.compareAndSet(this, oldval, nval);
     }
@@ -29,6 +31,8 @@ abstract class MainNode<K, V> extends BasicNode {
     }
     
     // do we need this? unclear in the javadocs...
+    // apparently not - volatile reads are supposed to be safe
+    // irregardless of whether there are concurrent ARFU updates
     public MainNode<K, V> READ_PREV() {
 	return updater.get(this);
     }

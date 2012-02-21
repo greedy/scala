@@ -636,11 +636,6 @@ trait ContextErrors {
 
      def CyclicReferenceError(errPos: Position, lockedSym: Symbol) =
        issueTypeError(PosAndMsgTypeError(errPos, "illegal cyclic reference involving " + lockedSym))
-       
-     def MacroExpandError(tree: Tree, t: Any) = { 
-       issueNormalTypeError(tree, "macros must return a compiler-specific tree; returned class is: " + t.getClass)
-       setError(tree)
-     }
     }
   }
 
@@ -713,10 +708,17 @@ trait ContextErrors {
           "constructor cannot be instantiated to expected type" + foundReqMsg(restpe, pt))
         setError(tree)
       }
-
-      def NoBestMethodAlternativeError(tree: Tree, argtpes: List[Type], pt: Type) =
+ 
+      def NoBestMethodAlternativeError(tree: Tree, argtpes: List[Type], pt: Type) = {
         issueNormalTypeError(tree,
           applyErrorMsg(tree, " cannot be applied to ", argtpes, pt))
+        // since inferMethodAlternative modifies the state of the tree 
+        // we have to set the type of tree to ErrorType only in the very last
+        // fallback action that is done in the inference (tracking it manually is error prone).
+        // This avoids entering infinite loop in doTypeApply.
+        // TODO: maybe we should do the same thing with inferExprAlternative.
+        if (implicitly[Context].reportErrors) setError(tree)
+      }
 
       def AmbiguousMethodAlternativeError(tree: Tree, pre: Type, best: Symbol,
             firstCompeting: Symbol, argtpes: List[Type], pt: Type) = {

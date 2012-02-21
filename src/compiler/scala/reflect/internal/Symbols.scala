@@ -1023,8 +1023,11 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     /** Modifies this symbol's info in place. */
     def modifyInfo(f: Type => Type): this.type              = setInfo(f(info))
     /** Substitute second list of symbols for first in current info. */
-    def substInfo(syms0: List[Symbol], syms1: List[Symbol]) = modifyInfo(_.substSym(syms0, syms1))
-    def setInfoOwnerAdjusted(info: Type): this.type         = setInfo(info atOwner this)
+    def substInfo(syms0: List[Symbol], syms1: List[Symbol]): this.type =
+      if (syms0.isEmpty) this
+      else modifyInfo(_.substSym(syms0, syms1))
+
+    def setInfoOwnerAdjusted(info: Type): this.type = setInfo(info atOwner this)
     
     /** Set the info and enter this symbol into the owner's scope. */
     def setInfoAndEnter(info: Type): this.type = {
@@ -1380,15 +1383,25 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       cloneSymbol(owner)
 
     /** A clone of this symbol, but with given owner. */
-    final def cloneSymbol(owner: Symbol): Symbol = cloneSymbol(owner, this.rawflags)
-    final def cloneSymbol(owner: Symbol, newFlags: Long): Symbol = {
-      val newSym = cloneSymbolImpl(owner, newFlags)
-      ( newSym
+    final def cloneSymbol(newOwner: Symbol): Symbol =
+      cloneSymbol(newOwner, this.rawflags)
+    final def cloneSymbol(newOwner: Symbol, newFlags: Long): Symbol =
+      cloneSymbol(newOwner, newFlags, nme.NO_NAME)
+    final def cloneSymbol(newOwner: Symbol, newFlags: Long, newName: Name): Symbol = {
+      val clone = cloneSymbolImpl(newOwner, newFlags)
+      ( clone
           setPrivateWithin privateWithin
-          setInfo (info cloneInfo newSym)
+          setInfo (this.info cloneInfo clone)
           setAnnotations this.annotations
       )
+      if (clone.thisSym != clone)
+        clone.typeOfThis = (clone.typeOfThis cloneInfo clone)
+      if (newName != nme.NO_NAME)
+        clone.name = newName
+      
+      clone
     }
+    
     /** Internal method to clone a symbol's implementation with the given flags and no info. */
     def cloneSymbolImpl(owner: Symbol, newFlags: Long): Symbol
     def cloneSymbolImpl(owner: Symbol): Symbol = cloneSymbolImpl(owner, 0L)
@@ -1704,6 +1717,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
      *     (which is always the interface, by convention)
      *   - before erasure, it looks up the interface name in the scope of the owner of the class.
      *     This only works for implementation classes owned by other classes or traits.
+     *     !!! Why?
      */
     final def toInterface: Symbol =
       if (isImplClass) {
@@ -2090,6 +2104,8 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
 
     def infosString = infos.toString()
 
+    def debugLocationString = fullLocationString + " " + debugFlagString
+    def debugFlagString = hasFlagsToString(-1L)
     def hasFlagsToString(mask: Long): String = flagsToString(
       flags & mask,
       if (hasAccessBoundary) privateWithin.toString else ""
@@ -2188,7 +2204,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     }
 
     def setLazyAccessor(sym: Symbol): TermSymbol = {
-      assert(isLazy && (referenced == NoSymbol || referenced == sym), (this, hasFlagsToString(-1L), referenced, sym))
+      assert(isLazy && (referenced == NoSymbol || referenced == sym), (this, debugFlagString, referenced, sym))
       referenced = sym
       this
     }
@@ -2329,15 +2345,15 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
 
     /** Overridden in subclasses for which it makes sense.
      */
-    def existentialBound: Type = abort("unexpected type: "+this.getClass+ " "+this.fullLocationString+ " " + hasFlagsToString(-1L))
+    def existentialBound: Type = abort("unexpected type: "+this.getClass+ " "+debugLocationString)
 
-    override def name: TypeName = super.name.asInstanceOf[TypeName]
+    override def name: TypeName = super.name.toTypeName
     final override def isType = true
     override def isNonClassType = true
     override def isAbstractType = {
       if (settings.debug.value) {
         if (isDeferred) {
-          println("TypeSymbol claims to be abstract type: " + this.getClass + " " + hasFlagsToString(-1L) + " at ")
+          println("TypeSymbol claims to be abstract type: " + this.getClass + " " + debugFlagString + " at ")
           (new Throwable).printStackTrace
         }
       }
@@ -2708,6 +2724,8 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
    */
   def cloneSymbolsAndModify(syms: List[Symbol], infoFn: Type => Type): List[Symbol] =
     cloneSymbols(syms) map (_ modifyInfo infoFn)
+  def cloneSymbolsAtOwnerAndModify(syms: List[Symbol], owner: Symbol, infoFn: Type => Type): List[Symbol] =
+    cloneSymbolsAtOwner(syms, owner) map (_ modifyInfo infoFn)
 
   /** Functions which perform the standard clone/substituting on the given symbols and type,
    *  then call the creator function with the new symbols and type as arguments.

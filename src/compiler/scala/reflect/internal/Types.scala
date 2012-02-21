@@ -680,7 +680,7 @@ trait Types extends api.Types { self: SymbolTable =>
      * symbol.
      */
     def substSym(from: List[Symbol], to: List[Symbol]): Type =
-      if (from eq to) this
+      if ((from eq to) || from.isEmpty) this
       else new SubstSymMap(from, to) apply this
 
     /** Substitute all occurrences of `ThisType(from)` in this type by `to`.
@@ -2433,25 +2433,37 @@ trait Types extends api.Types { self: SymbolTable =>
       case _ =>
         List()
     }
-
+    /** An existential can only be printed with wildcards if:
+     *   - the underlying type is a typeref
+     *   - where there is a 1-to-1 correspondence between underlying's typeargs and quantified
+     *   - and none of the existential parameters is referenced from anywhere else in the type 
+     *   - and none of the existential parameters are singleton types
+     */
+    private def isRepresentableWithWildcards = !settings.debug.value && {
+      val qset = quantified.toSet
+      !qset.exists(_.isSingletonExistential) && (underlying match {
+        case TypeRef(_, sym, args) =>
+          sameLength(args, quantified) && {
+            args forall { arg =>
+              qset(arg.typeSymbol) && !qset.exists(arg.typeSymbol.info.bounds contains _)
+            }
+          }
+        case _ => false
+      })
+    }
     override def safeToString: String = {
-      if (!(quantified exists (_.isSingletonExistential)) && !settings.debug.value)
-        // try to represent with wildcards first
-        underlying match {
-          case TypeRef(pre, sym, args) if args.nonEmpty =>
-            val wargs = wildcardArgsString(quantified.toSet, args)
-            if (sameLength(wargs, args))
-              return TypeRef(pre, sym, List()) + wargs.mkString("[", ", ", "]")
-          case _ =>
-        }
-      var ustr = underlying.toString
-      underlying match {
-        case MethodType(_, _) | NullaryMethodType(_) | PolyType(_, _) => ustr = "("+ustr+")"
-        case _ =>
+      def clauses = {
+        val str = quantified map (_.existentialToString) mkString (" forSome { ", "; ", " }")
+        if (settings.explaintypes.value) "(" + str + ")" else str
       }
-      val str =
-        ustr+(quantified map (_.existentialToString) mkString(" forSome { ", "; ", " }"))
-      if (settings.explaintypes.value) "("+str+")" else str
+      underlying match {
+        case TypeRef(pre, sym, args) if isRepresentableWithWildcards =>
+          "" + TypeRef(pre, sym, Nil) + wildcardArgsString(quantified.toSet, args).mkString("[", ", ", "]")
+        case MethodType(_, _) | NullaryMethodType(_) | PolyType(_, _) =>
+          "(" + underlying + ")" + clauses
+        case _ =>
+          "" + underlying + clauses
+      }
     }
 
     override def cloneInfo(owner: Symbol) =
@@ -3260,6 +3272,25 @@ trait Types extends api.Types { self: SymbolTable =>
       case WildcardType                                   => tycon // needed for neg/t0226
       case _                                              => abort(debugString(tycon))
     }
+  
+  /** A creator for existential types where the type arguments,
+   *  rather than being applied directly, are interpreted as the
+   *  upper bounds of unknown types.  For instance if the type argument
+   *  list given is List(AnyRefClass), the resulting type would be
+   *  e.g. Set[_ <: AnyRef] rather than Set[AnyRef] .
+   */
+  def appliedTypeAsUpperBounds(tycon: Type, args: List[Type]): Type = {
+    tycon match {
+      case TypeRef(pre, sym, _) if sameLength(sym.typeParams, args) =>
+        val eparams  = typeParamsToExistentials(sym)
+        val bounds   = args map (TypeBounds upper _) 
+        (eparams, bounds).zipped foreach (_ setInfo _)
+
+        newExistentialType(eparams, typeRef(pre, sym, eparams map (_.tpe)))
+      case _ =>
+        appliedType(tycon, args)
+    }
+  }
 
   /** A creator for type parameterizations that strips empty type parameter lists.
    *  Use this factory method to indicate the type has kind * (it's a polymorphic value)
@@ -3845,6 +3876,8 @@ trait Types extends api.Types { self: SymbolTable =>
 
     eparams map (_ substInfo (tparams, eparams))
   }
+  def typeParamsToExistentials(clazz: Symbol): List[Symbol] =
+    typeParamsToExistentials(clazz, clazz.typeParams)
 
   //  note: it's important to write the two tests in this order,
   //  as only typeParams forces the classfile to be read. See #400
@@ -3876,7 +3909,7 @@ trait Types extends api.Types { self: SymbolTable =>
         if (expanded contains sym) AnyRefClass.tpe
         else try {
           expanded += sym
-          val eparams = mapOver(typeParamsToExistentials(sym, sym.typeParams))
+          val eparams = mapOver(typeParamsToExistentials(sym))
           existentialAbstraction(eparams, typeRef(apply(pre), sym, eparams map (_.tpe)))
         } finally {
           expanded -= sym
@@ -5348,9 +5381,9 @@ trait Types extends api.Types { self: SymbolTable =>
             val params2 = mt2.params
             val res2 = mt2.resultType
             (sameLength(params1, params2) &&
+             mt1.isImplicit == mt2.isImplicit &&
              matchingParams(params1, params2, mt1.isJava, mt2.isJava) &&
-             (res1 <:< res2.substSym(params2, params1)) &&
-             mt1.isImplicit == mt2.isImplicit)
+             (res1 <:< res2.substSym(params2, params1)))
           // TODO: if mt1.params.isEmpty, consider NullaryMethodType?
           case _ =>
             false
@@ -5460,8 +5493,8 @@ trait Types extends api.Types { self: SymbolTable =>
           matchesType(tp1, res2, true)
         case MethodType(_, _) =>
           false
-        case PolyType(tparams2, res2) =>
-          tparams2.isEmpty && matchesType(tp1, res2, alwaysMatchSimple)
+        case PolyType(_, _) =>
+          false
         case _ =>
           alwaysMatchSimple || tp1 =:= tp2
       }
@@ -5470,14 +5503,16 @@ trait Types extends api.Types { self: SymbolTable =>
         tp2 match {
           case mt2 @ MethodType(params2, res2) =>
             // sameLength(params1, params2) was used directly as pre-screening optimization (now done by matchesQuantified -- is that ok, performancewise?)
-            matchesQuantified(params1, params2, res1, res2) &&
+            mt1.isImplicit == mt2.isImplicit &&
             matchingParams(params1, params2, mt1.isJava, mt2.isJava) &&
-            mt1.isImplicit == mt2.isImplicit
+            matchesQuantified(params1, params2, res1, res2)
           case NullaryMethodType(res2) =>
             if (params1.isEmpty) matchesType(res1, res2, alwaysMatchSimple)
             else matchesType(tp1, res2, alwaysMatchSimple)
           case ExistentialType(_, res2) =>
             alwaysMatchSimple && matchesType(tp1, res2, true)
+          case TypeRef(_, sym, Nil) =>
+            params1.isEmpty && sym.isModuleClass && matchesType(res1, tp2, alwaysMatchSimple)
           case _ =>
             false
         }
@@ -5489,13 +5524,18 @@ trait Types extends api.Types { self: SymbolTable =>
             matchesType(res1, res2, alwaysMatchSimple)
           case ExistentialType(_, res2) =>
             alwaysMatchSimple && matchesType(tp1, res2, true)
+          case TypeRef(_, sym, Nil) if sym.isModuleClass =>
+            matchesType(res1, tp2, alwaysMatchSimple)
           case _ =>
             matchesType(res1, tp2, alwaysMatchSimple)
         }
       case PolyType(tparams1, res1) =>
         tp2 match {
           case PolyType(tparams2, res2) =>
-            matchesQuantified(tparams1, tparams2, res1, res2)
+            if ((tparams1 corresponds tparams2)(_ eq _))
+              matchesType(res1, res2, alwaysMatchSimple)
+            else
+              matchesQuantified(tparams1, tparams2, res1, res2)
           case ExistentialType(_, res2) =>
             alwaysMatchSimple && matchesType(tp1, res2, true)
           case _ =>
@@ -5508,6 +5548,12 @@ trait Types extends api.Types { self: SymbolTable =>
           case _ =>
             if (alwaysMatchSimple) matchesType(res1, tp2, true)
             else lastTry
+        }
+      case TypeRef(_, sym, Nil) if sym.isModuleClass =>
+        tp2 match {
+          case MethodType(Nil, res2)   => matchesType(tp1, res2, alwaysMatchSimple)
+          case NullaryMethodType(res2) => matchesType(tp1, res2, alwaysMatchSimple)
+          case _                       => lastTry
         }
       case _ =>
         lastTry
