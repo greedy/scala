@@ -240,11 +240,10 @@ INITIALISATION
     <available property="llvm.jar.available" file="${lib.dir}/llvm.jar"/>
   </target>
 
-  <target name="strap.llvm" depends="libs.llvm.starr" unless="llvm.jar.available">
+  <target name="init.llvm" depends="check.llvm" unless="llvm.jar.available">
+    <antcall target="libs.llvm.starr"/>
     <copy todir="${lib.dir}" file="${build-libs.dir}/llvm.jar"/>
   </target>
-
-  <target name="init.llvm" depends="check.llvm,strap.llvm"/>
 
   <target name="init" depends="init.jars">
   <!-- scalac.args.optimise is selectively overridden in certain antcall tasks. -->
