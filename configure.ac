@@ -1,5 +1,5 @@
 AC_INIT([scala-llvm],[0])
-AC_CONFIG_SRCDIR([src/llvm-ffi/scala/ffi/ctypes.scala.in])
+AC_CONFIG_SRCDIR([src/llvm/library/scala/ffi/ctypes.scala.in])
 
 AC_DEFUN([CHECK_INT_TYPE],[
   AC_CHECK_SIZEOF([$1])
@@ -34,6 +34,6 @@ CHECK_ALIGNMENT([int64_t])
 CHECK_ALIGNMENT([float])
 CHECK_ALIGNMENT([double])
 
-AC_CONFIG_SUBDIRS([src/llvmrt])
-AC_CONFIG_FILES([src/llvm-ffi/scala/ffi/ctypes.scala])
+AC_CONFIG_SUBDIRS([src/llvm/runtime])
+AC_CONFIG_FILES([src/llvm/library/scala/ffi/ctypes.scala])
 AC_OUTPUT

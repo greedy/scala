@@ -5,11 +5,11 @@ SCALAC=JAVA_OPTS=-Xmx500M ../../../build/quick/bin/scalac
 SLFLAGS=-no-specialization -target:llvm
 
 run-sample:
-	make -C ../../../src/llvmrt llvmrt.a runscala
+	make -C ../../../src/llvm/runtime llvmrt.a runscala
 	rm -rf irfiles/example irfiles/example.stamp
 	rm -rf bin/example.bc bin/example.aot
 	make irfiles/example.stamp bin/example.bc
-	../../../src/llvmrt/runscala bin/example.bc example
+	../../../src/llvm/runtime/runscala bin/example.bc example
 
 run-sample-jvm:
 	make classes
@@ -51,13 +51,13 @@ bin/%.bc: irfiles/%.stamp
 	for x in irfiles/$*/*.ll ; do \
 	  llvm-as $$x; \
 	done
-	llvm-ld -o $@ -r -disable-internalize irfiles/$*/*.bc ../../../src/llvmrt/llvmrt.a
+	llvm-ld -o $@ -r -disable-internalize irfiles/$*/*.bc ../../../src/llvm/runtime/llvmrt.a
 	opt -O3 -o bin/$*.opt.bc $@
 	mv bin/$*.opt.bc $@
 
 bin/%.aot: bin/%.bc
-	../../../src/llvmrt/linkscala $< `basename $*`
-	llvm-ld -v -native -o $@ b.out.bc ../../../src/llvmrt/llvmrt.a -lapr-1 -L/usr/lib64 `icu-config --ldflags-libsonly ` ../../../src/llvmrt/unwind.o
+	../../../src/llvm/runtime/linkscala $< `basename $*`
+	llvm-ld -v -native -o $@ b.out.bc ../../../src/llvm/runtime/llvmrt.a -lapr-1 -L/usr/lib64 `icu-config --ldflags-libsonly ` ../../../src/llvm/runtime/unwind.o
 	rm -f b.out.bc
 
 classes: example.scala

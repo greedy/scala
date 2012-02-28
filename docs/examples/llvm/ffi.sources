@@ -1,6 +1,6 @@
-../../../src/llvm-ffi/scala/ffi/ctypes.scala
-../../../src/llvm-ffi/scala/ffi/package.scala
-../../../src/llvm-ffi/scala/ffi/Ptr.scala
-../../../src/llvm-ffi/scala/ffi/Storable.scala
-../../../src/llvm-ffi/scala/ffi/alloc.scala
-../../../src/llvm-ffi/scala/ffi/foreign.scala
+../../../src/llvm/library/scala/ffi/ctypes.scala
+../../../src/llvm/library/scala/ffi/package.scala
+../../../src/llvm/library/scala/ffi/Ptr.scala
+../../../src/llvm/library/scala/ffi/Storable.scala
+../../../src/llvm/library/scala/ffi/alloc.scala
+../../../src/llvm/library/scala/ffi/foreign.scala

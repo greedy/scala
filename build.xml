@@ -236,13 +236,13 @@ INITIALISATION
     </touch>
   </target>
 
-  <target name="check.llvm">
-    <available property="llvm.jar.available" file="${lib.dir}/llvm.jar"/>
+  <target name="check.llvmil">
+    <available property="llvmil.jar.available" file="${lib.dir}/llvmil.jar"/>
   </target>
 
-  <target name="init.llvm" depends="check.llvm" unless="llvm.jar.available">
-    <antcall target="libs.llvm.starr"/>
-    <copy todir="${lib.dir}" file="${build-libs.dir}/llvm.jar"/>
+  <target name="init.llvm" depends="check.llvmil" unless="llvmil.jar.available">
+    <antcall target="libs.llvmil.starr"/>
+    <copy todir="${lib.dir}" file="${build-libs.dir}/llvmil.jar"/>
   </target>
 
   <target name="init" depends="init.jars">
@@ -297,7 +297,7 @@ INITIALISATION
         <include name="fjbg.jar"/>
         <include name="msil.jar"/>
         <include name="forkjoin.jar"/>
-        <include name="llvm.jar"/>
+        <include name="llvmil.jar"/>
       </fileset>
       <pathelement location="${ant.jar}"/>
       <path refid="lib.extra"/>
@@ -655,13 +655,13 @@ QUICK BUILD (QUICK)
   <target name="quick.newlibs" depends="quick.lib" if="libs.outdated">
     <antcall target="libs.done" inheritRefs="true"/>
     <property name="fjbg.jar" value="${build-libs.dir}/fjbg.jar"/>
-    <property name="llvm.jar" value="${build-libs.dir}/llvm.jar"/>
+    <property name="llvmil.jar" value="${build-libs.dir}/llvmil.jar"/>
     <property name="msil.jar" value="${build-libs.dir}/msil.jar"/>
   </target>
   
   <target name="quick.libs" depends="quick.newlibs" unless="libs.outdated">
     <property name="fjbg.jar" value="${lib.dir}/fjbg.jar"/>
-    <property name="llvm.jar" value="${lib.dir}/llvm.jar"/>
+    <property name="llvmil.jar" value="${lib.dir}/llvmil.jar"/>
     <property name="msil.jar" value="${lib.dir}/msil.jar"/>
   </target>
 
@@ -985,7 +985,7 @@ PACKED QUICK BUILD (PACK)
       <fileset dir="${build-quick.dir}/classes/compiler"/>
       <!-- filemode / dirmode: see trac ticket #1294 -->
       <zipfileset dirmode="755" filemode="644" src="${fjbg.jar}"/>
-      <zipfileset dirmode="755" filemode="644" src="${llvm.jar}"/>
+      <zipfileset dirmode="755" filemode="644" src="${llvmil.jar}"/>
       <zipfileset dirmode="755" filemode="644" src="${msil.jar}"/>
     </jar>
     <copy file="${jline.jar}" toDir="${build-pack.dir}/lib"/>
@@ -1512,60 +1512,60 @@ LIBRARIES (MSIL, FJBG maybe later)
     </jar>
   </target>
 
-  <target name="libs.pre-llvm" depends="libs.start">
-    <uptodate property="libs.llvm.available" targetfile="${build-libs.dir}/llvm.complete">
-      <srcfiles dir="${src.dir}/llvm">
+  <target name="libs.pre-llvmil" depends="libs.start">
+    <uptodate property="libs.llvmil.available" targetfile="${build-libs.dir}/llvmil.complete">
+      <srcfiles dir="${src.dir}/llvm/llvmil">
 	<include name="**/*.java"/>
 	<include name="**/*.scala"/>
       </srcfiles>
     </uptodate>
   </target>
 
-  <target name="libs.llvm.starr" depends="init">
-    <mkdir dir="${build-libs.dir}/classes/llvm"/>
+  <target name="libs.llvmil.starr" depends="init">
+    <mkdir dir="${build-libs.dir}/classes/llvmil"/>
     <scalacfork
-      destdir="${build-libs.dir}/classes/llvm"
+      destdir="${build-libs.dir}/classes/llvmil"
       compilerpathref="starr.classpath"
       params="${scalac.args.all}"
-      srcdir="${src.dir}/llvm"
+      srcdir="${src.dir}/llvm/llvmil"
       jvmargs="${scalacfork.jvmargs}">
       <include name="**/*.scala"/>
       <compilationpath>
         <pathelement location="${lib.starr.jar}"/>
       </compilationpath>
     </scalacfork>
-    <touch file="${build-libs.dir}/llvm.complete" verbose="no"/>
-    <jar destfile="${build-libs.dir}/llvm.jar">
-      <fileset dir="${build-libs.dir}/classes/llvm"/>
+    <touch file="${build-libs.dir}/llvmil.complete" verbose="no"/>
+    <jar destfile="${build-libs.dir}/llvmil.jar">
+      <fileset dir="${build-libs.dir}/classes/llvmil"/>
     </jar>
   </target>
 
-  <target name="libs.llvm" depends="libs.pre-llvm" unless="libs.llvm.available">
-    <mkdir dir="${build-libs.dir}/classes/llvm"/>
+  <target name="libs.llvmil" depends="libs.pre-llvmil" unless="libs.llvmil.available">
+    <mkdir dir="${build-libs.dir}/classes/llvmil"/>
     <scalacfork
-      destdir="${build-libs.dir}/classes/llvm"
+      destdir="${build-libs.dir}/classes/llvmil"
       compilerpathref="locker.classpath"
       params="${scalac.args.all}"
-      srcdir="${src.dir}/llvm"
+      srcdir="${src.dir}/llvm/llvmil"
       jvmargs="${scalacfork.jvmargs}">
       <include name="**/*.scala"/>
       <compilationpath>
 	<pathelement location="${build-quick.dir}/classes/library"/>
       </compilationpath>
     </scalacfork>
-    <touch file="${build-libs.dir}/llvm.complete" verbose="no"/>
+    <touch file="${build-libs.dir}/llvmil.complete" verbose="no"/>
   </target>
 
-  <target name="libs.pre-llvmpack" depends="libs.llvm">
+  <target name="libs.pre-llvmilpack" depends="libs.llvmil">
   </target>
 
-  <target name="libs.llvmpack" depends="libs.pre-llvmpack" unless="libs.llvmpack.available">
-    <jar destfile="${build-libs.dir}/llvm.jar">
-      <fileset dir="${build-libs.dir}/classes/llvm"/>
+  <target name="libs.llvmilpack" depends="libs.pre-llvmilpack" unless="libs.llvmilpack.available">
+    <jar destfile="${build-libs.dir}/llvmil.jar">
+      <fileset dir="${build-libs.dir}/classes/llvmil"/>
     </jar>
   </target>
 
-  <target name="libs.done" depends="libs.msilpack, libs.fjbgpack, libs.llvmpack"/>
+  <target name="libs.done" depends="libs.msilpack, libs.fjbgpack, libs.llvmilpack"/>
 
   <target name="forkjoin.done" depends="libs.forkjoinpack"/>
   
@@ -2073,7 +2073,7 @@ STABLE REFERENCE (STARR)
     <copy toDir="${lib.dir}" overwrite="yes">
       <fileset dir="${build-libs.dir}">
         <include name="fjbg.jar"/>
-        <include name="llvm.jar"/>
+        <include name="llvmil.jar"/>
         <include name="msil.jar"/>
         <include name="forkjoin.jar"/>
       </fileset>
