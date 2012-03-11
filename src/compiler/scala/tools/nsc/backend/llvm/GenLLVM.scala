@@ -893,8 +893,8 @@ abstract class GenLLVM extends SubComponent {
       }
 
       def exportFunction(m: IMethod): Seq[ModuleComp] = {
-        m.symbol.getAnnotation(ForeignExportAnnotSym) match {
-          case Some(AnnotationInfo(_,List(Literal(Constant(foreignSymbol: String))),_)) => {
+        m.symbol.getAnnotation(ForeignExportAnnotSym).get match {
+          case AnnotationInfo(_,List(Literal(Constant(foreignSymbol: String))),_) => {
             val methType = m.symbol.info
             if (!m.symbol.isStatic) {
               error("Only object methods can be exported"); Seq.empty
