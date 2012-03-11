@@ -14,7 +14,7 @@ object Storable extends ctypes.StorableCtypes
 }
 
 trait Storable[T] {
-  def size: Int
+  def size: CSizeT
   def alignment: Int
   def peekElemOff(base: Ptr[T], n: Int): T = peek(base plus (n * size))
   def pokeElemOff(base: Ptr[T], n: Int, x: T): Unit = poke(base plus (n * size), x)
