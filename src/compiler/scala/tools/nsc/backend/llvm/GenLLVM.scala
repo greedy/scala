@@ -717,12 +717,23 @@ abstract class GenLLVM extends SubComponent {
 
       val virtualMethodCache: mutable.Map[Symbol,List[Symbol]] = new mutable.HashMap
 
+
+/* intp("scala.Some").info.decls.toList filterNot (_.allOverriddenSymbols.headOption exists (_ isDeferred)) */
+/*
+ def vms(s:Symbol):List[(Symbol,List[Symbol])] = if (s == NoSymbol) Nil else { val sms = vms(s.superClass); val mms = s.info.members.filterNot(m => !m.isMethod || m.isConstructor || m.isEffectivelyFinal || m.isOverride || m.allOverriddenSymbols.exists(o => supers(s).contains(o.owner))); sms ++ List((s,(mms.toSet -- sms.flatMap(_._2).toSet).toList)) }
+*/
       def virtualMethods(s: Symbol): List[Symbol] = {
         virtualMethodCache.getOrElseUpdate(s,
           if (s == NoSymbol) Nil
           else {
-            val myvirts = s.info.decls.toList.filter(d => d.isMethod && !d.isConstructor && !(d.isOverride && s.superClass.info.members.exists(mem => mem.info <:< d.info && mem.name == d.name)) && (d.isDeferred || !d.isEffectivelyFinal))
+            val supers = Stream.iterate(s.superClass)(_.superClass).takeWhile(s => s != NoSymbol).toList
+            val mymembers = s.info.members.filterNot(m => !m.isMethod || m.isConstructor || (!m.isDeferred && m.isEffectivelyFinal) || m.allOverriddenSymbols.exists(o => supers.contains(o.owner)))
+            val supervirts = virtualMethods(s.superClass)
+            supervirts ++ (mymembers.toSet -- supervirts.toSet).toList.sortBy(methodSig _)
+/*
+            val myvirts = s.info.decls.toList.filter(d => d.isMethod && !d.isConstructor && !(d.allOverriddenSymbols exists (m => !m.isDeferred)) && (d.isDeferred || !d.isEffectivelyFinal))
             (virtualMethods(s.superClass) ++ myvirts.sortBy(methodSig _)).toList
+*/
           }
         )
       }
