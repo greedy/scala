@@ -546,3 +546,11 @@ method__Ojava_Dlang_DString_Mutf8bytes_Ajava_Dlang_DString_R_Nscala_DByte(
     return NULL;
   }
 }
+
+struct java_lang_Object*
+method_java_Dlang_DString_MgetBytes_R_Nscala_DByte(
+    struct java_lang_String *self, vtable_t selfVtable,
+    vtable_t *vtableOut)
+{
+  return method__Ojava_Dlang_DString_Mutf8bytes_Ajava_Dlang_DString_R_Nscala_DByte(NULL, NULL, self, selfVtable, vtableOut);
+}
