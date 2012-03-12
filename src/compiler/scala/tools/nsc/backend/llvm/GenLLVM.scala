@@ -1111,7 +1111,7 @@ abstract class GenLLVM extends SubComponent {
           Seq(header) ++ hblocks ++ Seq(footer)
         }
 
-        m.code.blocks.filter(reachable).foreach { bb =>
+        m.code.blocks./*filter(reachable).*/foreach { bb =>
           val stack: mutable.Stack[(LMValue[_<:ConcreteType],TypeKind)] = mutable.Stack()
           def popn(n: Int) {
             for (_ <- 0 until n) stack.pop
@@ -1120,7 +1120,7 @@ abstract class GenLLVM extends SubComponent {
           val pass = Label("__PASS__")
           val excpreds = bb.code.blocks.filter(pb => pb.exceptionSuccessors.contains(bb))
           val dirpreds = bb.code.blocks.filter(_.directSuccessors contains bb)
-          val preds = (excpreds ++ dirpreds).filter(reachable)
+          val preds = (excpreds ++ dirpreds)/*.filter(reachable)*/
           insns.append(new icomment("predecessors: "+preds.map(_.fullString).mkString(",")+" successors: "+bb.successors.map(_.fullString).mkString(" ")))
           def loadobjvtbl(src: LMValue[SomeConcreteType])(implicit _insns: InstBuffer): LMValue[SomeConcreteType] = {
             val asobj = nextvar(rtObject.pointer)
@@ -1278,15 +1278,15 @@ abstract class GenLLVM extends SubComponent {
               recordType(lt)
               if (tpe.isValueType || tpe == ConcatClass) {
                 val reg = new LocalVariable(blockName(bb)+".in."+n.toString,lt)
-                val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
-                val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
+                val dirsources = dirpreds/*.filter(reachable)*/.map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
+                val excsources = excpreds/*.filter(reachable)*/.map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
                 val sources = dirsources ++ excsources
                 insns.append(new phi(reg, sources))
                 stack.push((reg, tpe))
               } else {
                 val asobj = nextvar(rtReference)
-                val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
-                val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
+                val dirsources = dirpreds/*.filter(reachable)*/.map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
+                val excsources = excpreds/*.filter(reachable)*/.map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
                 val sources = dirsources ++ excsources
                 insns.append(new phi(asobj, sources))
                 stack.push((cast(asobj, ObjectReference, tpe)(predcasts), tpe))
@@ -2283,7 +2283,7 @@ abstract class GenLLVM extends SubComponent {
 
     def stackUsage(bb: BasicBlock, memo: immutable.BitSet): (Seq[TypeKind],Seq[TypeKind]) = {
       val (ict,ipt) = internalUsage(bb)
-      val predextras = bb.predecessors.filter(pb => reachable(pb) && !memo(pb.label)).headOption match {
+      val predextras = bb.predecessors.filter(pb => /*reachable(pb) &&*/ !memo(pb.label)).headOption match {
         case Some(p) => stackUsage(p, memo+bb.label)._2.dropRight(ict.length)
         case None => Seq.empty
       }
