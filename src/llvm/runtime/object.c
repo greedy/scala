@@ -20,6 +20,7 @@ struct klass class_java_Dlang_DObject = {
   NULL,
   NULL,
   0,
+  0,
 };
 
 int32_t
