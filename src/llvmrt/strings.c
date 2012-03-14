@@ -39,6 +39,7 @@ struct klass class_java_Dlang_DString = {
   NULL,
   NULL,
   0,
+  0,
 };
 
 void
