@@ -681,6 +681,14 @@ abstract class GenLLVM extends SubComponent {
         }
       }
 
+      def externFieldFun(s: Symbol, static: Boolean) = {
+        externFuns.getOrElseUpdate(s, {
+          val fun = fieldPtrfun(s, static)
+          fun.tpe.argTypes.foreach(recordType)
+          recordType(fun.tpe.returnType)
+          fun
+        })
+      }
       def externFun(s: Symbol) = {
         externFuns.getOrElseUpdate(s, {
           val fun = functionForMethodSymbol(s)
@@ -717,12 +725,23 @@ abstract class GenLLVM extends SubComponent {
 
       val virtualMethodCache: mutable.Map[Symbol,List[Symbol]] = new mutable.HashMap
 
+
+/* intp("scala.Some").info.decls.toList filterNot (_.allOverriddenSymbols.headOption exists (_ isDeferred)) */
+/*
+ def vms(s:Symbol):List[(Symbol,List[Symbol])] = if (s == NoSymbol) Nil else { val sms = vms(s.superClass); val mms = s.info.members.filterNot(m => !m.isMethod || m.isConstructor || m.isEffectivelyFinal || m.isOverride || m.allOverriddenSymbols.exists(o => supers(s).contains(o.owner))); sms ++ List((s,(mms.toSet -- sms.flatMap(_._2).toSet).toList)) }
+*/
       def virtualMethods(s: Symbol): List[Symbol] = {
         virtualMethodCache.getOrElseUpdate(s,
           if (s == NoSymbol) Nil
           else {
-            val myvirts = s.info.decls.toList.filter(d => d.isMethod && !d.isConstructor && !(d.isOverride && s.superClass.info.members.exists(mem => mem.info <:< d.info && mem.name == d.name)) && (d.isDeferred || !d.isEffectivelyFinal))
+            val supers = Stream.iterate(s.superClass)(_.superClass).takeWhile(s => s != NoSymbol).toList
+            val mymembers = s.info.members.filterNot(m => !m.isMethod || m.isConstructor || (!m.isDeferred && m.isEffectivelyFinal) || m.allOverriddenSymbols.exists(o => supers.contains(o.owner)))
+            val supervirts = virtualMethods(s.superClass)
+            supervirts ++ (mymembers.toSet -- supervirts.toSet).toList.sortBy(methodSig _)
+/*
+            val myvirts = s.info.decls.toList.filter(d => d.isMethod && !d.isConstructor && !(d.allOverriddenSymbols exists (m => !m.isDeferred)) && (d.isDeferred || !d.isEffectivelyFinal))
             (virtualMethods(s.superClass) ++ myvirts.sortBy(methodSig _)).toList
+*/
           }
         )
       }
@@ -882,8 +901,8 @@ abstract class GenLLVM extends SubComponent {
       }
 
       def exportFunction(m: IMethod): Seq[ModuleComp] = {
-        m.symbol.getAnnotation(ForeignExportAnnotSym) match {
-          case Some(AnnotationInfo(_,List(Literal(Constant(foreignSymbol: String))),_)) => {
+        m.symbol.getAnnotation(ForeignExportAnnotSym).get match {
+          case AnnotationInfo(_,List(Literal(Constant(foreignSymbol: String))),_) => {
             val methType = m.symbol.info
             if (!m.symbol.isStatic) {
               error("Only object methods can be exported"); Seq.empty
@@ -1016,6 +1035,21 @@ abstract class GenLLVM extends SubComponent {
         }
       }
 
+      def genFieldFun(m: IField,i:Int) = {
+        val static = m.symbol.isStaticMember
+        val thisobj = new LocalVariable(".thisobj", rtObject.pointer)
+        val thisvar = new LocalVariable(".this", classType(c.symbol).pointer)
+        val fun = fieldPtrfun(m.symbol, static)
+        val src = if (static) externStaticP(c.symbol) else thisvar.asInstanceOf[LMValue[LMPointer]]
+        val prep = if (static) Seq() else Seq(new bitcast(thisvar, fun.args(0).lmvar))
+        val fieldptr = new LocalVariable("fieldptr", symType(m.symbol).pointer)
+        val idx = new CInt(LMInt.i32,if (static) i else i+1)
+        val body = Seq(LMBlock(Some(Label("start")), prep ++ Seq(
+          new getelementptr(fieldptr, src, Seq(new CInt(LMInt.i8,0),idx)),
+          new ret(fieldptr)
+        )))
+        fun.define(body)
+      }
 
       def genNativeFun(m: IMethod) = {
         val thisarg = ArgSpec(new LocalVariable(".this", symType(c.symbol)))
@@ -1077,7 +1111,7 @@ abstract class GenLLVM extends SubComponent {
           Seq(header) ++ hblocks ++ Seq(footer)
         }
 
-        m.code.blocks.filter(reachable).foreach { bb =>
+        m.code.blocks./*filter(reachable).*/foreach { bb =>
           val stack: mutable.Stack[(LMValue[_<:ConcreteType],TypeKind)] = mutable.Stack()
           def popn(n: Int) {
             for (_ <- 0 until n) stack.pop
@@ -1086,7 +1120,7 @@ abstract class GenLLVM extends SubComponent {
           val pass = Label("__PASS__")
           val excpreds = bb.code.blocks.filter(pb => pb.exceptionSuccessors.contains(bb))
           val dirpreds = bb.code.blocks.filter(_.directSuccessors contains bb)
-          val preds = (excpreds ++ dirpreds).filter(reachable)
+          val preds = (excpreds ++ dirpreds)/*.filter(reachable)*/
           insns.append(new icomment("predecessors: "+preds.map(_.fullString).mkString(",")+" successors: "+bb.successors.map(_.fullString).mkString(" ")))
           def loadobjvtbl(src: LMValue[SomeConcreteType])(implicit _insns: InstBuffer): LMValue[SomeConcreteType] = {
             val asobj = nextvar(rtObject.pointer)
@@ -1244,15 +1278,15 @@ abstract class GenLLVM extends SubComponent {
               recordType(lt)
               if (tpe.isValueType || tpe == ConcatClass) {
                 val reg = new LocalVariable(blockName(bb)+".in."+n.toString,lt)
-                val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
-                val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
+                val dirsources = dirpreds/*.filter(reachable)*/.map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
+                val excsources = excpreds/*.filter(reachable)*/.map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
                 val sources = dirsources ++ excsources
                 insns.append(new phi(reg, sources))
                 stack.push((reg, tpe))
               } else {
                 val asobj = nextvar(rtReference)
-                val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
-                val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
+                val dirsources = dirpreds/*.filter(reachable)*/.map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
+                val excsources = excpreds/*.filter(reachable)*/.map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
                 val sources = dirsources ++ excsources
                 insns.append(new phi(asobj, sources))
                 stack.push((cast(asobj, ObjectReference, tpe)(predcasts), tpe))
@@ -1320,27 +1354,36 @@ abstract class GenLLVM extends SubComponent {
               }
               case i@LOAD_FIELD(field, false) => {
                 val v = nextvar(symType(field))
-                val fieldptr = nextvar(v.tpe.pointer)
+                val fieldptr = nextvar(symType(field).pointer)
+                val (ivar,isym) = stack.pop
+                val instance = cast(ivar,isym,toTypeKind(field.owner.tpe))
+                val asobj = getrefptr(instance)
+                val instptr = nextvar(classType(field.owner).pointer)
+                insns.append(new bitcast(instptr, asobj))
+                insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
+                insns.append(new call(fieldptr, externFieldFun(field, false), Seq(asobj)))
+                insns.append(new load(v, fieldptr))
+                stack.push((v,toTypeKind(field.tpe)))
+                /*
                 instFields(field.owner) match {
                   case Some(fi) =>
                     val fieldidx = fi.indexWhere(f => f.symbol == field)
                     assume(fieldidx >= 0)
-                    val (ivar,isym) = stack.pop
-                    val instance = cast(ivar,isym,toTypeKind(field.owner.tpe))
-                    val asobj = getrefptr(instance)
-                    val instptr = nextvar(classType(field.owner).pointer)
-                    insns.append(new bitcast(instptr, asobj))
-                    insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
                     insns.append(new getelementptr(fieldptr, instptr.asInstanceOf[LMValue[LMPointer]], Seq(new CInt(LMInt.i8,0),new CInt(LMInt.i32,fieldidx+1))))
-                    insns.append(new load(v, fieldptr))
-                    stack.push((v,toTypeKind(field.tpe)))
                   case None =>
                     error("No field info for "+field.owner+" needed to lookup position of "+field)
                     m.dump
                     stack.push((new CUndef(v.tpe), toTypeKind(field.tpe)))
                 }
+                */
               }
               case LOAD_FIELD(field, true) => {
+                val v = nextvar(symType(field))
+                val fieldptr = nextvar(v.tpe.pointer)
+                insns.append(new call(fieldptr, externFieldFun(field, true), Seq()))
+                insns.append(new load(v, fieldptr))
+                stack.push((v,toTypeKind(field.tpe)))
+                /*
                 val v = nextvar(symType(field))
                 val fieldptr = nextvar(v.tpe.pointer)
                 staticFields(field.owner) match {
@@ -1355,6 +1398,7 @@ abstract class GenLLVM extends SubComponent {
                     m.dump
                     stack.push((new CUndef(v.tpe), ObjectReference))
                 }
+                */
               }
               case LOAD_MODULE(module) => {
                 insns.append(new call_void(moduleInitFun(module), Seq.empty))
@@ -1380,6 +1424,16 @@ abstract class GenLLVM extends SubComponent {
               }
               case STORE_FIELD(field, false) => {
                 val fieldptr = nextvar(symType(field).pointer)
+                val (value,valuesym) = stack.pop
+                val (ivar,isym) = stack.pop
+                val instance = cast(ivar,isym,toTypeKind(field.owner.tpe))
+                val asobj = getrefptr(instance)
+                val instptr = nextvar(classType(field.owner).pointer)
+                insns.append(new bitcast(instptr, asobj))
+                insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
+                insns.append(new call(fieldptr, externFieldFun(field, false), Seq(asobj)))
+                insns.append(new store(cast(value, valuesym, toTypeKind(field.tpe)), fieldptr))
+                /*
                 instFields(field.owner) match {
                   case Some(fi) =>
                     val fieldidx = fi.indexWhere(f => f.symbol == field)
@@ -1396,9 +1450,14 @@ abstract class GenLLVM extends SubComponent {
                   case None =>
                     error("No field info for "+field.owner+" needed to lookup position of "+field)
                 }
+                */
               }
               case STORE_FIELD(field, true) => {
                 val fieldptr = nextvar(symType(field).pointer)
+                val (value,valuesym) = stack.pop
+                insns.append(new call(fieldptr, externFieldFun(field, true), Seq()))
+                insns.append(new store(cast(value, valuesym, toTypeKind(field.tpe)), fieldptr))
+                /*
                 staticFields(field.owner) match {
                   case Some(fi) =>
                     val fieldidx = fi.indexWhere(f => f.symbol == field)
@@ -1409,6 +1468,7 @@ abstract class GenLLVM extends SubComponent {
                   case None =>
                     error("No field info for "+field.owner+" needed to lookup position of "+field)
                 }
+                */
               }
               case CALL_PRIMITIVE(primitive) => {
                 primitive match {
@@ -2000,6 +2060,9 @@ abstract class GenLLVM extends SubComponent {
       val methods = concreteMethods.filter(m => !CodegenAnnotations.exists(a => m.symbol.hasAnnotation(a)))
       val llvmmethods = concreteMethods.filter(_.symbol.hasAnnotation(LlvmimplAnnotSym))
       val methodFuns = methods.filter(_.code != NoCode).map(m => try { genFun(m) } catch { case e => println(e); m.dump; throw e } )
+      val staticFieldFuns = c.fields.filter(_.symbol.isStaticMember).zipWithIndex.map((genFieldFun _).tupled)
+      val nonstaticFieldFuns = c.fields.filterNot(_.symbol.isStaticMember).zipWithIndex.map((genFieldFun _).tupled)
+      val fieldFuns = staticFieldFuns ++ nonstaticFieldFuns
       val llvmmethodFuns = llvmmethods.map(genNativeFun)
       val foreignFuns = c.methods.filter(_.symbol.hasAnnotation(ForeignAnnotSym)).flatMap(genForeignFun)
       val foreignVals = c.methods.filter(_.symbol.hasAnnotation(ForeignValueAnnotSym)).flatMap(genForeignVal)
@@ -2019,6 +2082,7 @@ abstract class GenLLVM extends SubComponent {
         otherModules.keys.map(mod => moduleInitFun(mod).declare),
         classInfo,
         methodFuns,
+        fieldFuns,
         llvmmethodFuns,
         exportedFunctions,
         foreignFuns,
@@ -2145,7 +2209,7 @@ abstract class GenLLVM extends SubComponent {
       dir.fileNamed(llvmName(sym) + suffix)
     }
 
-    /* used escapes: _ D L G S O M R A N */
+    /* used escapes: _ D L G S O M R A N F */
 
     def encodeName(s: String) = {
       s.replace("_","__")
@@ -2173,6 +2237,14 @@ abstract class GenLLVM extends SubComponent {
         llvmName(sym.owner)+methodSig(sym)
       else
 	encodeName(sym.simpleName.toString.trim)
+    }
+
+    def fieldPtrfun(sym: Symbol, static: Boolean): LMFunction = {
+      val prefix = if (static) "static_" else ""
+      val funName = llvmName(sym.owner)+"_F"+llvmName(sym)
+      val restype = symType(sym).pointer
+      val args = if (static) Nil else List(ArgSpec(new LocalVariable("t", rtObject.pointer)))
+      new LMFunction(restype, funName, args, false, Externally_visible, Default, Ccc, Seq.empty, Seq.empty, None, None, None)
     }
 
     def blockLabel(bb: BasicBlock) = Label(blockName(bb))
@@ -2211,7 +2283,7 @@ abstract class GenLLVM extends SubComponent {
 
     def stackUsage(bb: BasicBlock, memo: immutable.BitSet): (Seq[TypeKind],Seq[TypeKind]) = {
       val (ict,ipt) = internalUsage(bb)
-      val predextras = bb.predecessors.filter(pb => reachable(pb) && !memo(pb.label)).headOption match {
+      val predextras = bb.predecessors.filter(pb => /*reachable(pb) &&*/ !memo(pb.label)).headOption match {
         case Some(p) => stackUsage(p, memo+bb.label)._2.dropRight(ict.length)
         case None => Seq.empty
       }

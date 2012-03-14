@@ -195,6 +195,7 @@ package java {
       def toString(i: scala.Int) = valueOf(i).toString
 
       def rotateLeft(i: scala.Int, amt: scala.Int) = (i << (32-amt)) | (i >>> amt)
+      def signum(i: scala.Int) = if (i < 0) -1 else if (i == 0) 0 else 1
     }
     class Integer(value: scala.Int) extends Number {
       // def byteValue: scala.Byte = value.toByte
@@ -277,6 +278,7 @@ package java {
       def toHexString(i: scala.Long): java.lang.String = sys.error("unimplemented")
       def toOctalString(i: scala.Long): java.lang.String = sys.error("unimplemented")
       def toString(i: scala.Long) = valueOf(i).toString
+      def signum(l: scala.Long) = if (l < 0) -1 else if (l == 0) 0 else 1
     }
     class Long(value: scala.Long) extends Number {
       // def byteValue: scala.Byte = value.toByte
