@@ -507,7 +507,7 @@ package java {
       def print(f: Float): Unit = print(f.toString)
       def print(d: Double): Unit = print(d.toString)
       def print(s: Array[Char]): Unit = print("character array")
-      def print(s: String): Unit = if (s eq null) print("null") else { write(String.utf8bytes(s)) }
+      def print(s: String): Unit = if (s eq null) write(String.utf8bytes("null")) else { write(String.utf8bytes(s)) }
       def print(x: Any): Unit = x match {
         case b: Boolean => print(b)
         case c: Char => print(c)
