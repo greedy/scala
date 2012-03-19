@@ -96,7 +96,7 @@ new_array(uint8_t k, struct klass *et, int32_t ndims, int32_t dim0, ...)
       break;
   }
   datasize = sizeof(struct array) + dim0 * eltsize;
-  data = a = gcalloc(datasize);
+  data = a = (struct array*)gcalloc(datasize);
   a->super.klass = aclass;
   a->length = dim0;
   va_start(dims, dim0);
@@ -104,7 +104,7 @@ new_array(uint8_t k, struct klass *et, int32_t ndims, int32_t dim0, ...)
     int32_t dimN = va_arg(dims, int32_t);
     void **td;
     aclass = arrayOf(aclass);
-    a = gcalloc(sizeof(struct array) + dimN * sizeof(void*));
+    a = (struct array*)gcalloc(sizeof(struct array) + dimN * sizeof(void*));
     a->super.klass = aclass;
     a->length = dimN;
     for (size_t i = 0; i < dimN; i++) {

@@ -477,6 +477,8 @@ abstract class GenLLVM extends SubComponent {
         new TypeAlias(rtReference),
         scalaPersonality.declare,
         rtNew.declare,
+        rtPushref.declare,
+        rtPopref.declare,
         rtInitobj.declare,
         rtInitLoop.declare,
         rtNewArray.declare,
@@ -1136,29 +1138,6 @@ abstract class GenLLVM extends SubComponent {
 
         m.code.blocks./*filter(reachable).*/foreach { bb =>
           val stack: mutable.Stack[(LMValue[_<:ConcreteType],TypeKind)] = mutable.Stack()
-          def pop()(implicit _insns: InstBuffer) = {
-            val r = stack.pop
-            if (r._2.isRefArrayOrBoxType) {
-              _insns.append(new call_void(rtPopref, Seq(new CInt(LMInt.i32, 1))))
-            }
-            r
-          }
-          def popn(n: Int)(implicit _insns: InstBuffer) {
-            for (_ <- 0 until n) pop()(_insns)
-            _insns.append(new call_void(rtPopref, Seq(new CInt(LMInt.i32, n))))
-          }
-          def push(x: (LMValue[_<:ConcreteType],TypeKind))(implicit _insns: InstBuffer) {
-            if (x._2.isRefArrayOrBoxType) {
-              _insns.append(new call_void(rtPushref, Seq(x._1)))
-            }
-            stack.push(x)
-          }
-          implicit val insns: InstBuffer = new mutable.ListBuffer
-          val pass = Label("__PASS__")
-          val excpreds = bb.code.blocks.filter(pb => pb.exceptionSuccessors.contains(bb))
-          val dirpreds = bb.code.blocks.filter(_.directSuccessors contains bb)
-          val preds = (excpreds ++ dirpreds)/*.filter(reachable)*/
-          insns.append(new icomment("predecessors: "+preds.map(_.fullString).mkString(",")+" successors: "+bb.successors.map(_.fullString).mkString(" ")))
           def loadobjvtbl(src: LMValue[SomeConcreteType])(implicit _insns: InstBuffer): LMValue[SomeConcreteType] = {
             val asobj = nextvar(rtObject.pointer)
             val clsa = nextvar(rtClass.pointer.pointer)
@@ -1197,6 +1176,29 @@ abstract class GenLLVM extends SubComponent {
             _insns.append(new call(tag, llvmInvariantStart, Seq(new CInt(LMInt.i64, -1), vtblbp)))
             vtbl.asInstanceOf[LMValue[LMPointer]]
           }
+          def pop()(implicit _insns: InstBuffer) = {
+            val r = stack.pop
+            if (r._2.isRefArrayOrBoxType) {
+              _insns.append(new call_void(rtPopref, Seq(new CInt(LMInt.i32, 1))))
+            }
+            r
+          }
+          def popn(n: Int)(implicit _insns: InstBuffer) {
+            for (_ <- 0 until n) pop()(_insns)
+            //_insns.append(new call_void(rtPopref, Seq(new CInt(LMInt.i32, n))))
+          }
+          def push(x: (LMValue[_<:ConcreteType],TypeKind))(implicit _insns: InstBuffer) {
+            if (x._2.isRefArrayOrBoxType) {
+              _insns.append(new call_void(rtPushref, Seq(getrefptr(x._1)(_insns))))
+            }
+            stack.push(x)
+          }
+          implicit val insns: InstBuffer = new mutable.ListBuffer
+          val pass = Label("__PASS__")
+          val excpreds = bb.code.blocks.filter(pb => pb.exceptionSuccessors.contains(bb))
+          val dirpreds = bb.code.blocks.filter(_.directSuccessors contains bb)
+          val preds = (excpreds ++ dirpreds)/*.filter(reachable)*/
+          insns.append(new icomment("predecessors: "+preds.map(_.fullString).mkString(",")+" successors: "+bb.successors.map(_.fullString).mkString(" ")))
 	  def arrayClass(elemTpe: TypeKind)(implicit _insns: InstBuffer): LMValue[LMPointer] = {
 	    def makeArrayClass(klassP: LMValue[LMPointer]): LMValue[LMPointer] = {
 	      val arrayKlass = nextvar(rtClass.pointer)
@@ -1319,14 +1321,15 @@ abstract class GenLLVM extends SubComponent {
                 val excsources = excpreds/*.filter(reachable)*/.map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
                 val sources = dirsources ++ excsources
                 insns.append(new phi(reg, sources))
-                push((reg, tpe))
+                /* they're already live on stack from predecessor */
+                stack.push((reg, tpe))
               } else {
                 val asobj = nextvar(rtReference)
                 val dirsources = dirpreds/*.filter(reachable)*/.map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
                 val excsources = excpreds/*.filter(reachable)*/.map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
                 val sources = dirsources ++ excsources
                 insns.append(new phi(asobj, sources))
-                push((cast(asobj, ObjectReference, tpe)(predcasts), tpe))
+                stack.push((cast(asobj, ObjectReference, tpe)(predcasts), tpe))
               }
             }
           }
@@ -1463,6 +1466,9 @@ abstract class GenLLVM extends SubComponent {
                 val fieldptr = nextvar(symType(field).pointer)
                 val (value,valuesym) = pop()
                 val (ivar,isym) = pop()
+                println("store field " + field)
+                println((ivar,isym))
+                println((value,valuesym))
                 val instance = cast(ivar,isym,toTypeKind(field.owner.tpe))
                 val asobj = getrefptr(instance)
                 val instptr = nextvar(classType(field.owner).pointer)
@@ -1775,6 +1781,7 @@ abstract class GenLLVM extends SubComponent {
                 }
                 if (funtype.returnType == LMVoid) {
                   insns.append(new invoke_void(castedfun, expandedArgs, pass, blockExSelLabel(bb,-2), Ccc, Seq.empty, Seq.empty))
+                  popn(args.length)
                 } else if (funtype.returnType == rtObject.pointer) {
                   val v = nextvar(rtObject.pointer)
                   val vt = nextvar(rtVtable)
@@ -2098,8 +2105,8 @@ abstract class GenLLVM extends SubComponent {
       val methods = concreteMethods.filter(m => !CodegenAnnotations.exists(a => m.symbol.hasAnnotation(a)))
       val llvmmethods = concreteMethods.filter(_.symbol.hasAnnotation(LlvmimplAnnotSym))
       val methodFuns = methods.filter(_.code != NoCode).map(m => try { genFun(m) } catch { case e => println(e); m.dump; throw e } )
-      val staticFieldFuns = c.fields.filter(_.symbol.isStaticMember).zipWithIndex.map((genFieldFun _).tupled)
-      val nonstaticFieldFuns = c.fields.filterNot(_.symbol.isStaticMember).zipWithIndex.map((genFieldFun _).tupled)
+      val staticFieldFuns = staticFields(c).zipWithIndex.map((genFieldFun _).tupled)
+      val nonstaticFieldFuns = instFields(c).zipWithIndex.map((genFieldFun _).tupled)
       val fieldFuns = staticFieldFuns ++ nonstaticFieldFuns
       val llvmmethodFuns = llvmmethods.map(genNativeFun)
       val foreignFuns = c.methods.filter(_.symbol.hasAnnotation(ForeignAnnotSym)).flatMap(genForeignFun)

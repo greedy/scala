@@ -85,14 +85,34 @@ object example extends examplec with Magic {
       case e: Exception =>System.out.println("Caught exception, but shouldn't have here")
     }
     aprtest()
+    gctest()
   }
   def main(args: Array[String]) { main() }
 
   def aprtest() {
+  /*
     apr.file_t.stdout.putc('a':Byte)
     apr.file_t.stdout.putc('p':Byte)
     apr.file_t.stdout.putc('r':Byte)
     apr.file_t.stdout.putc('\n':Byte)
+    */
+  }
+
+  def gctest() {
+    var x = 1E6;
+    var a: String = ""
+    var b: String = ""
+    var c: String = ""
+    while (x > 0) {
+      c = b
+      b = a
+      a = x.toString
+      x -= 1
+    }
+    System.out.println("a,b,c")
+    System.out.println(a)
+    System.out.println(b)
+    System.out.println(c)
   }
 
   def toMagic(m: Magic) = m

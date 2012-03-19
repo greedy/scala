@@ -3,10 +3,10 @@ WARNINGS = -Wall
 CPPFLAGS = `icu-config --cppflags`
 CFLAGS = -g $(WARNINGS) -std=c99 -fexceptions `llvm-config --cflags $(COMPONENTS)`
 CXXFLAGS = -g $(WARNINGS) -fexceptions `llvm-config --cxxflags $(COMPONENTS)`
-LDFLAGS = `icu-config --ldflags-searchpath --ldflags-icuio` `llvm-config --ldflags $(COMPONENTS)` `apr-1-config --link-ld --libs`
+LDFLAGS = -g `icu-config --ldflags-searchpath --ldflags-icuio` `llvm-config --ldflags $(COMPONENTS)` `apr-1-config --link-ld --libs`
 LDLIBS = `icu-config --ldflags-libsonly --ldflags-icuio` `llvm-config --libs $(COMPONENTS)` -lm
 
-RTOBJECTS = runtime.bc object.bc boxes.bc arrays.bc strings.bc fp.bc io.bc
+RTOBJECTS = runtime.bc object.bc boxes.bc arrays.bc strings.bc fp.bc io.bc gc.bc
 
 %.bc: %.c
 	clang -std=c99 -fexceptions `icu-config --cppflags` -O4 -emit-llvm -c -o $@ $^

@@ -1,13 +1,22 @@
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
 
+#include "arrays.h"
+#include "runtime.h"
+#include "klass.h"
+#include "gc.h"
+
+void marksweep();
+
 struct gcobj {
   struct gcobj* prev;
   struct gcobj* nextwork;
-  struct java_lang_Object obj[];
-}
+  size_t sz;
+  char obj[];
+};
 
 static struct gcobj* head = NULL;
 
@@ -26,16 +35,20 @@ static size_t heapsize = 0;
 #define HEAPLIMIT (64*1024*1024)
 
 static inline struct gcobj* object2gc(struct java_lang_Object *obj) {
+  if (obj == NULL) return NULL;
   return (struct gcobj*)(((void*)obj)-offsetof(struct gcobj, obj[0]));
 }
 
 static inline struct java_lang_Object* gc2object(struct gcobj *gc) {
-  return &(gc->obj[0]);
+  if (gc == NULL) return NULL;
+  return (struct java_lang_Object*)&(gc->obj[0]);
 }
 
 struct java_lang_Object* rt_new(struct klass *klass)
 {
-  return gcalloc(klass->instsize);
+  struct java_lang_Object *obj = gcalloc(klass->instsize);
+  rt_initobj(obj, klass);
+  return obj;
 }
 
 struct java_lang_Object* gcalloc(size_t nbytes) {
@@ -46,10 +59,14 @@ struct java_lang_Object* gcalloc(size_t nbytes) {
     abort();
   }
   struct gcobj* gcp = (struct gcobj*)calloc(1, objsize);
+  gcp->sz = objsize;
+  //if ((heapsize + gcp->sz)/(2<<20) != heapsize/(2<<20)) {
+    //fprintf(stderr, "allocating %zu heapsize is now %zu\n", objsize, heapsize);
+  //}
+  heapsize += gcp->sz;
   struct java_lang_Object* obj = gc2object(gcp);
   gcp->prev = head;
   head = gcp;
-  rt_initobj(obj, klass);
   return obj;
 }
 
@@ -63,28 +80,31 @@ void rt_addroot(struct java_lang_Object** obj) {
 }
 
 void rt_pushref(struct java_lang_Object* obj) {
-  if (obj == NULL) return;
   if (shadowsp == shadowlimit) {
     fprintf(stderr, "Stack overflow\n");
     fflush(stderr);
     abort();
   }
   *(shadowsp++) = object2gc(obj);
+  //fprintf(stderr, "Push %p depth=%td\n", obj, (shadowsp-&(shadowstack[0])));
 }
 
 void rt_popref(uint32_t n) {
-  if (shadowsp-n < &(shadowstack[0])) {
+  if (shadowsp-&(shadowstack[0]) < n) {
     fprintf(stderr, "Stack underflow\n");
     fflush(stderr);
     abort();
   }
   shadowsp-=n;
+  //fprintf(stderr, "Pop %d depth=%td\n", n, (shadowsp-&(shadowstack[0])));
 }
 
 void marksweep() {
+  fprintf(stderr, "collecting heapsize = %zu\n", heapsize);
   struct gcobj* workq = NULL;
-  for (struct java_lang_Object** curp = &(staticroots[0]); curp < nextroot; curp++) {
-    struct gcobj* cur = object2gc(*curp);
+  for (struct java_lang_Object*** curp = &(staticroots[0]); curp < nextroot; curp++) {
+    struct gcobj* cur = object2gc(**curp);
+    if (cur == NULL) continue;
     if (!cur->nextwork) {
       if (workq) {
         cur->nextwork = workq;
@@ -96,6 +116,7 @@ void marksweep() {
   }
   for (struct gcobj **curp = &(shadowstack[0]); curp < shadowsp; curp++) {
     struct gcobj* cur = *curp;
+    if (cur == NULL) continue;
     if (!cur->nextwork) {
       if (workq) {
         cur->nextwork = workq;
@@ -123,9 +144,9 @@ void marksweep() {
         }
       }
     } else {
-      while (k != class_java_Dlang_DObject) {
+      while (k != &class_java_Dlang_DObject) {
         struct klass* sk = k->super;
-        struct java_lang_Object** ps;
+        struct reference* ps;
         ps = (struct reference*)(((char*)obj)+sk->instsize);
         for (size_t i = 0; i < k->npointers; ++i) {
           struct java_lang_Object* p = (ps+i)->object;
@@ -139,7 +160,7 @@ void marksweep() {
       }
     }
     if (workq->nextwork == workq) {
-      workq == NULL;
+      workq = NULL;
     }
   }
   /* everything live has non-null nextwork */
@@ -150,13 +171,17 @@ void marksweep() {
     workq = cur->prev;
     if (cur->nextwork) {
       /* cur is live */
-      cur->prev = head
+      cur->prev = head;
       head = cur;
       cur->nextwork = NULL;
     } else {
+#if 0
       if (cur->klass-> == /*...*/) {
       }
+#endif
+      heapsize -= cur->sz;
       free(cur);
     }
   }
+  fprintf(stderr, "done collecting, heapsize=%zu\n", heapsize);
 }
