@@ -157,7 +157,41 @@ abstract class GenLLVM extends SubComponent {
         new LMFunction(
           LMVoid, "rt_popref",
           Seq(
-            ArgSpec(new LocalVariable("n", LMInt.i32))
+          ), false,
+          Externally_visible, Default, Ccc,
+          Seq.empty, Seq.empty, None, None, None)
+
+      lazy val rtAddroot =
+        new LMFunction(
+          LMVoid, "rt_addroot",
+          Seq(
+            ArgSpec(new LocalVariable("root", rtObject.pointer.pointer))
+          ), false,
+          Externally_visible, Default, Ccc,
+          Seq.empty, Seq.empty, None, None, None)
+
+      lazy val rtLocalcell =
+        new LMFunction(
+          LMVoid, "rt_localcell",
+          Seq(
+            ArgSpec(new LocalVariable("cell", rtObject.pointer.pointer))
+          ), false,
+          Externally_visible, Default, Ccc,
+          Seq.empty, Seq.empty, None, None, None)
+
+      lazy val rtOpenframe =
+        new LMFunction(
+          LMInt.i8.pointer, "rt_openframe",
+          Seq(
+          ), false,
+          Externally_visible, Default, Ccc,
+          Seq.empty, Seq.empty, None, None, None)
+
+      lazy val rtCloseframe =
+        new LMFunction(
+          LMVoid, "rt_closeframe",
+          Seq(
+            ArgSpec(new LocalVariable("frame", LMInt.i8.pointer))
           ), false,
           Externally_visible, Default, Ccc,
           Seq.empty, Seq.empty, None, None, None)
@@ -479,6 +513,10 @@ abstract class GenLLVM extends SubComponent {
         rtNew.declare,
         rtPushref.declare,
         rtPopref.declare,
+        rtOpenframe.declare,
+        rtCloseframe.declare,
+        rtAddroot.declare,
+        rtLocalcell.declare,
         rtInitobj.declare,
         rtInitLoop.declare,
         rtNewArray.declare,
@@ -834,6 +872,7 @@ abstract class GenLLVM extends SubComponent {
       val moduleInfo: Seq[ModuleComp] = {
         if (c.symbol.isModuleClass && c.symbol.isStatic && !c.symbol.isImplClass) {
           val ig = new LMGlobalVariable(moduleInstanceName(c.symbol), classType(c.symbol), Externally_visible, Default, false)
+          val igp = new LMGlobalVariable("module_ref", rtObject.pointer, Internal, Default, false)
           val initStarted = new LMGlobalVariable("init_started", LMInt.i1, Internal, Default, false)
           val initFinished = new LMGlobalVariable("init_finished", LMInt.i1, Internal, Default, false)
           val initFun = moduleInitFun(c.symbol)
@@ -854,6 +893,8 @@ abstract class GenLLVM extends SubComponent {
               new store(LMConstant.boolconst(true), new CGlobalAddress(initStarted)),
               new call_void(rtInitobj, Seq(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), externClassP(c.symbol))),
               new call_void(externFun(c.lookupMethod(nme.CONSTRUCTOR).get.symbol), Seq(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), new Cgetelementptr(classVtableGlobal, Seq[CInt](0,0), rtVtable))),
+              new store(new Cbitcast(new CGlobalAddress(ig), rtObject.pointer), new CGlobalAddress(igp)),
+              new call_void(rtAddroot, Seq(new CGlobalAddress(igp))),
               new store(LMConstant.boolconst(true), new CGlobalAddress(initFinished)),
               retvoid
             ))))
@@ -863,6 +904,7 @@ abstract class GenLLVM extends SubComponent {
             ig.define(new CUndef(ig.tpe)),
             initStarted.define(false),
             initFinished.define(false),
+            igp.define(new CUndef(igp.tpe)),
             initFundef)
         } else {
           Seq.empty
@@ -1107,6 +1149,7 @@ abstract class GenLLVM extends SubComponent {
         }
 
         val currentException = new LocalVariable("_currentException", rtObject.pointer.pointer)
+        val framepointer = new LocalVariable("_framepointer", LMInt.i8.pointer)
 
         def exSels(bb: BasicBlock): Seq[LMBlock] = {
           val uwx = nextvar(LMInt.i8.pointer)
@@ -1179,13 +1222,12 @@ abstract class GenLLVM extends SubComponent {
           def pop()(implicit _insns: InstBuffer) = {
             val r = stack.pop
             if (r._2.isRefArrayOrBoxType) {
-              _insns.append(new call_void(rtPopref, Seq(new CInt(LMInt.i32, 1))))
+              _insns.append(new call_void(rtPopref, Seq()))
             }
             r
           }
           def popn(n: Int)(implicit _insns: InstBuffer) {
             for (_ <- 0 until n) pop()(_insns)
-            //_insns.append(new call_void(rtPopref, Seq(new CInt(LMInt.i32, n))))
           }
           def push(x: (LMValue[_<:ConcreteType],TypeKind))(implicit _insns: InstBuffer) {
             if (x._2.isRefArrayOrBoxType) {
@@ -1913,14 +1955,17 @@ abstract class GenLLVM extends SubComponent {
               }
               case RETURN(kind) => {
                 if (kind == UNIT) {
+                  insns.append(new call_void(rtCloseframe, Seq(framepointer)))
                   insns.append(retvoid)
                 } else if (kind.isRefOrArrayType) {
                   val (v,s) = pop()
+                  insns.append(new call_void(rtCloseframe, Seq(framepointer)))
                   val vtblOut: LocalVariable[LMPointer] = argsInfo.collect { case VtableReturn(outVar) => outVar }.head
                   insns.append(new store(getrefvtbl(v), vtblOut))
                   insns.append(new ret(getrefptr(v)))
                 } else {
                   val (v,s) = pop()
+                  insns.append(new call_void(rtCloseframe, Seq(framepointer)))
                   insns.append(new ret(cast(v,s,kind)))
                 }
               }
@@ -2064,7 +2109,20 @@ abstract class GenLLVM extends SubComponent {
             )
           case VtableReturn(_) => Seq.empty
         }
-        blocks.insert(0,LMBlock(Some(Label(".entry.")), allocaLocals ++ handleArgs ++ Seq(new alloca(vtableReturn, rtVtable), new alloca(currentException, rtObject.pointer), new br(blockLabel(m.code.startBlock)))))
+        val openframe = Seq(
+          new call(framepointer, rtOpenframe, Seq.empty),
+          new store(new CNull(rtObject.pointer), currentException),
+          new call_void(rtLocalcell, Seq(currentException))
+        )
+        val registerLocals = m.locals.filter(_.kind.isRefOrArrayType).flatMap { l =>
+          val lo = new LocalVariable("objpointer."+localCell(l).name, rtObject.pointer.pointer)
+          Seq(
+            new getelementptr(lo, localCell(l), Seq(new CInt(LMInt.i32,0), new CInt(LMInt.i32,0))),
+            new store(new CNull(rtObject.pointer), lo),
+            new call_void(rtLocalcell, Seq(lo))
+          )
+        }
+        blocks.insert(0,LMBlock(Some(Label(".entry.")), Seq(new alloca(vtableReturn, rtVtable), new alloca(currentException, rtObject.pointer)) ++ openframe ++ allocaLocals ++ registerLocals ++ handleArgs ++ Seq(new br(blockLabel(m.code.startBlock)))))
         fun.define(blocks)
       }
 

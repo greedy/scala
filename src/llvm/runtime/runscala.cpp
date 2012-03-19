@@ -223,8 +223,8 @@ int main(int argc, char *argv[], char * const *envp)
 
   std::vector<GenericValue> args;
 
-  // Mod->MaterializeAll();
-  // traceFuncs(*Mod);
+  Mod->MaterializeAll();
+  //traceFuncs(*Mod);
 
   Function *wrapper = createMainWrapperFunction(*Mod, EntryFn, ModuleInstance, InitFn, "main_wrapper");
 
