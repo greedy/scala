@@ -12,13 +12,6 @@ static void printclassname(FILE* f, struct klass *klass)
   fprintf(f, "%.*s", klass->name.len, klass->name.bytes);
 }
 
-struct java_lang_Object *rt_new(struct klass *klass)
-{
-  struct java_lang_Object* obj = (struct java_lang_Object*)calloc(1, klass->instsize);
-  rt_initobj(obj, klass);
-  return obj;
-}
-
 void rt_initobj(struct java_lang_Object *object, struct klass *klass)
 {
   object->klass = klass;

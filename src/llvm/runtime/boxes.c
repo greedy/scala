@@ -3,7 +3,7 @@
 
 #define DEFINE_BOX2(p,k,c,g)                                                      \
   struct object_java_lang_ ## c;                                                  \
-  extern struct object_java_lang_ ## c module__Ojava_Dlang_D ## c;                \
+  extern struct object_java_lang_ ## c* module__Ojava_Dlang_D ## c;               \
   extern void initmodule_module__Ojava_Dlang_D ## c();                            \
   extern struct java_lang_Object*                                                 \
   method__Ojava_Dlang_D ## c ## _MvalueOf_Ascala_D ## k ## _Rjava_Dlang_D ## c    \
@@ -14,9 +14,9 @@
   struct java_lang_Object *rt_box_ ## c (p v)                                     \
   {                                                                               \
     vtable_t vtbl;                                                                \
-    struct java_lang_Object *mod =                                                \
-      (struct java_lang_Object*)&module__Ojava_Dlang_D ## c;                      \
     initmodule_module__Ojava_Dlang_D ## c();                                      \
+    struct java_lang_Object *mod =                                                \
+      (struct java_lang_Object*)module__Ojava_Dlang_D ## c;                       \
     return                                                                        \
     method__Ojava_Dlang_D ## c ## _MvalueOf_Ascala_D ## k ## _Rjava_Dlang_D ## c  \
     (mod, mod->klass->vtable, v, &vtbl);                                          \

@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "gc.h"
+
 static void *vtable_array[] = {
   method_java_Dlang_DObject_Mclone_Rjava_Dlang_DObject,
   method_java_Dlang_DObject_Mequals_Ajava_Dlang_DObject_Rscala_DBoolean,
@@ -24,6 +26,7 @@ struct klass *arrayOf(struct klass *klass)
     ac->instsize = 0;
     ac->super = &class_java_Dlang_DObject;
     ac->vtable = vtable_array;
+    ac->npointers = 0;
     ac->numiface = 0;
     ac->arrayklass = NULL;
     ac->elementklass = klass;
@@ -32,7 +35,7 @@ struct klass *arrayOf(struct klass *klass)
   return klass->arrayklass;
 }
 
-#define PRIM_ARRAY(t) struct klass t ## _array = { { sizeof("]" # t)-1, "]" # t }, 0, NULL, NULL, NULL, NULL, 0 }
+#define PRIM_ARRAY(t) struct klass t ## _array = { { sizeof("]" # t)-1, "]" # t }, 0, &class_java_Dlang_DObject, vtable_array, NULL, NULL, 0, 0 }
 
 PRIM_ARRAY(bool);
 PRIM_ARRAY(byte);
@@ -93,7 +96,7 @@ new_array(uint8_t k, struct klass *et, int32_t ndims, int32_t dim0, ...)
       break;
   }
   datasize = sizeof(struct array) + dim0 * eltsize;
-  data = a = calloc(1, datasize);
+  data = a = (struct array*)gcalloc(datasize);
   a->super.klass = aclass;
   a->length = dim0;
   va_start(dims, dim0);
@@ -101,17 +104,17 @@ new_array(uint8_t k, struct klass *et, int32_t ndims, int32_t dim0, ...)
     int32_t dimN = va_arg(dims, int32_t);
     void **td;
     aclass = arrayOf(aclass);
-    a = calloc(1, sizeof(struct array) + dimN * sizeof(void*));
+    a = (struct array*)gcalloc(sizeof(struct array) + dimN * sizeof(void*));
     a->super.klass = aclass;
     a->length = dimN;
     for (size_t i = 0; i < dimN; i++) {
       void *de;
-      de = malloc(datasize);
+      de = gcalloc(datasize);
       memcpy(de, data, datasize);
       ((void**)a->data)[i] = de;
     }
     /* FIXME - extra allocation overhead */
-    free(data);
+    // free(data);
     datasize = sizeof(struct array) + dimN * sizeof(void*);
     data = a;
   }

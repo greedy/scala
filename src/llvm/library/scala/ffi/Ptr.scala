@@ -23,7 +23,7 @@ object Ptr {
 
 class Ptr[T] private[ffi] (private[ffi] val address: CIntPtr) {
   def cast[U]: Ptr[U] = new Ptr[U](address)
-  def plus(n: Int) = new Ptr[T](address + n)
+  def plus(n: Long) = new Ptr[T](address + n)
   def align(n: Int) = new Ptr[T](address + (address % n))
   def minus(y: Ptr[_]) = address - y.address
   def peek()(implicit st: Storable[T]): T = st.peek(this)

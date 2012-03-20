@@ -67,8 +67,8 @@ createMainWrapperFunction(
 
   Value *argvObj = builder.CreateCall2(module.getFunction("rt_argvtoarray"), argc, argv);
 
-  args.push_back(builder.CreateBitCast(moduleGlobal, realMain->getFunctionType()->getParamType(0)));
-  args.push_back(builder.CreateCall(loadvtable, builder.CreateBitCast(moduleGlobal, loadvtable->getFunctionType()->getParamType(0))));
+  args.push_back(builder.CreateBitCast(builder.CreateLoad(moduleGlobal), realMain->getFunctionType()->getParamType(0)));
+  args.push_back(builder.CreateCall(loadvtable, builder.CreateBitCast(builder.CreateLoad(moduleGlobal), loadvtable->getFunctionType()->getParamType(0))));
   args.push_back(builder.CreateBitCast(argvObj, realMain->getFunctionType()->getParamType(2)));
   args.push_back(builder.CreateCall(loadvtable, builder.CreateBitCast(argvObj, loadvtable->getFunctionType()->getParamType(0))));
 

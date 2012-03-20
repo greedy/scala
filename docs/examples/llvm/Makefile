@@ -51,13 +51,13 @@ bin/%.bc: irfiles/%.stamp
 	for x in irfiles/$*/*.ll ; do \
 	  llvm-as $$x; \
 	done
-	llvm-ld -o $@ -r -disable-internalize irfiles/$*/*.bc ../../../src/llvm/runtime/llvmrt.a
+	llvm-ld -disable-opt -o $@ -r -disable-internalize irfiles/$*/*.bc ../../../src/llvm/runtime/llvmrt.a
 	opt -O3 -o bin/$*.opt.bc $@
 	mv bin/$*.opt.bc $@
 
 bin/%.aot: bin/%.bc
 	../../../src/llvm/runtime/linkscala $< `basename $*`
-	llvm-ld -v -native -o $@ b.out.bc ../../../src/llvm/runtime/llvmrt.a -lapr-1 -L/usr/lib64 `icu-config --ldflags-libsonly ` ../../../src/llvm/runtime/unwind.o
+	llvm-ld -v -native -o $@ b.out.bc ../../../src/llvm/runtime/llvmrt.a -lapr-1 -L/usr/lib64 `icu-config --ldflags-libsonly --ldflags-searchpath` -Xlinker=-undefined -Xlinker=dynamic_lookup ../../../src/llvm/runtime/unwind.o
 	rm -f b.out.bc
 
 classes: example.scala

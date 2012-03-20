@@ -4,6 +4,7 @@
 #include "llvm/LLVMContext.h"
 #include "llvm/Target/TargetData.h"
 #include "llvm/Module.h"
+#include "llvm/Constants.h"
 #include "llvm/Type.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Bitcode/ReaderWriter.h"
@@ -19,6 +20,8 @@
 #include "llvm/Support/PluginLoader.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/InstIterator.h"
+#include "llvm/Instructions.h"
 #if LLVM_MAJOR_VERSION >=2 && LLVM_MINOR_VERSION >= 9
 # include "llvm/ADT/OwningPtr.h"
 # include "llvm/Support/Process.h"
@@ -30,6 +33,7 @@
 #endif
 #include "llvm/Target/TargetSelect.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/Support/IRBuilder.h"
 #include <cerrno>
 #include <cstdlib>
 #include <iostream>
@@ -53,6 +57,22 @@ static void do_shutdown() {
 extern void* getExceptionObject;
 extern void* scalaPersonality;
 
+static size_t nesting = 0;
+
+void traceentry(const char *s)
+{
+  for (size_t i = 0; i < nesting; i++) errs() << " ";
+  errs() << ">>> " << s << "\n";
+  nesting++;
+}
+
+void traceexit(const char *s)
+{
+  nesting--;
+  for (size_t i = 0; i < nesting; i++) errs() << " ";
+  errs() << "<<< " << s << "\n";
+}
+
 static void *makeFuns(const std::string &name)
 {
   if (name == "createOurException") {
@@ -61,6 +81,10 @@ static void *makeFuns(const std::string &name)
     return getExceptionObject;
   } else if (name == "scalaPersonality") {
     return scalaPersonality;
+  } else if (name == "traceentry") {
+    return (void*)traceentry;
+  } else if (name == "traceexit") {
+    return (void*)traceexit;
   } else {
     errs() << "Missing function " << name << "\n";
     return (void*)abort;
@@ -77,6 +101,43 @@ class LogFuns : public JITEventListener {
   {
   }
 };
+
+void addTrace(Function *f, Constant *traceentryFn, Constant *traceexitFn)
+{
+  if (!f->getBasicBlockList().empty()) {
+    /*
+    errs() << "adding trace to " << f->getName() << "\n";
+    f->dump();
+    */
+    LLVMContext &ctx = f->getContext();
+    IRBuilder<> builder(ctx);
+    Constant *enteringConst = ConstantArray::get(ctx, (f->getName()).str());
+    Constant *leavingConst = ConstantArray::get(ctx, (f->getName()).str());
+    Value *enteringGV = new GlobalVariable(enteringConst->getType(), true, Function::ExternalLinkage, enteringConst);
+    Value *leavingGV = new GlobalVariable(leavingConst->getType(), true, Function::ExternalLinkage, leavingConst);
+    builder.SetInsertPoint(&f->getEntryBlock(), f->getEntryBlock().getFirstNonPHI());
+    builder.CreateCall(traceentryFn, builder.CreateConstInBoundsGEP2_32(enteringGV, 0, 0));
+    for (inst_iterator I = inst_begin(f), E = inst_end(f); I != E; ++I) {
+      if (ReturnInst* retInstr = dyn_cast<ReturnInst>(&*I)) {
+        builder.SetInsertPoint(retInstr->getParent(), retInstr);
+        builder.CreateCall(traceexitFn, builder.CreateConstInBoundsGEP2_32(leavingGV, 0, 0));
+      }
+    }
+  }
+}
+
+void traceFuncs(Module &m)
+{
+  LLVMContext &ctx = m.getContext();
+  std::vector<const Type*> argtypes;
+  argtypes.push_back(Type::getInt8PtrTy(ctx));
+  FunctionType *tracestringFnTy = FunctionType::get(Type::getVoidTy(ctx), argtypes, false);
+  Constant *traceentryFn = m.getOrInsertFunction("traceentry", tracestringFnTy);
+  Constant *traceexitFn = m.getOrInsertFunction("traceexit", tracestringFnTy);
+  for (Module::iterator it = m.begin(); it != m.end(); ++it) {
+    addTrace(it, traceentryFn, traceexitFn);
+  }
+}
 
 int main(int argc, char *argv[], char * const *envp)
 {
@@ -175,6 +236,9 @@ int main(int argc, char *argv[], char * const *envp)
   EE->runStaticConstructorsDestructors(false);
 
   std::vector<GenericValue> args;
+
+  Mod->MaterializeAll();
+  //traceFuncs(*Mod);
 
   Function *wrapper = createMainWrapperFunction(*Mod, EntryFn, ModuleInstance, InitFn, "main_wrapper");
 

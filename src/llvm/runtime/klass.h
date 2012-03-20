@@ -22,6 +22,7 @@ struct klass {
   void **vtable;
   struct klass *arrayklass;
   struct klass *elementklass;
+  uint32_t npointers;
   uint32_t numiface;
   struct ifaceinfo ifaces[];
 };
