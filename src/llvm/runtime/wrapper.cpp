@@ -1,3 +1,4 @@
+#include "config.h"
 #include "wrapper.h"
 
 #include "llvm/Function.h"
@@ -43,10 +44,17 @@ createMainWrapperFunction(
   LLVMContext &ctx = module.getContext();
 
   IRBuilder<> builder(ctx);
+#if LLVM_MAJOR_VERSION >=3
+  std::vector<Type*> argtypes;
+  argtypes.push_back(Type::getInt32Ty(ctx));
+  argtypes.push_back(Type::getInt8PtrTy(ctx)->getPointerTo());
+  FunctionType *funtype = FunctionType::get(Type::getVoidTy(ctx), makeArrayRef(argtypes), false);
+#else
   std::vector<const Type*> argtypes;
   argtypes.push_back(Type::getInt32Ty(ctx));
   argtypes.push_back(Type::getInt8PtrTy(ctx)->getPointerTo());
   FunctionType *funtype = FunctionType::get(Type::getVoidTy(ctx), argtypes, false);
+#endif
   Function *ret = Function::Create(funtype, Function::ExternalLinkage, name, &module);
 
   Function *loadvtable = module.getFunction("rt_loadvtable");
@@ -72,7 +80,11 @@ createMainWrapperFunction(
   args.push_back(builder.CreateBitCast(argvObj, realMain->getFunctionType()->getParamType(2)));
   args.push_back(builder.CreateCall(loadvtable, builder.CreateBitCast(argvObj, loadvtable->getFunctionType()->getParamType(0))));
 
+#if LLVM_MAJOR_VERSION >=3
+  builder.CreateInvoke(realMain, normalBlock, exceptionBlock, makeArrayRef(args));
+#else
   builder.CreateInvoke(realMain, normalBlock, exceptionBlock, args.begin(), args.end());
+#endif
 
   args.clear();
 
@@ -91,9 +103,13 @@ createMainWrapperFunction(
   args.push_back(ConstantInt::get(builder.getInt32Ty(), 1));
   args.push_back(ConstantInt::get(builder.getInt32Ty(), 0));
 
+#if LLVM_MAJOR_VERSION >=3
+  builder.CreateCall(Intrinsic::getDeclaration(&module, Intrinsic::eh_selector), makeArrayRef(args));
+#else
   builder.CreateCall(
       Intrinsic::getDeclaration(&module, Intrinsic::eh_selector), 
       args.begin(), args.end());
+#endif
 
   args.clear();
 

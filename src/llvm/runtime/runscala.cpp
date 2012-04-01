@@ -22,7 +22,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/InstIterator.h"
 #include "llvm/Instructions.h"
-#if LLVM_MAJOR_VERSION >=2 && LLVM_MINOR_VERSION >= 9
+#if LLVM_MAJOR_VERSION >=3 || LLVM_MAJOR_VERSION ==2 && LLVM_MINOR_VERSION >= 9
 # include "llvm/ADT/OwningPtr.h"
 # include "llvm/Support/Process.h"
 # include "llvm/Support/Signals.h"
@@ -31,8 +31,12 @@
 # include "llvm/System/Process.h"
 # include "llvm/System/Signals.h"
 #endif
-#include "llvm/Target/TargetSelect.h"
-#include "llvm/Target/TargetOptions.h"
+#if LLVM_MAJOR_VERSION >=3
+# include "llvm/Support/TargetSelect.h"
+# include "llvm/Target/TargetOptions.h"
+#else
+# include "llvm/Target/TargetOptions.h"
+#endif
 #include "llvm/Support/IRBuilder.h"
 #include <cerrno>
 #include <cstdlib>
@@ -129,9 +133,15 @@ void addTrace(Function *f, Constant *traceentryFn, Constant *traceexitFn)
 void traceFuncs(Module &m)
 {
   LLVMContext &ctx = m.getContext();
+#if LLVM_MAJOR_VERSION >=3
+  std::vector<Type*> argtypes;
+  argtypes.push_back(Type::getInt8PtrTy(ctx));
+  FunctionType *tracestringFnTy = FunctionType::get(Type::getVoidTy(ctx), makeArrayRef(argtypes), false);
+#else
   std::vector<const Type*> argtypes;
   argtypes.push_back(Type::getInt8PtrTy(ctx));
   FunctionType *tracestringFnTy = FunctionType::get(Type::getVoidTy(ctx), argtypes, false);
+#endif
   Constant *traceentryFn = m.getOrInsertFunction("traceentry", tracestringFnTy);
   Constant *traceexitFn = m.getOrInsertFunction("traceexit", tracestringFnTy);
   for (Module::iterator it = m.begin(); it != m.end(); ++it) {
@@ -152,7 +162,7 @@ int main(int argc, char *argv[], char * const *envp)
   std::string ErrorMsg;
   Module *Mod = NULL;
 
-#if LLVM_MAJOR_VERSION >= 2 && LLVM_MINOR_VERSION >= 9
+#if LLVM_MAJOR_VERSION >=3 || LLVM_MAJOR_VERSION >= 2 && LLVM_MINOR_VERSION >= 9
   OwningPtr<MemoryBuffer> Buffer;
   error_code errc = MemoryBuffer::getFileOrSTDIN(argv[1], Buffer);
   if (errc) {
