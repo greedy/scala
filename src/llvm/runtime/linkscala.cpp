@@ -46,6 +46,7 @@ int main(int argc, char *argv[], char * const *envp)
            << ErrorMsg << "\n";
     exit(1);
   }
+  outs() << "loaded module " << Mod << " " << Buffer << " " << Buffer.get() << "\n";
 #else
   if (MemoryBuffer *Buffer = MemoryBuffer::getFileOrSTDIN(argv[1],&ErrorMsg)) {
     Mod = getLazyBitcodeModule(Buffer, Context, &ErrorMsg);

@@ -1,9 +1,2 @@
-../../../src/library/scala/runtime/AbstractFunction1.scala
-../../../src/library/scala/Function1.scala
-../../../src/library/scala/PartialFunction.scala
-../../../src/library/scala/SpecializableCompanion.scala
-../../../src/library/scala/collection/mutable/WrappedArray.scala
-../../../src/library/scala/ScalaObject.scala
-../../../src/library/scala/Serializable.scala
 Predef.scala
 LowPriorityImplicits.scala

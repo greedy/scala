@@ -9,12 +9,12 @@ object alloc {
   def free(p: Ptr[_]) = _free(Ptr.unwrap(p))
   def alloca[A:Storable,B](f: Ptr[A] => B): B = {
     val ptr: Ptr[A] = malloc
-    if (ptr.isNull) throw new Exception()
+    if (ptr.isNull) throw new OutOfMemoryError()
     else try { f(ptr) } finally { free(ptr) }
   }
   def allocaBytes[A,B](n: CSizeT)(f: Ptr[A] => B): B = {
     val ptr: Ptr[A] = mallocBytes(n)
-    if (ptr.isNull) throw new Exception()
+    if (ptr.isNull) throw new OutOfMemoryError()
     else try { f(ptr) } finally { free(ptr) }
   }
 }

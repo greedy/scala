@@ -127,6 +127,29 @@ method_java_Dlang_DClass_MtoString_Rjava_Dlang_DString(
   return method_java_Dlang_DClass_MgetName_Rjava_Dlang_DString(self, selfVtable, vtableOut);
 }
 
+bool
+method_java_Dlang_DClass_MisArray_Rscala_DBoolean(
+    struct java_lang_Class *self, vtable_t selfVtable)
+{
+  return self->theklass->elementklass != NULL;
+}
+
+bool
+method_java_Dlang_DClass_MisAssignableFrom_Ajava_Dlang_DClass_Rscala_DBoolean(
+    struct java_lang_Class *self, vtable_t selfVtable,
+    struct java_lang_Class *cls, vtable_t clsVtable)
+{
+  if (rt_issubclass(self->theklass, cls->theklass)) {
+    return true;
+  }
+  for (size_t i = 0; i < cls->theklass->numiface; ++i) {
+    if (cls->theklass->ifaces[i].klass == self->theklass) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /* TODO - cache in klass struct */
 extern struct java_lang_Class *
 rt_classobject(struct klass* klass)

@@ -7,6 +7,9 @@ package scala.tools.nsc
 package backend
 
 import llvm.GenLLVM
+import util.{ClassPath, JavaClassPath}
+import scala.collection.{mutable, immutable}
+import io.{ File, Directory, Path, AbstractFile }
 
 trait LLVMPlatform extends JavaPlatform {
   import global._

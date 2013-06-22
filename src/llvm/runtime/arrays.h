@@ -27,8 +27,9 @@ extern struct klass double_array;
 struct array {
   struct java_lang_Object super;
   int32_t length;
-  uint8_t data[];
 };
+
+#define ARRAY_DATA(a,t) ((t*)(((char*)(a))+(a)->super.klass->eltsoffset))
 
 struct array *new_array(uint8_t k, struct klass *et, int32_t ndims, int32_t dim0, ...);
 

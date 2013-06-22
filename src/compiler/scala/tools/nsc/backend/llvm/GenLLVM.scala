@@ -13,6 +13,8 @@ import ch.epfl.lamp.llvm.{Instruction => LMInstruction, Constant => LMConstant, 
 import io.AbstractFile
 import java.io.OutputStreamWriter
 
+import java.util.regex.{Pattern, Matcher}
+
 abstract class GenLLVM extends SubComponent {
   import global._
   import icodes._
@@ -596,7 +598,7 @@ abstract class GenLLVM extends SubComponent {
     }
 
     def genClass(c: IClass) {
-      println("Generating " + c)
+      //println("Generating " + c)
       val externFuns: mutable.Map[Symbol,LMFunction] = new mutable.HashMap
       val externClasses: mutable.Map[Symbol,LMGlobalVariable[_<:ConcreteType]] = new mutable.HashMap
       val externStatics: mutable.Map[Symbol,LMGlobalVariable[_<:ConcreteType]] = new mutable.HashMap
@@ -796,7 +798,7 @@ abstract class GenLLVM extends SubComponent {
           if (s == NoSymbol) Nil
           else {
             val supers = Stream.iterate(s.superClass)(_.superClass).takeWhile(s => s != NoSymbol).toList
-            val mymembers = s.info.members.filterNot(m => !m.isMethod || m.isConstructor || (!m.isDeferred && m.isEffectivelyFinal) || m.allOverriddenSymbols.exists(o => supers.contains(o.owner)))
+            val mymembers = s.info.members.filterNot(m => !m.isMethod || m.isConstructor || (!m.isDeferred && !m.isSuperAccessor && m.isEffectivelyFinal) || m.allOverriddenSymbols.exists(o => supers.contains(o.owner)))
             val supervirts = virtualMethods(s.superClass)
             supervirts ++ (mymembers.toSet -- supervirts.toSet).toList.sortBy(methodSig _)
 /*
@@ -807,12 +809,20 @@ abstract class GenLLVM extends SubComponent {
         )
       }
 
-      def implementationOfCache: mutable.Map[Symbol,Symbol] = new mutable.HashMap
+      val implementationOfCache: mutable.Map[Symbol,Symbol] = new mutable.HashMap
 
       def implementationOf(m: Symbol) = {
         implementationOfCache.getOrElseUpdate(m, {
           val typeOrder = Ordering.fromLessThan[Symbol](_.info <:< _.info)
-          val alts = c.symbol.info.members.filter(mem => mem.info <:< m.info && mem.name == m.name)
+          val alts = c.symbol.info.members.filter(mem => mem.info =:= m.info && mem.name == m.name)
+          /*
+          if (m.nameString contains "repr") {
+            println("Implementations of " + m.defString + " (" + m.fullName + ") in " + c.symbol.fullName)
+            alts.foreach { alt =>
+              println("  " + alt.defString + " (" + alt.fullName + ")")
+            }
+          }
+           */
           if (alts.isEmpty) throw new Exception("No implementation of " + m + ": " + m.info + " in " + c) else alts.min(typeOrder)
         })
       }
@@ -820,6 +830,22 @@ abstract class GenLLVM extends SubComponent {
       val classVtable = {
         val basevirts = virtualMethods(c.symbol)
         val virts = basevirts.map(implementationOf _)
+        /*
+        println("Superaccessor implementations in " + c.symbol.fullNameString)
+        (basevirts zip virts).foreach { case (bv, v) =>
+          if (v.isSuperAccessor || bv.isSuperAccessor) {
+            println("- " + v.fullNameString + " of " + bv.fullNameString)
+            println("  base location: " + bv.debugLocationString)
+            println("  impl location: " + v.debugLocationString)
+            println("  base flags: " + bv.debugFlagString)
+            println("  impl flags: " + v.debugFlagString)
+            println("  base incomplete here: " + bv.isIncompleteIn(c.symbol))
+            println("  base incomplete owner: " + bv.isIncompleteIn(bv.owner))
+            println("  impl incomplete here: " + v.isIncompleteIn(c.symbol))
+            println("  impl incomplete owner: " + v.isIncompleteIn(v.owner))
+          }
+        }
+         */
         val vfuns = virts.map(v => if (v.isIncompleteIn(c.symbol)) new CNull(LMInt.i8.pointer) else new CFunctionAddress(externFun(v)))
         new CArray(LMInt.i8.pointer, vfuns.map(f => new Cbitcast(f, LMInt.i8.pointer)))
       }
@@ -892,9 +918,9 @@ abstract class GenLLVM extends SubComponent {
             LMBlock(Some(Label("not_started")), Seq(
               new store(LMConstant.boolconst(true), new CGlobalAddress(initStarted)),
               new call(obj, rtNew, Seq(externClassP(c.symbol))),
-              new call_void(externFun(c.lookupMethod(nme.CONSTRUCTOR).get.symbol), Seq(obj, new Cgetelementptr(classVtableGlobal, Seq[CInt](0,0), rtVtable))),
               new store(obj, new CGlobalAddress(ig)),
               new call_void(rtAddroot, Seq(new CGlobalAddress(ig))),
+              new call_void(externFun(c.lookupMethod(nme.CONSTRUCTOR).get.symbol), Seq(obj, new Cgetelementptr(classVtableGlobal, Seq[CInt](0,0), rtVtable))),
               new store(LMConstant.boolconst(true), new CGlobalAddress(initFinished)),
               retvoid
             ))))
@@ -1186,7 +1212,7 @@ abstract class GenLLVM extends SubComponent {
           Seq(header) ++ hblocks ++ Seq(footer)
         }
 
-        m.code.blocks./*filter(reachable).*/foreach { bb =>
+        m.code.blocks.filter(reachable).foreach { bb =>
           val stack: mutable.Stack[(LMValue[_<:ConcreteType],TypeKind)] = mutable.Stack()
           def loadobjvtbl(src: LMValue[SomeConcreteType])(implicit _insns: InstBuffer): LMValue[SomeConcreteType] = {
             val asobj = nextvar(rtObject.pointer)
@@ -1246,7 +1272,7 @@ abstract class GenLLVM extends SubComponent {
           val pass = Label("__PASS__")
           val excpreds = bb.code.blocks.filter(pb => pb.exceptionSuccessors.contains(bb))
           val dirpreds = bb.code.blocks.filter(_.directSuccessors contains bb)
-          val preds = (excpreds ++ dirpreds)/*.filter(reachable)*/
+          val preds = (excpreds ++ dirpreds).filter(reachable)
           insns.append(new icomment("predecessors: "+preds.map(_.fullString).mkString(",")+" successors: "+bb.successors.map(_.fullString).mkString(" ")))
 	  def arrayClass(elemTpe: TypeKind)(implicit _insns: InstBuffer): LMValue[LMPointer] = {
 	    def makeArrayClass(klassP: LMValue[LMPointer]): LMValue[LMPointer] = {
@@ -1366,16 +1392,16 @@ abstract class GenLLVM extends SubComponent {
               recordType(lt)
               if (tpe.isValueType || tpe == ConcatClass) {
                 val reg = new LocalVariable(blockName(bb)+".in."+n.toString,lt)
-                val dirsources = dirpreds/*.filter(reachable)*/.map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
-                val excsources = excpreds/*.filter(reachable)*/.map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
+                val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
+                val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,lt)))
                 val sources = dirsources ++ excsources
                 insns.append(new phi(reg, sources))
                 /* they're already live on stack from predecessor */
                 stack.push((reg, tpe))
               } else {
                 val asobj = nextvar(rtReference)
-                val dirsources = dirpreds/*.filter(reachable)*/.map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
-                val excsources = excpreds/*.filter(reachable)*/.map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
+                val dirsources = dirpreds.filter(reachable).map(pred => (blockLabel(pred,-1), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
+                val excsources = excpreds.filter(reachable).map(pred => (blockExSelLabel(pred,pred.method.exh.filter(_.covers(pred)).indexWhere(_.startBlock == bb)), new LocalVariable(blockName(pred)+".out."+n.toString,rtReference)))
                 val sources = dirsources ++ excsources
                 insns.append(new phi(asobj, sources))
                 stack.push((cast(asobj, ObjectReference, tpe)(predcasts), tpe))
@@ -1420,16 +1446,27 @@ abstract class GenLLVM extends SubComponent {
                 val arraylmtype = arrayType(kind.toType.typeSymbol)
                 val index = pop()._1
                 val array = pop()._1
-                val asarray = nextvar(arraylmtype)
-                val asobj = getrefptr(array)
+                val classPtrPtr = nextvar(rtClass.pointer.pointer)
+                val classPtr = nextvar(rtClass.pointer)
+                val eltsOffsetPtr = nextvar(LMInt.i32.pointer)
+                val eltsOffset = nextvar(LMInt.i32)
+                val asbyteptr = nextvar(LMInt.i8.pointer)
+                val basebyteptr = nextvar(LMInt.i8.pointer)
+                val baseptr = nextvar(typeKindType(kind).pointer)
                 val itemptr = nextvar(typeKindType(kind).pointer)
                 val item = nextvar(typeKindType(kind))
+                val asobj = getrefptr(array)
                 insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
                 insns.append(new invoke_void(rtAssertArrayBounds, Seq(asobj, index),
                                              pass, blockExSelLabel(bb,-2)))
-                insns.append(new bitcast(asarray, asobj))
-                insns.append(new getelementptr(itemptr, asarray.asInstanceOf[LMValue[LMPointer]],
-                  Seq(LMConstant.intconst(0), LMConstant.intconst(2), index.asInstanceOf[LMValue[LMInt]])))
+                insns.append(new getelementptr(classPtrPtr, asobj, Seq[CInt](0,0)))
+                insns.append(new load(classPtr, classPtrPtr))
+                insns.append(new getelementptr(eltsOffsetPtr, classPtr, Seq[CInt](0,6)))
+                insns.append(new load(eltsOffset, eltsOffsetPtr))
+                insns.append(new bitcast(asbyteptr, asobj))
+                insns.append(new getelementptr(basebyteptr, asbyteptr, Seq(eltsOffset)))
+                insns.append(new bitcast(baseptr, basebyteptr))
+                insns.append(new getelementptr(itemptr, baseptr, Seq(index.asInstanceOf[LMValue[LMInt]])))
                 insns.append(new load(item, itemptr))
                 push((item, kind))
               }
@@ -1500,13 +1537,26 @@ abstract class GenLLVM extends SubComponent {
                 val (item, itemtk) = pop()
                 val index = pop()._1
                 val array = pop()._1
-                val asarray = nextvar(arraylmtype)
+                val classPtrPtr = nextvar(rtClass.pointer.pointer)
+                val classPtr = nextvar(rtClass.pointer)
+                val eltsOffsetPtr = nextvar(LMInt.i32.pointer)
+                val eltsOffset = nextvar(LMInt.i32)
+                val asbyteptr = nextvar(LMInt.i8.pointer)
+                val basebyteptr = nextvar(LMInt.i8.pointer)
+                val baseptr = nextvar(typeKindType(kind).pointer)
                 val itemptr = nextvar(typeKindType(kind).pointer)
                 val asobj = getrefptr(array)
-                insns.append(new bitcast(asarray, asobj))
                 insns.append(new invoke_void(rtAssertNotNull, Seq(asobj), pass, blockExSelLabel(bb,-2)))
-                insns.append(new getelementptr(itemptr, asarray.asInstanceOf[LMValue[LMPointer]],
-                  Seq(LMConstant.intconst(0), LMConstant.intconst(2), index.asInstanceOf[LMValue[LMInt]])))
+                insns.append(new invoke_void(rtAssertArrayBounds, Seq(asobj, index),
+                                             pass, blockExSelLabel(bb,-2)))
+                insns.append(new getelementptr(classPtrPtr, asobj, Seq[CInt](0,0)))
+                insns.append(new load(classPtr, classPtrPtr))
+                insns.append(new getelementptr(eltsOffsetPtr, classPtr, Seq[CInt](0,6)))
+                insns.append(new load(eltsOffset, eltsOffsetPtr))
+                insns.append(new bitcast(asbyteptr, asobj))
+                insns.append(new getelementptr(basebyteptr, asbyteptr, Seq(eltsOffset)))
+                insns.append(new bitcast(baseptr, basebyteptr))
+                insns.append(new getelementptr(itemptr, baseptr, Seq(index.asInstanceOf[LMValue[LMInt]])))
                 insns.append(new store(cast(item, itemtk, kind), itemptr))
               }
               case STORE_LOCAL(local) => {
@@ -1517,9 +1567,11 @@ abstract class GenLLVM extends SubComponent {
                 val fieldptr = nextvar(symType(field).pointer)
                 val (value,valuesym) = pop()
                 val (ivar,isym) = pop()
+                /*
                 println("store field " + field)
                 println((ivar,isym))
                 println((value,valuesym))
+                 */
                 val instance = cast(ivar,isym,toTypeKind(field.owner.tpe))
                 val asobj = getrefptr(instance)
                 val instptr = nextvar(classType(field.owner).pointer)
@@ -1804,7 +1856,7 @@ abstract class GenLLVM extends SubComponent {
                   case _ => ()
                 }
                 val fun = style match {
-                  case Dynamic if method.isEffectivelyFinal && !method.isDeferred =>
+                  case Dynamic if method.isEffectivelyFinal && !method.isDeferred && !method.isSuperAccessor =>
                     new CFunctionAddress(externFun(method))
                   case Dynamic => {
                     /* TODO - don't cast to trait if method present in receiver vtable */
@@ -1968,12 +2020,14 @@ abstract class GenLLVM extends SubComponent {
                   insns.append(retvoid)
                 } else if (kind.isRefOrArrayType) {
                   val (v,s) = pop()
+                  val vr = cast(v, s, kind)
                   insns.append(new call_void(rtCloseframe, Seq(framepointer)))
                   val vtblOut: LocalVariable[LMPointer] = argsInfo.collect { case VtableReturn(outVar) => outVar }.head
-                  insns.append(new store(getrefvtbl(v), vtblOut))
-                  insns.append(new ret(getrefptr(v)))
+                  insns.append(new store(getrefvtbl(vr), vtblOut))
+                  insns.append(new ret(getrefptr(vr)))
                 } else {
                   val (v,s) = pop()
+                  val vr = cast(v, s, kind)
                   insns.append(new call_void(rtCloseframe, Seq(framepointer)))
                   insns.append(new ret(cast(v,s,kind)))
                 }
@@ -2321,14 +2375,24 @@ abstract class GenLLVM extends SubComponent {
       dir.fileNamed(llvmName(sym) + suffix)
     }
 
-    /* used escapes: _ D L G S O M R A N F */
+    /* used escapes: _ D L G S O M R A N F U */
+
+    val escapePat = Pattern.compile("[^\\p{ASCII}]")
 
     def encodeName(s: String) = {
-      s.replace("_","__")
-       .replace(".","_D")
-       .replace("<","_L")
-       .replace(">","_G")
-       .replace("$","_S")
+      val enc1 = s.replace("_","__")
+        .replace(".","_D")
+        .replace("<","_L")
+        .replace(">","_G")
+        .replace("$","_S")
+      val matcher = escapePat.matcher(enc1)
+      val sb = new StringBuffer()
+      while (matcher.find()) {
+        assert(matcher.end()-matcher.start() == 1)
+        matcher.appendReplacement(sb, "_U%04X".format(enc1.charAt(matcher.start()).toInt))
+      }
+      matcher.appendTail(sb)
+      sb.toString
     }
 
     def methodSig(sym: Symbol): String = {

@@ -68,12 +68,20 @@ package java {
       def this(message: String) = this(message, null)
       def this(cause: Throwable) = this(null, cause)
       def getStackTrace(): scala.Array[StackTraceElement] = null
-      def getMessage(): String = null
+      def getMessage(): String = message
       def printStackTrace(): Unit = ()
       def getCause: Throwable = cause
       def fillInStackTrace(): Throwable = this
+      override def toString = {
+        getClass().getName() + ": " + (if (message ne null) message else "(null)")
+      }
     }
     class Exception(message: String, cause: Throwable) extends Throwable(message, cause) {
+      def this() = this(null, null)
+      def this(message: String) = this(message, null)
+      def this(cause: Throwable) = this(null, cause)
+    }
+    class ArrayStoreException(message: String, cause: Throwable) extends RuntimeException(message, cause) {
       def this() = this(null, null)
       def this(message: String) = this(message, null)
       def this(cause: Throwable) = this(null, cause)
@@ -134,7 +142,7 @@ package java {
     object Byte {
       val TYPE = null
       def valueOf(i: scala.Byte): java.lang.Byte = new Byte(i)
-      def parseByte(s: String): scala.Byte = sys.error("unimplemented")
+      def parseByte(s: String): scala.Byte = sys.error("parseByte unimplemented")
       val MIN_VALUE: scala.Byte = -128
       val MAX_VALUE: scala.Byte = 127
       def toString(b: scala.Byte) = valueOf(b).toString
@@ -151,7 +159,7 @@ package java {
     object Short {
       val TYPE = null
       def valueOf(i: scala.Short): java.lang.Short = new Short(i)
-      def parseShort(s: String): scala.Short = sys.error("unimplemented")
+      def parseShort(s: String): scala.Short = sys.error("parseShort unimplemented")
       val MIN_VALUE: scala.Short = 32767
       val MAX_VALUE: scala.Short = -32768
       def toString(s: scala.Short) = valueOf(s).toString
@@ -173,7 +181,7 @@ package java {
         var c = 0;
         while (x != 0) {
           c = c + (x & 1);
-          x = x >> 1;
+          x = x >>> 1;
         }
         c
       }
@@ -189,13 +197,29 @@ package java {
       val MIN_VALUE: scala.Int = (1<<31)
       val MAX_VALUE: scala.Int = (1<<31)-1
 
-      def toBinaryString(i: scala.Int): java.lang.String = sys.error("unimplemented")
-      def toHexString(i: scala.Int): java.lang.String = sys.error("unimplemented")
-      def toOctalString(i: scala.Int): java.lang.String = sys.error("unimplemented")
+      def toBinaryString(i: scala.Int): java.lang.String = sys.error("inttoBinaryString unimplemented")
+      def toHexString(i: scala.Int): java.lang.String = sys.error("inttoHexString unimplemented")
+      def toOctalString(i: scala.Int): java.lang.String = sys.error("inttoOctalString unimplemented")
       def toString(i: scala.Int) = valueOf(i).toString
 
       def rotateLeft(i: scala.Int, amt: scala.Int) = (i << (32-amt)) | (i >>> amt)
       def signum(i: scala.Int) = if (i < 0) -1 else if (i == 0) 0 else 1
+
+      def highestOneBit(i: scala.Int) = {
+        var x = 1<<31
+        while ((x != 0) && ((i & x) != 0)) {
+          x = x>>>1;
+        }
+        x
+      }
+      def numberOfLeadingZeros(i: scala.Int) = {
+        var x = 0
+        while ((i & (1<<31)) != 0) {
+          x += 1
+          i << 1
+        }
+        x
+      }
     }
     class Integer(value: scala.Int) extends Number {
       // def byteValue: scala.Byte = value.toByte
@@ -209,13 +233,13 @@ package java {
     object Character {
       val TYPE = null
       def valueOf(i: scala.Char): java.lang.Character = new Character(i)
-      def getType(c: scala.Char): scala.Int = sys.error("unimplemented")
-      def getType(c: scala.Int): scala.Int = sys.error("unimplemented")
+      def getType(c: scala.Char): scala.Int = sys.error("getType(char) unimplemented")
+      def getType(c: scala.Int): scala.Int = sys.error("getType(int) unimplemented")
       val MIN_VALUE: scala.Char = 0
       val MAX_VALUE: scala.Char = 0xffff.toChar
       val MAX_RADIX: scala.Int = 36
 
-      def reverseBytes(c: scala.Char): scala.Char = sys.error("unimplemented")
+      def reverseBytes(c: scala.Char): scala.Char = sys.error("charreverseBytes unimplemented")
 
       val LOWERCASE_LETTER: scala.Byte = 0
       val UPPERCASE_LETTER: scala.Byte = 0
@@ -230,31 +254,31 @@ package java {
       val SURROGATE: scala.Byte = 0
 
       /* Tests */
-      def digit(c: scala.Char, radix: scala.Int): scala.Int = sys.error("unimplemented")
-      def isISOControl(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isDigit(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isLetter(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isLetterOrDigit(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isWhitespace(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isSpaceChar(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isHighSurrogate(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isLowSurrogate(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isUnicodeIdentifierStart(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isUnicodeIdentifierPart(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isIdentifierIgnorable(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isMirrored(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isLowerCase(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isUpperCase(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isTitleCase(c: scala.Char): scala.Boolean = sys.error("unimplemented")
-      def isJavaIdentifierPart(c: scala.Char): scala.Boolean = sys.error("unimplemented")
+      def digit(c: scala.Char, radix: scala.Int): scala.Int = sys.error("digit unimplemented")
+      def isISOControl(c: scala.Char): scala.Boolean = sys.error("isiso unimplemented")
+      def isDigit(c: scala.Char): scala.Boolean = sys.error("isdigit unimplemented")
+      def isLetter(c: scala.Char): scala.Boolean = sys.error("isletter unimplemented")
+      def isLetterOrDigit(c: scala.Char): scala.Boolean = sys.error("isletterdigit unimplemented")
+      def isWhitespace(c: scala.Char): scala.Boolean = sys.error("iswhite unimplemented")
+      def isSpaceChar(c: scala.Char): scala.Boolean = sys.error("isspacechar unimplemented")
+      def isHighSurrogate(c: scala.Char): scala.Boolean = sys.error("ishigh unimplemented")
+      def isLowSurrogate(c: scala.Char): scala.Boolean = sys.error("islow unimplemented")
+      def isUnicodeIdentifierStart(c: scala.Char): scala.Boolean = sys.error("isidentstart unimplemented")
+      def isUnicodeIdentifierPart(c: scala.Char): scala.Boolean = sys.error("isidentpart unimplemented")
+      def isIdentifierIgnorable(c: scala.Char): scala.Boolean = sys.error("isidentingore unimplemented")
+      def isMirrored(c: scala.Char): scala.Boolean = sys.error("ismirr unimplemented")
+      def isLowerCase(c: scala.Char): scala.Boolean = sys.error("islow unimplemented")
+      def isUpperCase(c: scala.Char): scala.Boolean = sys.error("isup unimplemented")
+      def isTitleCase(c: scala.Char): scala.Boolean = sys.error("istitle unimplemented")
+      def isJavaIdentifierPart(c: scala.Char): scala.Boolean = sys.error("isjavaidnetpart unimplemented")
 
-      def getDirectionality(c: scala.Char): scala.Byte = sys.error("unimplemented")
+      def getDirectionality(c: scala.Char): scala.Byte = sys.error("getdir unimplemented")
 
       /* Conversions */
-      def toUpperCase(c: scala.Char): scala.Char = sys.error("unimplemented")
-      def toLowerCase(c: scala.Char): scala.Char = sys.error("unimplemented")
-      def toTitleCase(c: scala.Char): scala.Char = sys.error("unimplemented")
-      def getNumericValue(c: scala.Char): scala.Int = sys.error("unimplemented")
+      def toUpperCase(c: scala.Char): scala.Char = sys.error("toup unimplemented")
+      def toLowerCase(c: scala.Char): scala.Char = sys.error("tolow unimplemented")
+      def toTitleCase(c: scala.Char): scala.Char = sys.error("totitle unimplemented")
+      def getNumericValue(c: scala.Char): scala.Int = sys.error("getnumval unimplemented")
       def toString(c: scala.Char) = valueOf(c).toString
     }
     class Character(value: scala.Char) {
@@ -270,13 +294,23 @@ package java {
     object Long {
       val TYPE = null
       def valueOf(i: scala.Long) = new Long(i)
-      def parseLong(s: String): scala.Long = sys.error("unimplemented")
+      def parseLong(s: String): scala.Long = sys.error("parseLong unimplemented")
       val MIN_VALUE: scala.Long = (1L<<63)
       val MAX_VALUE: scala.Long = (1L<<63)-1
 
-      def toBinaryString(i: scala.Long): java.lang.String = sys.error("unimplemented")
-      def toHexString(i: scala.Long): java.lang.String = sys.error("unimplemented")
-      def toOctalString(i: scala.Long): java.lang.String = sys.error("unimplemented")
+      def bitCount(i: scala.Long): scala.Int = {
+        var x = i;
+        var c = 0;
+        while (x != 0) {
+          c = c + (x & 1).toInt;
+          x = x >>> 1;
+        }
+        c
+      }
+
+      def toBinaryString(i: scala.Long): java.lang.String = sys.error("longtobinstring unimplemented")
+      def toHexString(i: scala.Long): java.lang.String = sys.error("longtohexstring unimplemented")
+      def toOctalString(i: scala.Long): java.lang.String = sys.error("longtooctalstring unimplemented")
       def toString(i: scala.Long) = valueOf(i).toString
       def signum(l: scala.Long) = if (l < 0) -1 else if (l == 0) 0 else 1
     }
@@ -292,13 +326,13 @@ package java {
     object Float {
       val TYPE = null
       def valueOf(i: scala.Float): java.lang.Float = new Float(i)
-      def parseFloat(s: String): scala.Float = sys.error("unimplemented")
+      def parseFloat(s: String): scala.Float = sys.error("parsefloat unimplemented")
       def compare(a: scala.Float, b: scala.Float): scala.Int = {
         if (a == b) 0
         else if (a < b) -1
         else 1
       }
-      def floatToRawIntBits(f: scala.Float): scala.Int = sys.error("unimplemented")
+      def floatToRawIntBits(f: scala.Float): scala.Int = sys.error("floatrawintbits unimplemented")
       @native def intBitsToFloat(bits: scala.Int): scala.Float
       val MIN_VALUE           = intBitsToFloat(0x00000001)
       val MAX_VALUE           = intBitsToFloat(0x7f7fffff)
@@ -331,14 +365,14 @@ package java {
     object Double {
       val TYPE = null
       def valueOf(i: scala.Double): java.lang.Double = new Double(i)
-      def parseDouble(s: String): scala.Double = sys.error("unimplemented")
+      def parseDouble(s: String): scala.Double = sys.error("parsedouble unimplemented")
       def compare(a: scala.Double, b: scala.Double): scala.Int = {
         if (a == b) 0
         else if (a < b) -1
         else 1
       }
-      def doubleToRawLongBits(f: scala.Double): scala.Long = sys.error("unimplemented")
-      def doubleToLongBits(f: scala.Double): scala.Long = sys.error("unimplemented")
+      def doubleToRawLongBits(f: scala.Double): scala.Long = sys.error("doublerawbits unimplemented")
+      def doubleToLongBits(f: scala.Double): scala.Long = sys.error("doublebits unimplemented")
       @native def longBitsToDouble(bits: scala.Long): scala.Double
       val MAX_VALUE           = longBitsToDouble(0x7fefffffffffffffL)
       val MIN_VALUE           = longBitsToDouble(0x0000000000000001L)
@@ -376,20 +410,114 @@ package java {
       @native override def flush(): Unit
     }
     object System {
+      // def nanoTime(): Long = 0L
       var err: java.io.PrintStream = new io.PrintStream(StandardError, true)
       var out: java.io.PrintStream = new io.PrintStream(StandardOut, true)
       var in: java.io.InputStream = null
-      def getProperty(key: String): String = sys.error("unimplemented")
-      def getProperty(key: String, default: String): String = sys.error("unimplemented")
-      def currentTimeMillis(): scala.Long = sys.error("unimplemented")
-      def exit(status: scala.Int): Unit = sys.error("unimplemented")
-      def getenv(): java.util.Map[String,String] = sys.error("unimplemented")
-      def getenv(name: String): String = sys.error("unimplemented")
-      def getProperties(): java.util.Properties = sys.error("unimplemented")
-      def clearProperty(key: String): String = sys.error("unimplemented")
-      def setProperty(key: String, value: String): String = sys.error("unimplemented")
-      def arraycopy(src: Object, srcPos: scala.Int, dest: Object, destPos: scala.Int, length: scala.Int): Unit = sys.error("unimplemented")
-      def identityHashCode(x: Object): scala.Int = sys.error("unimplemented")
+      def getProperty(key: String): String = sys.error("getproperty unimplemented")
+      def getProperty(key: String, default: String): String = sys.error("getproperty default unimplemented")
+      def currentTimeMillis(): scala.Long = sys.error("curtimemill unimplemented")
+      def exit(status: scala.Int): Unit = sys.error("exit unimplemented")
+      def getenv(): java.util.Map[String,String] = sys.error("getenv unimplemented")
+      def getenv(name: String): String = sys.error("getenv name unimplemented")
+      def getProperties(): java.util.Properties = sys.error("getproperties unimplemented")
+      def clearProperty(key: String): String = sys.error("clearprop unimplemented")
+      def setProperty(key: String, value: String): String = sys.error("setprop unimplemented")
+      def arraycopy(src: Object, srcPos: scala.Int, dest: Object, destPos: scala.Int, length: scala.Int): Unit = {
+        (src,dest) match {
+          case (src:Array[Boolean],dest:Array[Boolean]) => {
+            if (srcPos < 0) throw new IndexOutOfBoundsException()
+            if (destPos < 0) throw new IndexOutOfBoundsException()
+            if (length < 0) throw new IndexOutOfBoundsException()
+            if (srcPos+length > src.length) throw new IndexOutOfBoundsException()
+            if (destPos+length > dest.length) throw new IndexOutOfBoundsException()
+            var i = 0
+            while (i < length) {
+              dest(destPos+i) = src(srcPos+i)
+              i = i + 1
+            }
+          }
+          case (src:Array[Char],dest:Array[Char]) => {
+            if (srcPos < 0) throw new IndexOutOfBoundsException()
+            if (destPos < 0) throw new IndexOutOfBoundsException()
+            if (length < 0) throw new IndexOutOfBoundsException()
+            if (srcPos+length > src.length) throw new IndexOutOfBoundsException()
+            if (destPos+length > dest.length) throw new IndexOutOfBoundsException()
+            var i = 0
+            while (i < length) {
+              dest(destPos+i) = src(srcPos+i)
+              i = i + 1
+            }
+          }
+          case (src:Array[Int],dest:Array[Int]) => {
+            if (srcPos < 0) throw new IndexOutOfBoundsException()
+            if (destPos < 0) throw new IndexOutOfBoundsException()
+            if (length < 0) throw new IndexOutOfBoundsException()
+            if (srcPos+length > src.length) throw new IndexOutOfBoundsException()
+            if (destPos+length > dest.length) throw new IndexOutOfBoundsException()
+            var i = 0
+            while (i < length) {
+              dest(destPos+i) = src(srcPos+i)
+              i = i + 1
+            }
+          }
+          case (src:Array[Long],dest:Array[Long]) => {
+            if (srcPos < 0) throw new IndexOutOfBoundsException()
+            if (destPos < 0) throw new IndexOutOfBoundsException()
+            if (length < 0) throw new IndexOutOfBoundsException()
+            if (srcPos+length > src.length) throw new IndexOutOfBoundsException()
+            if (destPos+length > dest.length) throw new IndexOutOfBoundsException()
+            var i = 0
+            while (i < length) {
+              dest(destPos+i) = src(srcPos+i)
+              i = i + 1
+            }
+          }
+          case (src:Array[Float],dest:Array[Float]) => {
+            if (srcPos < 0) throw new IndexOutOfBoundsException()
+            if (destPos < 0) throw new IndexOutOfBoundsException()
+            if (length < 0) throw new IndexOutOfBoundsException()
+            if (srcPos+length > src.length) throw new IndexOutOfBoundsException()
+            if (destPos+length > dest.length) throw new IndexOutOfBoundsException()
+            var i = 0
+            while (i < length) {
+              dest(destPos+i) = src(srcPos+i)
+              i = i + 1
+            }
+          }
+          case (src:Array[Double],dest:Array[Double]) => {
+            if (srcPos < 0) throw new IndexOutOfBoundsException()
+            if (destPos < 0) throw new IndexOutOfBoundsException()
+            if (length < 0) throw new IndexOutOfBoundsException()
+            if (srcPos+length > src.length) throw new IndexOutOfBoundsException()
+            if (destPos+length > dest.length) throw new IndexOutOfBoundsException()
+            var i = 0
+            while (i < length) {
+              dest(destPos+i) = src(srcPos+i)
+              i = i + 1
+            }
+          }
+          case (src:Array[Object],dest:Array[Object]) => {
+            /* FIXME - check that stores are type safe */
+            if (srcPos < 0) throw new IndexOutOfBoundsException()
+            if (destPos < 0) throw new IndexOutOfBoundsException()
+            if (length < 0) throw new IndexOutOfBoundsException()
+            if (srcPos+length > src.length) throw new IndexOutOfBoundsException()
+            if (destPos+length > dest.length) throw new IndexOutOfBoundsException()
+            var i = 0
+            while (i < length) {
+              dest(destPos+i) = src(srcPos+i)
+              i = i + 1
+            }
+          }
+          case _ => {
+            throw new ArrayStoreException()
+          }
+        }
+        val srcArray = if (src.isInstanceOf[Array[_]]) src.asInstanceOf[Array[_]] else throw new ArrayStoreException("source is not an array")
+        val destArray = if (dest.isInstanceOf[Array[_]]) dest.asInstanceOf[Array[_]] else throw new ArrayStoreException("dest is not an array")
+      }
+      def identityHashCode(x: Object): scala.Int = sys.error("identityHashCode unimplemented")
       def gc(): Unit = {}
       @native def debugPointer(o: Object): Unit
       @native def debugString(o: String): Unit
@@ -404,10 +532,10 @@ package java {
       final var m: ThreadLocal.ThreadLocalMap = new ThreadLocal.ThreadLocalMap()
       protected def initialValue: T = i
       def get(): T = {
-        if (hasValue) { set(initialValue) };
+        if (!hasValue) { set(initialValue) };
         v
       }
-      def remove { hasValue = false }
+      def remove() { hasValue = false }
       def set(o: T) { v = o; hasValue = true; }
       def childValue(parentValue: T): T = parentValue
       def createMap(t: Thread, firstValue: T) {}
@@ -528,10 +656,14 @@ package java {
       def println(x: Double): Unit = { print(x); println() }
       def println(x: String): Unit = { print(x); println() }
       def println(x: Any): Unit = { print(x); println() }
-      def printf(format: String, args: Array[Object]): Unit = print("printf")
-      def printf(l: Locale, format: String, args: Array[Object]): Unit = print("printf")
-      def format(format: String, args: Array[Object]): Unit = print("printf")
-      def format(l: Locale, format: String, args: Array[Object]): Unit = print("printf")
+      def printf(format: String, args: Object*): Unit = this.format(format, args:_*)
+      def printf(l: Locale, format: String, args: Object*): Unit = this.format(l, format, args:_*)
+      def format(format: String, args: Object*): Unit = {
+        print(format)
+        for (arg <- args) { print(" ");print(arg) }
+        println()
+      }
+      def format(l: Locale, format: String, args: Object*): Unit = this.format(format, args:_*)
     }
   }
   package math {
@@ -545,9 +677,9 @@ package java {
       case object HALF_UP extends RoundingMode
       case object UNNECESSARY extends RoundingMode
       case object UP extends RoundingMode
-      def valueOf(n: Int): RoundingMode = error("unimplemented")
-      def valueOf(name: String): RoundingMode = error("unimplemented")
-      def values: Array[RoundingMode] = error("unimplmented")
+      def valueOf(n: Int): RoundingMode = error("rmvalueofint unimplemented")
+      def valueOf(name: String): RoundingMode = error("rmvalueofstr unimplemented")
+      def values: Array[RoundingMode] = error("values unimplmented")
     }
     object MathContext {
       val DECIMAL128: MathContext = null

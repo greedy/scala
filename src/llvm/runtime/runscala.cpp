@@ -3,6 +3,7 @@
 #include "llvm/Bitcode/Archive.h"
 #include "llvm/LLVMContext.h"
 #include "llvm/Target/TargetData.h"
+#include "llvm/Target/TargetOptions.h"
 #include "llvm/Module.h"
 #include "llvm/Constants.h"
 #include "llvm/Type.h"
@@ -134,8 +135,10 @@ void traceFuncs(Module &m)
   FunctionType *tracestringFnTy = FunctionType::get(Type::getVoidTy(ctx), argtypes, false);
   Constant *traceentryFn = m.getOrInsertFunction("traceentry", tracestringFnTy);
   Constant *traceexitFn = m.getOrInsertFunction("traceexit", tracestringFnTy);
-  for (Module::iterator it = m.begin(); it != m.end(); ++it) {
-    addTrace(it, traceentryFn, traceexitFn);
+  if (false) {
+    for (Module::iterator it = m.begin(); it != m.end(); ++it) {
+      addTrace(it, traceentryFn, traceexitFn);
+    }
   }
 }
 
@@ -144,7 +147,7 @@ int main(int argc, char *argv[], char * const *envp)
   sys::PrintStackTraceOnErrorSignal();
   llvm::JITExceptionHandling = true;
   llvm::JITEmitDebugInfo = true;
-  llvm::JITEmitDebugInfoToDisk = true;
+  llvm::JITEmitDebugInfoToDisk = false;
   InitializeNativeTarget();
   LLVMContext &Context = getGlobalContext();
   atexit(do_shutdown);
@@ -183,6 +186,7 @@ int main(int argc, char *argv[], char * const *envp)
   builder.setErrorStr(&ErrorMsg);
   builder.setEngineKind(EngineKind::JIT);
   builder.setOptLevel(CodeGenOpt::None);
+  //builder.setUseMCJIT(true);
 
   EE = builder.create();
   if (!EE) {
@@ -232,14 +236,20 @@ int main(int argc, char *argv[], char * const *envp)
     return -1;
   }
 
+  errs() << "Running static constructors\n";
+
   // Run static constructors.
   EE->runStaticConstructorsDestructors(false);
 
   std::vector<GenericValue> args;
 
-  Mod->MaterializeAll();
-  //traceFuncs(*Mod);
+  errs() << "Materializing\n";
 
+  Mod->MaterializeAll();
+  traceFuncs(*Mod);
+
+  errs() << "Creating main wrapper\n";
+  
   Function *wrapper = createMainWrapperFunction(*Mod, EntryFn, ModuleInstance, InitFn, "main_wrapper");
 
   //Mod->MaterializeAllPermanently();
@@ -250,8 +260,10 @@ int main(int argc, char *argv[], char * const *envp)
   for (int i = 3; i < argc; i++) {
     jitargv.push_back(std::string(argv[i]));
   }
+  errs() << "Running main function\n";
   EE->runFunctionAsMain(wrapper, jitargv, envp);
 
+  errs() << "Running static destructors\n";
   EE->runStaticConstructorsDestructors(true);
 
   //Mod->dump();

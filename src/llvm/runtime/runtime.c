@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unicode/ustring.h>
+#include <unicode/utypes.h>
 
 static void printclassname(FILE* f, struct klass *klass)
 {
@@ -24,9 +26,12 @@ void rt_delete(struct java_lang_Object *object)
 
 void **rt_iface_cast(struct java_lang_Object *object, struct klass *iface)
 {
+  //fprintf(stderr, "rt_iface_cast(%p, %p)\n", object, iface);
+  if (object == NULL) return NULL;
   struct klass *klass = object->klass;
   void **vtable = NULL;
   uint32_t i;
+  //fprintf(stderr, "Casting %p %.*s to %p %.*s\n", object, klass->name.len, klass->name.bytes, iface, iface->name.len, iface->name.bytes);
   for (i = 0; i < klass->numiface; i++) {
     if (klass->ifaces[i].klass == iface) {
       vtable = klass->ifaces[i].vtable;
@@ -35,6 +40,7 @@ void **rt_iface_cast(struct java_lang_Object *object, struct klass *iface)
   if (vtable != NULL) {
     return vtable;
   } else {
+    fprintf(stderr, "Cant cast %p %.*s to %p %.*s\n", object, klass->name.len, klass->name.bytes, iface, iface->name.len, iface->name.bytes);
     abort();
   }
 }
@@ -52,21 +58,18 @@ bool rt_isinstance(struct java_lang_Object *object, struct klass *classoriface)
 bool rt_issubclass(struct klass *super, struct klass *sub)
 {
   if (super == sub) return true;
-  if (super->instsize == 0) {
-    /* array */
-    if (sub->instsize == 0) {
-      if ((super->elementklass != NULL) && (sub->elementklass != NULL)) {
-        return rt_issubclass(super->elementklass, sub->elementklass);
-      }
+  if (super->instsize == 0 && sub->instsize == 0) {
+    if ((super->elementklass != NULL) && (sub->elementklass != NULL)) {
+      super = super->elementklass;
+      sub = sub->elementklass;
     }
-  } else {
-    struct klass *checkclass = sub;
-    while (checkclass != NULL) {
-      if (super == checkclass) {
-        return true;
-      } else {
-        checkclass = checkclass->super;
-      }
+  }
+  struct klass *checkclass = sub;
+  while (checkclass != NULL) {
+    if (super == checkclass) {
+      return true;
+    } else {
+      checkclass = checkclass->super;
     }
   }
   return false;
@@ -113,15 +116,35 @@ void rt_assertNotNull(struct java_lang_Object *object)
   }
 }
 
+typedef struct java_lang_Object* (*toStringFn)(struct java_lang_Object *, vtable_t, vtable_t*);
+
 void rt_printexception(struct java_lang_Object *object)
 {
   fprintf(stderr, "Uncaught exception: %.*s\n", object->klass->name.len, object->klass->name.bytes);
+  toStringFn toString;
+  toString = object->klass->vtable[4];
+  vtable_t tempVtable;
+  struct java_lang_String *ss;
+  ss = (struct java_lang_String*)toString(object, rt_loadvtable(object), &tempVtable);
+  int32_t bufreq;
+  UErrorCode err = U_ZERO_ERROR;
+  u_strToUTF8(NULL, 0, &bufreq, ss->s, ss->len, &err);
+  if (U_SUCCESS(err) || err == U_BUFFER_OVERFLOW_ERROR) {
+    err = U_ZERO_ERROR;
+    int32_t buflen = bufreq+1;
+    char u8buf[buflen];
+    u_strToUTF8(u8buf, buflen, NULL, ss->s, ss->len, &err);
+    if (U_SUCCESS(err)) {
+      u8buf[buflen-1] = 0;
+      fputs(u8buf, stderr);
+    }
+  }
 }
 
 void *rt_argvtoarray(int argc, char **argv)
 {
   struct array *ret = new_array(OBJECT, &class_java_Dlang_DString, 1, argc);
-  struct reference* elements = (struct reference*)(&(ret->data[0]));
+  struct reference* elements = ARRAY_DATA(ret, struct reference);
   struct utf8str temp;
   for (int i = 0; i < argc; i++) {
     temp.len = strlen(argv[i]);
@@ -135,8 +158,11 @@ void *rt_argvtoarray(int argc, char **argv)
 
 vtable_t rt_loadvtable(struct java_lang_Object *obj)
 {
-  if (obj == NULL)
+  if (obj == NULL) {
+    //fprintf(stderr, "Loading vtable of NULL\n");
     return NULL;
-  else
+  } else {
+    //fprintf(stderr, "Loading vtable of %p (a %.*s) -> %p\n", obj, obj->klass->name.len, obj->klass->name.bytes, obj->klass->vtable);
     return obj->klass->vtable;
+  }
 }

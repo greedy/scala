@@ -28,6 +28,7 @@ object example extends examplec with Magic {
   val c: Char = 7.toChar
   val who = "world"
   override def x: Double = f+d+b
+  def superx: Double = super.x
   def main() {
     System.out.println("Saying hello")
     sayhello()
@@ -41,6 +42,8 @@ object example extends examplec with Magic {
     printdouble(x)
     System.out.println("Testing inherited def that called overriden def, z, should be 30")
     printdouble(z)
+    System.out.println("Testing super call, should be 6")
+    printdouble(super.x)
     System.out.println("Testing loops, should print numbers 0 to 9")
     var q = 0
     while (q < 10) {
@@ -122,6 +125,8 @@ object example extends examplec with Magic {
 
   def xyzzy = x
 
+  def unicode_α = 4
+  def unicode_β = 3
 
   def arraytests() {
     System.out.println("Testing array stuff")

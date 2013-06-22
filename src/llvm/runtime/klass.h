@@ -23,6 +23,7 @@ struct klass {
   struct klass *arrayklass;
   struct klass *elementklass;
   uint32_t npointers;
+#define eltsoffset npointers
   uint32_t numiface;
   struct ifaceinfo ifaces[];
 };

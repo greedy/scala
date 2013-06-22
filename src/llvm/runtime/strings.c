@@ -3,8 +3,9 @@
 #include "runtime.h"
 #include "arrays.h"
 
-#include "unicode/ustdio.h"
-#include "unicode/unum.h"
+#include <unicode/ustdio.h>
+#include <unicode/unum.h>
+#include <unicode/ustdio.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -431,6 +432,13 @@ void rt_string_append_string(
   n->prev = *s;
   *s = n;
 
+  //fprintf(stderr, "append string %p (a %.*s)\n", sobj, sobj->klass->name.len, sobj->klass->name.bytes);
+  /*
+  for (int i = 0; i < 5; i++) {
+    fprintf(stderr, "  vtable[%d] = %p\n", i, sobj->klass->vtable[i]);
+  }
+  */
+
   /* XXX sharing string data could make GC hard */
 
   toString = sobj->klass->vtable[4];
@@ -531,14 +539,14 @@ method__Ojava_Dlang_DString_Mutf8bytes_Ajava_Dlang_DString_R_Nscala_DByte(
   if (uerr == U_BUFFER_OVERFLOW_ERROR) {
     /* reallocate buffer and retry */
     free(buffer);
-    buffer = malloc(reqsize * sizeof(UChar));
+    buffer = malloc(reqsize * sizeof(char));
     bufsize = reqsize;
     uerr = U_ZERO_ERROR;
     u_strToUTF8(buffer, bufsize, &reqsize, s->s, s->len, &uerr);
   }
   if (U_SUCCESS(uerr)) {
     struct array *ret = new_array(BYTE, NULL, 1, reqsize);
-    memcpy(ret->data, buffer, reqsize);
+    memcpy(ARRAY_DATA(ret, char), buffer, reqsize);
     free(buffer);
     *vtableOut = rt_loadvtable((struct java_lang_Object*)ret);
     return (struct java_lang_Object*)ret;
