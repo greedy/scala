@@ -1,6 +1,14 @@
-Instructions
+Requirements
 ------------
 
+1. Install autoconf, libtool with their dependencies.
+2. Install LLVM. If your package manager uses names like llvm-<app>-<version>, 
+   make sure there are appropriate symlinks to llvm-<app>.
+3. Install libclang, libapr1-dev and libicu-dev.
+
+Instructions
+------------
+  
 1. Run autoreconf
 2. Run ./configure
 3. Build scala with ant
